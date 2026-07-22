@@ -1,22 +1,23 @@
 # GRACEFELL soundtrack provenance
 
-`gracefell-sovereigns-fall.mp3` is an original instrumental generated for this game on
-2026-07-22 with the official MiniMax Music Generation API.
+`gracefell-sovereigns-fall.mp3` is an original instrumental regenerated for this game on
+2026-07-22 with the MiniMax Music Generation API after the first score masked combat actions.
 
-- Model: `music-3.0-free`
-- Output: MP3, 44.1 kHz, stereo, 256 kbps, 119.989 seconds
-- MiniMax trace ID: `06af90a86592d959fd5ec76501df3acd`
-- SHA-256: `0C287BD318E19CEBEF32768D31797073F0A02AFA871FF54269E5D3709F28EE81`
+- Model: `music-2.6`
+- Output: MP3, 44.1 kHz, stereo, 256 kbps, 150.349 seconds
+- Generation job: `job_6ee5dfa2-70f3-403d-b97e-b34f7aab914b`
+- SHA-256: `C663049CFDD230293746D0F2D0607B6FE6F11F0FF1EC1503D98D29583C9199FC`
 
 ## Prompt
 
-> Instrumental dark-fantasy boss battle score for a ruined sacred arena. 96 BPM, D minor.
-> Ancient low strings, bowed bass, deep frame drums and taiko, iron percussion, distant
-> wordless texture used only as atmosphere, and sparse broken-bell overtones. Three-act
-> escalation: ominous restraint, martial pressure, then a fierce final phase. Leave clear
-> transient and midrange space for sword impacts, warning cues, and player feedback. No
-> vocals, no modern EDM, no heroic brass fanfare, no cheerful resolution. Memorable but
-> restrained motif, cinematic stereo depth, loop-friendly dark ending.
+> Minimalist dark-fantasy boss-arena underscore, 78 BPM, D minor, loop-friendly. Sparse bowed
+> cello and contrabass drones, distant low strings, occasional single cracked-stone bell, and a
+> very soft heartbeat-like pulse. Nearly no percussion: no taiko, no frame-drum barrage, no
+> cymbal crashes. No brass, no choir, no vocals, no melody-forward lead, no busy ostinato, no
+> heroic rise, no trailer climax. Keep the midrange hollow and leave large quiet gaps for sword
+> impacts, roll cues, boss telegraphs, footsteps and hit confirmation. Restrained low loudness,
+> stable dynamics, ominous and intimate rather than epic. Two-minute continuous tension with a
+> dark ending that joins naturally back to the opening.
 
 The API was called server-side during development. The repository and browser bundle do
 not contain the MiniMax API key or the temporary download URL.

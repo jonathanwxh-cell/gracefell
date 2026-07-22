@@ -426,3 +426,26 @@ The idle-prepared noise and arena impulse still use one canonical 48 kHz data se
 AudioBuffers are now linearly resampled to the actual `AudioContext.sampleRate`. This preserves
 their intended duration and avoids Chromium rejecting a 48 kHz convolver buffer when a device or
 CI runner opens Web Audio at 44.1 kHz. QA now asserts the context and impulse rates match.
+
+## v2.8 — Codex + MiniMax, "combat owns the mix" (2026-07-22)
+
+The first generated score asked for a three-act boss escalation with taiko, frame drums, iron
+percussion, and a fierce final phase. It was appropriate in isolation but competed with exactly the
+signals the game asks a player to react to. The replacement reverses those priorities: 78 BPM,
+sparse low strings, almost no percussion, hollow mids, no choir or trailer climax, and intentional
+gaps for tells and impacts. Its measured mean level is roughly 10 dB below the previous file.
+
+The runtime no longer relies on the asset prompt alone. The SFX submix is full gain while the music
+bus falls from 0.28 to 0.24 and the streamed score from 0.62 to 0.56. Combined with the source's
+roughly 10 dB lower mean level, this remains audible between actions without taking the foreground.
+A broad -6 dB peaking cut at 1.8 kHz and a lower low-pass ceiling leave the sword/telegraph presence band open. Every player
+verb and all seven boss windups now trigger fast music ducking before their transient; those cues
+use the six reserved critical voices rather than competing with phase-three projectile clutter.
+
+### Changed from v2.7.1
+
+- The MiniMax file is a new 150.349-second sparse instrumental, not a remix of the old score.
+- Music/SFX separation is encoded as QA invariants for submix levels, presence dip, action-duck
+  coverage, and minimum duck depth.
+- Adaptive intensity can still lift the score slightly, but no longer opens it past the action-safe
+  spectral ceiling; stagger now clears more space rather than merely reducing the drums.

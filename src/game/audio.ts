@@ -10,6 +10,7 @@ export interface SpatialAudio {
 type VoicePriority = 'normal' | 'critical';
 type SpatialInput = SpatialAudio | number;
 const PREPARED_SAMPLE_RATE = 48000;
+const SOUNDTRACK_VERSION = '2.8';
 
 interface VoiceVariation {
   pitch: number;
@@ -61,6 +62,7 @@ export class GameAudio {
   private drumsMusic!: GainNode;
   private tensionMusic!: GainNode;
   private soundtrackMusic!: GainNode;
+  private soundtrackPresenceDip!: BiquadFilterNode;
   private soundtrackFilter!: BiquadFilterNode;
   private limiter!: DynamicsCompressorNode;
   private peakLimiter!: WaveShaperNode;
@@ -82,7 +84,12 @@ export class GameAudio {
   private beat = 0;
   private activeVoices = 0;
   private readonly maxVoices = 36;
-  private readonly musicLevel = 0.28;
+  private readonly sfxLevel = 1;
+  private readonly musicLevel = 0.24;
+  private readonly soundtrackBaseLevel = 0.56;
+  private readonly soundtrackPresenceDipDb = -6;
+  private duckCount = 0;
+  private minDuckAmount = 1;
   private lastCue = new Map<string, number>();
   private variations = new Map<string, { index: number; at: number; streak: number }>();
   private variationCount = 0;
@@ -141,7 +148,7 @@ export class GameAudio {
     this.master.connect(this.limiter).connect(this.peakLimiter).connect(this.ctx.destination);
 
     this.sfx = this.ctx.createGain();
-    this.sfx.gain.value = 0.92;
+    this.sfx.gain.value = this.sfxLevel;
     this.sfx.connect(this.master);
 
     this.music = this.ctx.createGain();
@@ -165,10 +172,16 @@ export class GameAudio {
     this.soundtrackMusic = this.ctx.createGain();
     this.soundtrackMusic.gain.value = 0.0001;
     this.soundtrackMusic.connect(this.music);
+    this.soundtrackPresenceDip = this.ctx.createBiquadFilter();
+    this.soundtrackPresenceDip.type = 'peaking';
+    this.soundtrackPresenceDip.frequency.value = 1800;
+    this.soundtrackPresenceDip.Q.value = 0.72;
+    this.soundtrackPresenceDip.gain.value = this.soundtrackPresenceDipDb;
     this.soundtrackFilter = this.ctx.createBiquadFilter();
     this.soundtrackFilter.type = 'lowpass';
-    this.soundtrackFilter.frequency.value = 11500;
-    this.soundtrackFilter.Q.value = 0.45;
+    this.soundtrackFilter.frequency.value = 7600;
+    this.soundtrackFilter.Q.value = 0.35;
+    this.soundtrackPresenceDip.connect(this.soundtrackFilter);
     this.soundtrackFilter.connect(this.soundtrackMusic);
 
     this.cancelPreparation();
@@ -217,6 +230,8 @@ export class GameAudio {
     this.maxObservedDistance = 0;
     this.initCostMs = 0;
     this.irBuildCostMs = 0;
+    this.duckCount = 0;
+    this.minDuckAmount = 1;
     this.adaptive = { tension: 0, intensity: 0, staggered: false };
     const ctx = this.ctx;
     this.ctx = null;
@@ -269,7 +284,17 @@ export class GameAudio {
       phase: this.phase,
       soundtrackState: this.soundtrackState,
       soundtrackMode: this.soundtrackSource ? 'stream' : 'fallback',
+      soundtrackVersion: SOUNDTRACK_VERSION,
       waveDataPrepared: Boolean(this.preparedNoise && this.preparedImpulse),
+      mix: {
+        sfxLevel: this.sfxLevel,
+        musicLevel: this.musicLevel,
+        soundtrackBaseLevel: this.soundtrackBaseLevel,
+        soundtrackPresenceDipDb: this.soundtrackPresenceDipDb,
+        soundtrackCutoffHz: this.soundtrackFilter?.frequency.value ?? 0,
+        duckCount: this.duckCount,
+        minDuckAmount: this.minDuckAmount,
+      },
     };
   }
 
@@ -341,7 +366,7 @@ export class GameAudio {
   private prepareSoundtrackElement() {
     if (this.soundtrackElement) return this.soundtrackElement;
     const base = import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL : `${import.meta.env.BASE_URL}/`;
-    const element = new Audio(`${base}audio/gracefell-sovereigns-fall.mp3`);
+    const element = new Audio(`${base}audio/gracefell-sovereigns-fall.mp3?v=${SOUNDTRACK_VERSION}`);
     element.loop = true;
     element.preload = 'auto';
     this.soundtrackElement = element;
@@ -538,6 +563,8 @@ export class GameAudio {
 
   private duckMusic(amount = 0.45, duration = 0.32) {
     if (!this.ctx) return;
+    this.duckCount++;
+    this.minDuckAmount = Math.min(this.minDuckAmount, amount);
     const t0 = this.ctx.currentTime;
     const gain = this.music.gain;
     gain.cancelScheduledValues(t0);
@@ -653,17 +680,19 @@ export class GameAudio {
 
   swing(comboStep = 0, spatial: SpatialInput = 0) {
     if (!this.allowCue('swing', 0.035)) return;
+    this.duckMusic(0.56, 0.22);
     const lift = Math.max(0, Math.min(2, comboStep));
     const variation = this.vary(`swing-${lift}`, 0.8);
-    this.noise({ dur: 0.14 + lift * 0.018, gain: 0.15 + lift * 0.015, freq: 2800 + lift * 350, freqEnd: 520 + lift * 90, q: 1.5, spatial, reverb: 0.035, variation });
-    this.tone({ freq: 280 + lift * 38, freqEnd: 150 + lift * 24, dur: 0.11, type: 'triangle', gain: 0.045, spatial, variation });
+    this.noise({ dur: 0.14 + lift * 0.018, gain: 0.15 + lift * 0.015, freq: 2800 + lift * 350, freqEnd: 520 + lift * 90, q: 1.5, spatial, reverb: 0.035, variation, priority: 'critical' });
+    this.tone({ freq: 280 + lift * 38, freqEnd: 150 + lift * 24, dur: 0.11, type: 'triangle', gain: 0.045, spatial, variation, priority: 'critical' });
   }
 
   swingHeavy(spatial: SpatialInput = 0) {
     if (!this.allowCue('swing-heavy', 0.055)) return;
+    this.duckMusic(0.36, 0.4);
     const variation = this.vary('swing-heavy', 0.72);
-    this.noise({ dur: 0.31, gain: 0.23, freq: 1650, freqEnd: 210, q: 1.15, spatial, reverb: 0.08, variation });
-    this.tone({ freq: 180, freqEnd: 62, dur: 0.25, type: 'triangle', gain: 0.11, spatial, variation });
+    this.noise({ dur: 0.31, gain: 0.23, freq: 1650, freqEnd: 210, q: 1.15, spatial, reverb: 0.08, variation, priority: 'critical' });
+    this.tone({ freq: 180, freqEnd: 62, dur: 0.25, type: 'triangle', gain: 0.11, spatial, variation, priority: 'critical' });
   }
 
   hit(heavy = false, spatial: SpatialInput = 0, variant = 0) {
@@ -684,9 +713,10 @@ export class GameAudio {
 
   dodge(spatial: SpatialInput = 0) {
     if (!this.allowCue('dodge', 0.08)) return;
+    this.duckMusic(0.5, 0.28);
     const variation = this.vary('dodge', 0.55);
-    this.noise({ dur: 0.24, gain: 0.14, type: 'lowpass', freq: 3400, freqEnd: 260, q: 0.55, spatial, reverb: 0.035, variation });
-    this.tone({ freq: 150, freqEnd: 82, dur: 0.16, type: 'sine', gain: 0.045, spatial, variation });
+    this.noise({ dur: 0.24, gain: 0.14, type: 'lowpass', freq: 3400, freqEnd: 260, q: 0.55, spatial, reverb: 0.035, variation, priority: 'critical' });
+    this.tone({ freq: 150, freqEnd: 82, dur: 0.16, type: 'sine', gain: 0.045, spatial, variation, priority: 'critical' });
   }
 
   playerHurt(spatial: SpatialInput = 0) {
@@ -700,10 +730,11 @@ export class GameAudio {
 
   flask() {
     if (!this.allowCue('flask', 0.2)) return;
+    this.duckMusic(0.46, 0.62);
     const variation = this.vary('flask', 0.25);
-    this.noise({ dur: 0.08, gain: 0.12, type: 'highpass', freq: 4200, freqEnd: 2600, q: 2.4, reverb: 0.12, variation });
-    this.tone({ freq: 540, freqEnd: 780, dur: 0.5, type: 'sine', gain: 0.12, attack: 0.07, reverb: 0.1, variation });
-    this.tone({ freq: 820, freqEnd: 1280, dur: 0.62, type: 'triangle', gain: 0.075, attack: 0.11, reverb: 0.12, variation });
+    this.noise({ dur: 0.08, gain: 0.12, type: 'highpass', freq: 4200, freqEnd: 2600, q: 2.4, reverb: 0.12, variation, priority: 'critical' });
+    this.tone({ freq: 540, freqEnd: 780, dur: 0.5, type: 'sine', gain: 0.12, attack: 0.07, reverb: 0.1, variation, priority: 'critical' });
+    this.tone({ freq: 820, freqEnd: 1280, dur: 0.62, type: 'triangle', gain: 0.075, attack: 0.11, reverb: 0.12, variation, priority: 'critical' });
   }
 
   roar(big = false, spatial: SpatialInput = 0) {
@@ -775,34 +806,39 @@ export class GameAudio {
   telegraph(cue: BossAudioCue = 'ui', spatial: SpatialInput = 0) {
     if (cue === 'ui') { this.ui(); return; }
     if (!this.allowCue(`telegraph-${cue}`, 0.06)) return;
+    const duck: Record<Exclude<BossAudioCue, 'ui'>, [number, number]> = {
+      swipe: [0.38, 0.3], slam: [0.25, 0.5], charge: [0.28, 0.62], volley: [0.32, 0.4],
+      meteor: [0.24, 0.55], ring: [0.28, 0.5], spiral: [0.2, 0.68],
+    };
+    this.duckMusic(...duck[cue]);
     switch (cue) {
       case 'swipe':
-        this.noise({ dur: 0.22, gain: 0.09, type: 'bandpass', freq: 1900, freqEnd: 3300, q: 2.4, spatial, reverb: 0.09 });
-        this.tone({ freq: 410, freqEnd: 680, dur: 0.19, type: 'triangle', gain: 0.065, spatial });
+        this.noise({ dur: 0.22, gain: 0.09, type: 'bandpass', freq: 1900, freqEnd: 3300, q: 2.4, spatial, reverb: 0.09, priority: 'critical' });
+        this.tone({ freq: 410, freqEnd: 680, dur: 0.19, type: 'triangle', gain: 0.065, spatial, priority: 'critical' });
         break;
       case 'slam':
-        this.tone({ freq: 170, freqEnd: 82, dur: 0.5, type: 'triangle', gain: 0.13, spatial, reverb: 0.14 });
-        this.tone({ freq: 470, freqEnd: 270, dur: 0.32, type: 'sine', gain: 0.055, spatial });
+        this.tone({ freq: 170, freqEnd: 82, dur: 0.5, type: 'triangle', gain: 0.13, spatial, reverb: 0.14, priority: 'critical' });
+        this.tone({ freq: 470, freqEnd: 270, dur: 0.32, type: 'sine', gain: 0.055, spatial, priority: 'critical' });
         break;
       case 'charge':
-        this.tone({ freq: 72, freqEnd: 210, dur: 0.62, type: 'sawtooth', gain: 0.13, spatial, reverb: 0.12 });
-        this.noise({ dur: 0.58, gain: 0.1, type: 'lowpass', freq: 280, freqEnd: 1500, q: 0.7, spatial, reverb: 0.12 });
+        this.tone({ freq: 72, freqEnd: 210, dur: 0.62, type: 'sawtooth', gain: 0.13, spatial, reverb: 0.12, priority: 'critical' });
+        this.noise({ dur: 0.58, gain: 0.1, type: 'lowpass', freq: 280, freqEnd: 1500, q: 0.7, spatial, reverb: 0.12, priority: 'critical' });
         break;
       case 'volley':
-        this.tone({ freq: 720, freqEnd: 1220, dur: 0.36, type: 'triangle', gain: 0.08, spatial, reverb: 0.2 });
-        this.tone({ freq: 930, freqEnd: 1580, dur: 0.3, type: 'sine', gain: 0.05, detune: 8, spatial, reverb: 0.22 });
+        this.tone({ freq: 720, freqEnd: 1220, dur: 0.36, type: 'triangle', gain: 0.08, spatial, reverb: 0.2, priority: 'critical' });
+        this.tone({ freq: 930, freqEnd: 1580, dur: 0.3, type: 'sine', gain: 0.05, detune: 8, spatial, reverb: 0.22, priority: 'critical' });
         break;
       case 'meteor':
-        this.tone({ freq: 390, freqEnd: 120, dur: 0.52, type: 'sawtooth', gain: 0.1, spatial, reverb: 0.26 });
-        this.noise({ dur: 0.44, gain: 0.09, type: 'lowpass', freq: 1300, freqEnd: 180, spatial, reverb: 0.22 });
+        this.tone({ freq: 390, freqEnd: 120, dur: 0.52, type: 'sawtooth', gain: 0.1, spatial, reverb: 0.26, priority: 'critical' });
+        this.noise({ dur: 0.44, gain: 0.09, type: 'lowpass', freq: 1300, freqEnd: 180, spatial, reverb: 0.22, priority: 'critical' });
         break;
       case 'ring':
-        this.tone({ freq: 240, freqEnd: 540, dur: 0.48, type: 'sine', gain: 0.11, spatial, reverb: 0.3 });
-        this.tone({ freq: 365, freqEnd: 790, dur: 0.42, type: 'triangle', gain: 0.05, detune: -11, spatial, reverb: 0.26 });
+        this.tone({ freq: 240, freqEnd: 540, dur: 0.48, type: 'sine', gain: 0.11, spatial, reverb: 0.3, priority: 'critical' });
+        this.tone({ freq: 365, freqEnd: 790, dur: 0.42, type: 'triangle', gain: 0.05, detune: -11, spatial, reverb: 0.26, priority: 'critical' });
         break;
       case 'spiral':
-        this.tone({ freq: 155, freqEnd: 760, dur: 0.58, type: 'sawtooth', gain: 0.095, spatial, reverb: 0.24 });
-        this.tone({ freq: 740, freqEnd: 690, dur: 0.58, type: 'triangle', gain: 0.055, detune: 13, spatial, reverb: 0.28 });
+        this.tone({ freq: 155, freqEnd: 760, dur: 0.58, type: 'sawtooth', gain: 0.095, spatial, reverb: 0.24, priority: 'critical' });
+        this.tone({ freq: 740, freqEnd: 690, dur: 0.58, type: 'triangle', gain: 0.055, detune: 13, spatial, reverb: 0.28, priority: 'critical' });
         break;
     }
   }
@@ -845,7 +881,7 @@ export class GameAudio {
     try {
       const element = this.prepareSoundtrackElement();
       const source = ctx.createMediaElementSource(element);
-      source.connect(this.soundtrackFilter);
+      source.connect(this.soundtrackPresenceDip);
       this.soundtrackSource = source;
       this.musicNodes.push(source);
       await element.play();
@@ -856,10 +892,10 @@ export class GameAudio {
       const now = ctx.currentTime;
       this.soundtrackMusic.gain.cancelScheduledValues(now);
       this.soundtrackMusic.gain.setValueAtTime(0.0001, now);
-      this.soundtrackMusic.gain.exponentialRampToValueAtTime(0.62, now + 1.8);
+      this.soundtrackMusic.gain.exponentialRampToValueAtTime(this.soundtrackBaseLevel, now + 1.8);
       this.proceduralMusic.gain.cancelScheduledValues(now);
       this.proceduralMusic.gain.setValueAtTime(Math.max(0.0001, this.proceduralMusic.gain.value), now);
-      this.proceduralMusic.gain.exponentialRampToValueAtTime(0.18, now + 1.8);
+      this.proceduralMusic.gain.exponentialRampToValueAtTime(0.1, now + 1.8);
     } catch {
       if (this.ctx === ctx && token === this.soundtrackLoadToken) this.useProceduralFallback();
     }
@@ -977,11 +1013,11 @@ export class GameAudio {
     ) return;
     this.adaptive = { tension, intensity, staggered };
     const now = this.ctx.currentTime;
-    const tensionLevel = Math.max(0.0001, tension * 0.82);
-    const drumLevel = staggered ? 0.08 : 1 + intensity * 0.3;
+    const tensionLevel = Math.max(0.0001, tension * 0.56);
+    const drumLevel = staggered ? 0.05 : 0.72 + intensity * 0.18;
     const droneLevel = 0.94 + tension * 0.06;
-    const soundtrackLevel = staggered ? 0.42 : 0.62 + intensity * 0.065 - tension * 0.025;
-    const soundtrackCutoff = staggered ? 6200 : 11000 + intensity * 7600 + tension * 900;
+    const soundtrackLevel = staggered ? 0.32 : this.soundtrackBaseLevel + intensity * 0.03 - tension * 0.02;
+    const soundtrackCutoff = staggered ? 4200 : 7200 + intensity * 1600 + tension * 300;
     this.tensionMusic.gain.setTargetAtTime(tensionLevel, now, 0.2);
     this.drumsMusic.gain.setTargetAtTime(drumLevel, now, staggered ? 0.055 : 0.16);
     this.droneMusic.gain.setTargetAtTime(droneLevel, now, 0.22);

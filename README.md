@@ -95,8 +95,8 @@ reads as motion rather than hue.
 
 ## Listening to the fight
 
-The two-minute dark-fantasy score was generated with MiniMax Music 3.0 and ships locally, with a
-procedural fallback if it cannot decode. Combat audio is synthesized in the browser: every attack
+The sparse two-and-a-half-minute dark-fantasy score was generated with MiniMax and ships locally,
+with a procedural fallback if it cannot stream. Combat audio is synthesized in the browser: every attack
 has a stable tell, repeated swings and impacts receive subtle non-repeating variations, and hits use
 different metal, flesh, and low-frequency layers. Malakar has a layered organic roar plus footsteps
 and charge-scrape foley.
@@ -106,6 +106,10 @@ and how much of the stone arena tail you hear. Low player health introduces a te
 last 30% of boss health raises intensity, and a stagger clears the drums to expose the opening. A
 compressor and -1 dBFS peak ceiling protect dense phase-three collisions. Headphones give the best
 spatial read, but the transient and sub limits are designed to remain legible on a phone speaker.
+
+Combat owns the mix. The score sits on a lower bus with a broad 1.8 kHz presence dip, while every
+player verb and boss windup briefly ducks it before the action lands. Those cues use the reserved
+critical voices, so a dense projectile storm cannot spend the voice budget needed for a warning.
 
 The MP3 is streamed through the Web Audio music bus instead of being fully decoded into memory.
 Generated noise and the arena response are prepared before the first gesture, keeping the first

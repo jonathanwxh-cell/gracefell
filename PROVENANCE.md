@@ -27,6 +27,7 @@ Newest last. One row per pass. A "pass" = one continuous working session by one 
 | v2.6 | 2026-07-22 | Codex | GPT-5 / Codex Desktop | @jonathanwxh-cell | Implemented the six open audio enhancements locally: organic boss vocals, centralized non-repeating SFX variation, player-relative distance audio, material impacts and boss foley, adaptive music buses, true-peak protection, and a longer spectrally shaped arena reverb |
 | v2.7 | 2026-07-22 | Codex | GPT-5 / Codex Desktop | @jonathanwxh-cell | Responsiveness and performance polish: buffered touch actions through hit-stop, interruption-safe pause/audio lifecycle, streamed MiniMax score, adaptive floor cache, readable mobile HUD, semantic companion controls, clean defeat state, and portable CI playtests |
 | v2.7.1 | 2026-07-22 | Codex | GPT-5 / Codex Desktop | @jonathanwxh-cell | Release hardening: resampled prepared Web Audio data to the runtime context rate so 44.1 kHz browsers can initialize arena reverb and start the fight; added CI coverage for the invariant |
+| v2.8 | 2026-07-22 | Codex + MiniMax | GPT-5 / Codex Desktop + Music 2.6 | @jonathanwxh-cell | Replaced the overbearing score with a sparse low-loudness underscore; lowered and presence-shaped the music bus, added action-triggered ducking, and reserved critical voices for player verbs and boss windups |
 
 ---
 

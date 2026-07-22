@@ -125,6 +125,17 @@ async function installAudioSampleRate(context) {
       if (audioState.contextSampleRate !== audioState.arenaIrSampleRate) {
         out.errors.push(vp.name + ': arena IR sample rate does not match the AudioContext: ' + JSON.stringify(audioState));
       }
+      if (
+        audioState.mix.sfxLevel < 1
+        || audioState.mix.musicLevel > 0.25
+        || audioState.mix.soundtrackBaseLevel > 0.6
+        || audioState.mix.soundtrackPresenceDipDb > -4
+      ) {
+        out.errors.push(vp.name + ': music/SFX separation regressed: ' + JSON.stringify(audioState.mix));
+      }
+      if (audioState.mix.duckCount < 10 || audioState.mix.minDuckAmount > 0.25) {
+        out.errors.push(vp.name + ': action-triggered music ducking was not exercised: ' + JSON.stringify(audioState.mix));
+      }
       if (audioState.variationCount < 4 || audioState.maxObservedDistance < 400) {
         out.errors.push(vp.name + ': variation/spatial audio paths were not exercised: ' + JSON.stringify(audioState));
       }
