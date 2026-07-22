@@ -46,6 +46,38 @@ Break his poise to stagger him; staggered hits do 1.4×. Land a roll *into* an i
 
 Victory is graded S through C on time and wounds taken. Your best time and win count persist locally. A no-hit run is an S.
 
+## The grace dial
+
+There's no easy mode. There's one dial on the title screen, running **−3 to +5**.
+
+Turn it down and the sovereign slows, your dodge window widens, his hits land softer, you carry
+an extra flask. Turn it up and he speeds up, your flasks disappear, and past +3 he stops
+staggering at all.
+
+The rule the design holds to: **aid lengthens the read, it doesn't change the fight.** The pattern
+you learn at −3 is the same pattern you execute at +5 — nothing is removed, nothing is simplified,
+you're just given more time to see it coming.
+
+And the record carries the setting. Best times are stored per grace level and the victory seal
+stamps the trial you ran, so "S at +2" and "S at −1" stay different things. Beating him is
+supposed to mean something; it just shouldn't require the same reflexes from everybody.
+
+Also on the title screen: **screen shake** and **flash reduction** toggles. The low-health vignette
+pulses at about 5Hz by default, which is a photosensitivity concern — reduced mode makes it a
+steady glow and drops the full-screen flashes to a quarter strength.
+
+## Reading the screen
+
+One colour in this game means *this will hurt you* — a hot red reserved for hostile projectiles,
+hostile rings, and attack telegraphs. Nothing decorative is allowed to borrow it; the ambient fire,
+the boss's own burning core and his sword glow are all amber instead. There's a test that fails the
+build if an ambient particle ever picks up the hazard colour.
+
+Hazards are shape-coded too, so they survive colour blindness and bad displays: projectiles carry a
+hard white core and a rotating diamond outline (decoration is round), hostile rings show a bright
+leading edge — the part you actually have to clear — and meteors close four ticks inward so the fuse
+reads as motion rather than hue.
+
 ## Running it
 
 ```bash

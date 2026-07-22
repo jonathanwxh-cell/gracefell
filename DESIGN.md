@@ -54,6 +54,31 @@ desktop 1280×800 + mobile 390×844. Asserts: canvas draws (pixel sampling), zer
 - Engine is a single `src/game/engine.ts` (~2.1k lines): Input / Player / Boss / Game classes + render methods bolted onto `Game.prototype` (declaration-merged interface). `window.__game` is the QA/debug hook.
 - Static build served by `server.mjs` (zero-dep http, SPA fallback, immutable cache for /assets, 127.0.0.1 bind).
 
+## v2.1 — Claude (Opus 4.8), "going public" (2026-07-22)
+
+No gameplay change. The repo went public, so the things a stranger needs
+arrived: a README that explains the game rather than the Vite template, and an
+explicit credit split — Kimi (OKComputer) built v1, this agent extended it.
+
+The substantive piece is `PROVENANCE.md` and its enforcement. Several different
+AI agents work on this repo with no shared memory; each arrives cold and acts on
+whatever is written down. So credit and handoff context had to become mechanical
+rather than remembered:
+- `PROVENANCE.md` — the ledger, one row per pass, plus the rules (identify your
+  harness honestly, never claim a previous agent's work, document what you
+  changed from an earlier pass).
+- `.gitmessage` — commit template carrying the `Agent-Pass:` / `Co-authored-by:`
+  trailers, enabled via repo-local `commit.template`.
+- `AGENTS.md` — obligations hoisted to the top, because that's the part agents
+  reliably read.
+- `.github/pull_request_template.md` — the same fields at review time.
+- `scripts/provenance.sh` — regenerates the ledger from git trailers, `--gaps`
+  lists untagged commits. The markdown can drift; trailers in the object store
+  can't, so git stays the source of truth and drift stays detectable.
+
+The three pre-convention commits were left untagged rather than rewritten —
+they're the honest record of how this started.
+
 ## v2.2 — Claude (Opus 4.8), "clarity and the grace dial" (2026-07-22)
 
 Researched what actually drives replay and whether graphics matter, and the
@@ -119,3 +144,12 @@ now, before relics make the shape harder to change.
 - Harness gotcha: constructing a second `Game` (for the migration test)
   overwrites the `window.__game` debug hook and `destroy()` does not restore
   it — every later assertion then reads a dead instance. Restore it manually.
+
+### Shipping (v2.2, same pass)
+Listed on the box's public hub at `sites.alyoechosys.dev` under **Play**, then
+promoted to the featured shelf (now: Astra, Lume, Is It A Bubble, GRACEFELL,
+easel.). The hub is `~/apps/sites/sites.json`, served static — no restart, live
+on refresh. Verified with Playwright at 1280 and 390 that the card renders,
+links to the right host, and adds no console errors or overflow. Note the card
+sits ~8th in DOM order; "featured" there means a promoted shelf, not
+top-of-page.
