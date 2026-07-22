@@ -51,6 +51,14 @@ secondary path, and no feature should require a keyboard.
 - `menuGeom()` is the single source of truth for title-menu layout — renderer, hit-test and QA layout assertions all read it. If you move a menu element, move it there or the test stops protecting you.
 - `shake()` early-returns when `shakeEnabled` is false, and `flashScale()` gates full-screen flashes. Don't bypass them with direct `shakeAmp` writes — they're photosensitivity controls, not polish.
 - Perfect dodge window scales with grace: `t > 0.42 - 0.24 * mods.perfectWindow`; `perfectCd` prevents multi-trigger from one swing.
+- `GameAudio` owns synthesis, soundtrack loading, player-relative distance/pan, arena reverb, adaptive music, ducking, limiting, voice pressure, scheduling and teardown. Gameplay code should name the event and pass `audioSpatial(x, y)`; it should not build Web Audio nodes itself.
+- `public/audio/gracefell-sovereigns-fall.mp3` is the MiniMax Music 3.0 score. It must remain routed through `soundtrackMusic -> music -> master` so combat ducking, mute and the limiter still apply. The procedural drone/drums start immediately, crossfade under the MP3, and remain the network/decode fallback.
+- Noise is generated once in `GameAudio.init()` and reused. Do not return to allocating/filling an `AudioBuffer` for every projectile or impact — phase-three storms make that a mobile GC problem.
+- Boss windups use `audio.telegraph(attack, spatial)`. The seven attack names are an audio readability contract: a player should be able to distinguish swipe, slam, charge, volley, meteor, ring and spiral before the hit lands.
+- `vary()` is the central SFX anti-repetition policy. Keep hostile telegraph timing exact; apply variation to performance and impact sounds, and retain repeat masking/critical-voice reservations rather than adding unbounded layers at call sites.
+- The generated score, procedural drone, drums and tension pad have separate submix gains. `updateCombatState()` owns low-health, boss-intensity and stagger transitions. The master route must remain `master -> compressor -> peakLimiter -> destination`.
+- The arena IR is generated once at startup and should stay above 1.5 seconds while its measured build remains below 50 ms on the QA browser. Distance processing owns attenuation, low-pass and room-send changes together; do not add call-site volume hacks.
+- Boss stalk footsteps and charge scrape are state foley. Charge scrape must stop with charge state; it is intentionally requested in short grains rather than held as an orphanable looping node.
 
 ## Headless QA facts (hard-won)
 - chromium path: `~/.cache/ms-playwright/chromium-1228/...` (1223 does not exist on this box).
@@ -58,7 +66,7 @@ secondary path, and no feature should require a keyboard.
 - Screenshots are not always reviewable by an agent. When they aren't, make correctness numeric instead of eyeballing: that's why `menuGeom()` exists and why the layout assertions caught a chevron drawing 5px outside its plate at 390px.
 - RAF runs ~0.6x real time under swiftshader → gate on `waitForFunction(game.stateT/state)`, never wall-clock sleeps, for sim-time thresholds.
 - Boss ignores damage while `state === 'spawn'` (intro). Wait for `game.state === 'fight'` first.
-- Audio: AudioContext works headless but is silent — no assertions on sound.
+- AudioContext works headlessly but is silent. QA asserts initialization, MiniMax MP3 decode, limiter/noise-pool presence, voice pressure, every boss-cue code path and haptic requests; actual timbre and mix balance still require a listening pass on phone speaker + headphones.
 
 ## Known scope edges
 - Touch is now genuinely tested: `qa/verify.cjs` runs a third pass in a `hasTouch + isMobile` context that taps to start, drives a real drag through the touch listeners and asserts the knight moves, taps ATK, and checks every button for overlap / off-screen / joystick-zone / fingertip-size violations. That test caught two overlapping buttons the moment it was written.

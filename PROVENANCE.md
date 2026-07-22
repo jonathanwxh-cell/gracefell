@@ -22,6 +22,9 @@ Newest last. One row per pass. A "pass" = one continuous working session by one 
 | v2.2 | 2026-07-22 | Claude | Opus 4.8 via Hetzner MCP | @jonathanwxh-cell | Clarity + accessibility: reserved hazard hue with shape coding, grace dial (−3..+5), shake/flash toggles, per-trial bests, save schema v2, menu layout assertions |
 | v2.2.1 | 2026-07-22 | Claude | Opus 4.8 via Hetzner MCP | @jonathanwxh-cell | Docs pass: README grace-dial + readability sections, DESIGN v2.1 section backfilled, AGENTS stale entries corrected (save schema, dodge window), listed + featured on sites.alyoechosys.dev |
 | v2.3 | 2026-07-22 | Claude | Opus 4.8 via Hetzner MCP | @jonathanwxh-cell | Mobile-first: up-front coarse-pointer detection, responsive safe-area thumb cluster, touch-first copy, haptics, and a real thumbs-only QA pass |
+| v2.4 | 2026-07-22 | Codex | GPT-5 / Codex Desktop | @jonathanwxh-cell | Procedural audio clarity pass: attack-specific tells, layered spatial impacts, arena reverb, mastering and ducking, reusable noise, scheduled music, cleanup, combat haptics, and audio-state QA |
+| v2.5 | 2026-07-22 | Codex + MiniMax | GPT-5 / Codex Desktop + Music 3.0 free | @jonathanwxh-cell | Generated and integrated an original two-minute dark-fantasy score, crossfaded through the existing music bus with procedural fallback, combat ducking, local asset provenance, and decode QA |
+| v2.6 | 2026-07-22 | Codex | GPT-5 / Codex Desktop | @jonathanwxh-cell | Implemented the six open audio enhancements locally: organic boss vocals, centralized non-repeating SFX variation, player-relative distance audio, material impacts and boss foley, adaptive music buses, true-peak protection, and a longer spectrally shaped arena reverb |
 
 ---
 
