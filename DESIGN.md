@@ -209,3 +209,154 @@ strip later if that turns out to be wrong; hard to re-derive.
 - Title control legend and HUD hint are no longer desktop-only strings; both branch on `isTouch`.
 - `TOUCH_BTNS` schema changed from `{dx, dy, r}` pixels to `{ox, oy, ur}` base-units. Anything reading the old fields will break.
 - Menu has a 4th row on touch devices; `menuRows()` no longer returns a fixed 3, and the base Y shifts to keep the block centred.
+
+## v2.4 — Codex (GPT-5), "the sovereign has a voice" (2026-07-22)
+
+The visual readability rule from v2.2 now has an audio counterpart: every hostile
+windup gets a stable sound identity. `engine.ts` names the gameplay event and its
+arena position; `GameAudio` owns how that event is voiced. Swipe, slam, charge,
+volley, meteor, ring and spiral no longer collapse onto the same triangle chirp or
+roar. The cue is part of the attack contract, not decoration.
+
+### Synthesis and mix
+
+Important sounds are layered as transient, body and room tail. Light sword actions
+stay short and dry; heavy hits, slams and meteors earn the sub energy and longer
+reverb. The three-hit combo rises slightly in brightness, confirmed hits differ
+from whiffs, meteor fuses whistle before impact, and perfect dodge briefly clears
+space in the music before its metallic spark.
+
+The mix now has explicit mobile guardrails:
+
+- one startup-generated noise buffer replaces per-sound allocation and random-fill;
+- a 36-voice soft budget drops low-priority clutter before critical feedback;
+- a compressor/limiter catches phase-three pileups before the phone speaker clips;
+- short generated stereo impulse response gives the arena a shared stone-room tail;
+- world X becomes stereo pan, clamped before the arena edge;
+- heavy feedback ducks the drone instead of trying to win a volume contest.
+
+### Timing and lifecycle
+
+Victory notes, the double heartbeat and drums are scheduled against
+`AudioContext.currentTime`. A 50 ms look-ahead only decides what to enqueue; the
+browser audio clock decides when it sounds, so main-thread canvas work cannot pull
+the rhythm apart. `Game.destroy()` now tears the audio system down as well as the
+render/input loop, closing the context and clearing its scheduler.
+
+### Changed from v2.3
+
+- `audio.telegraph()` as a generic gameplay cue is replaced by
+  `audio.telegraph(attack, pan)`; menu rows use the deliberately small `audio.ui()`.
+- Player damage and perfect dodge now request their documented haptic patterns.
+- Boss and player events pass positional pan; Web Audio node construction remains
+  inside `GameAudio`.
+- The touch ATK QA no longer accepts the unchanged `move` state as success.
+
+### Verification notes
+
+`npm run build` passes. Chromium desktop and mobile passes reached combat, exercised
+all seven windups plus meteor/ring/impact layers, confirmed a running AudioContext,
+limiter, reusable noise pool, bounded voice count, real touch ATK state and haptic
+requests, with no console errors. Headless audio is silent by design, so these tests
+prove the event graph and runtime invariants — a human phone-speaker/headphone pass
+still decides final timbre and level balance.
+
+## v2.5 — Codex (GPT-5), "the room remembers a song" (2026-07-22)
+
+The procedural score did its most important job — it stayed out of the way of combat —
+but its four oscillators and sparse drum scheduler could not carry two minutes of tension
+without sounding like a system. The owner asked specifically for MiniMax, so this pass
+uses Music 3.0 to add one original instrumental rather than replacing the audio engine.
+
+The prompt asks for a ruined-sacred-arena palette in D minor: low strings, bowed bass,
+frame drums, iron percussion and broken bells, while explicitly reserving transient and
+midrange space for the attack language introduced in v2.4. The API-produced result is a
+two-minute 44.1 kHz stereo MP3. Its exact prompt, trace identifier and SHA-256 live beside
+the asset in `public/audio/README.md` so this binary has reproducible provenance.
+
+### Integration, not replacement
+
+`GameAudio.init()` still starts the procedural bed immediately. It then fetches and
+decodes the local MP3 inside the already-unlocked AudioContext and crossfades it in over
+1.8 seconds. The generated score and procedural bed have separate submix gains but meet
+again at the existing `music` bus, so mute, heavy-hit ducking and the phase-three limiter
+continue to govern both. If fetch or decode fails, the generated-score state becomes
+`fallback` and the procedural bed simply keeps playing. No API key or remote URL enters
+the client build.
+
+The phase-aware procedural drums remain at a reduced level under the fixed recording.
+That matters because the player's damage rate determines when phase two and three occur;
+a pre-rendered musical transition cannot stay synchronized with every run.
+
+### Changed from v2.4
+
+- The project is no longer literally asset-free: it ships one generated MP3. Visuals and
+  every gameplay SFX remain procedural.
+- `musicNodes` now also owns the looping `AudioBufferSourceNode`, so the existing teardown
+  path stops and disconnects the recording with the rest of the audio graph.
+- Audio QA now treats `soundtrackState: "playing"` as a required runtime invariant rather
+  than accepting a silently missing binary.
+
+## v2.6 — Codex (GPT-5), "iron, distance, and breath" (2026-07-22)
+
+This pass turns the six open audio enhancement issues into one coherent mix architecture.
+They were not independent requests: variation needs a shared policy, distance needs a richer
+spatial contract than pan alone, adaptive music needs separate buses, and all of that raises
+the importance of predictable voice pressure and peak control.
+
+### A spatial contract, not just stereo decoration
+
+Gameplay now passes `{ pan, distance }` from every world event, measured relative to the
+player rather than the arena centre. `GameAudio` converts distance into attenuation,
+high-frequency rolloff, and proportionally more room send. The call sites name events and
+coordinates; they still do not build Web Audio nodes. This keeps the acoustic model centralized
+and makes future occlusion or alternate mixes possible without rewriting boss logic.
+
+### Variation and materials
+
+Repeated cues draw from four subtle, non-repeating profiles that vary pitch, filter, gain,
+duration, and onset. A per-family streak mask can pull a repeated sound down by up to 6 dB,
+while exact rhythmic telegraphs remain deterministic. Sword contact now separates a 6–9 ms
+transient, material body, gated sub layer, and inharmonic metal resonances; player hurt uses
+flesh/body components and deliberately omits the metal tail. The sub gate prevents rapid
+phase-three hits from multiplying low-frequency energy.
+
+Malakar also gains motion foley: paced footfalls while stalking and a scrape texture only while
+charging. His roar is no longer a single oscillator gesture. It combines breath, FM modulation,
+subharmonic body, formant sweeps, saturation, and slow unstable flutter, with separate small and
+full-roar shapes.
+
+### Adaptive score and mastering
+
+The MiniMax recording remains the musical identity and procedural fallback remains immediate,
+but the music bus is now split into drone, drums, tension, and soundtrack layers. Player health
+below 35% introduces a filtered tension pad; boss health below 30% increases intensity; stagger
+briefly suppresses drums so the opening is audible. Changes use AudioParam targets rather than
+frame-stepped gain jumps.
+
+The master compressor now feeds a soft-clipping WaveShaper ceiling at -1 dBFS. This is a
+practical browser approximation of true-peak protection, not a claim of oversampled offline
+loudness mastering. The arena response is a 1.9-second stereo, mid-focused synthetic impulse;
+live Chromium measured its generation at about 8.2 ms, comfortably below the issue's 50 ms
+budget.
+
+### Changed from v2.5
+
+- Positional audio arguments changed from a numeric pan to `SpatialAudio`; a numeric value is
+  still accepted inside `GameAudio` for compatibility, but gameplay should pass the descriptor.
+- The procedural score is no longer one indivisible bus: drone, drums, and tension can respond
+  independently while the MiniMax track remains routed through the common music/master chain.
+- The 36-voice ceiling is now hard, with six slots reserved from ordinary sounds for critical
+  feedback during dense combat.
+- QA debug state exposes the peak limiter, IR duration/build cost, variation coverage, maximum
+  exercised distance, and adaptive mix state.
+
+### Verification notes
+
+`npm run build`, TypeScript, focused audio ESLint, JavaScript syntax checks, and `git diff
+--check` pass. Live Chromium loaded the MiniMax score, exercised nine variation families and
+470 px of distance, engaged low-health/boss-intensity/stagger states, peaked at 30/36 active
+voices in the stress burst, and emitted no console warnings or errors. Desktop and 390×844
+views reached combat. The legacy repo QA script still points at a Linux-only Chromium path on
+this Windows checkout, so its expanded assertions are recorded but were not executed here.
+Final timbre and balance remain a human listening decision on headphones and a phone speaker.

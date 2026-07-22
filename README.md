@@ -8,7 +8,9 @@ rules are all decided by what works one-handed on a 390px screen.
 
 **Play it: [gracefell.alyoechosys.dev](https://gracefell.alyoechosys.dev)**
 
-Zero art assets. Zero audio files. Every stone in the floor, every ember, every wing, and every drum hit is generated at runtime from code — canvas 2D for the visuals, Web Audio for the score and the SFX. The whole thing is one `<canvas>` and about two thousand lines of TypeScript.
+Zero art assets, one generated music track. Every stone in the floor, every ember, every wing, and every combat cue is generated at runtime from code — canvas 2D for the visuals and Web Audio for the SFX. A MiniMax Music 3.0 instrumental now supplies the score, with the original procedural drone and phase-aware drums kept underneath and available as the offline fallback. The whole game is still one `<canvas>` and about two thousand lines of TypeScript.
+
+The sovereign has an audio language, not one generic warning: swipes whistle, charges rise, volleys crystallise, rings resonate, meteors fall and the spiral winds itself tight. Impacts are layered and positioned across the arena, the stone room supplies a generated reverb tail, and the whole score ducks and limits itself when phase three gets crowded. The shipped MP3 is music only; every combat sound, noise source and room impulse is still synthesized at startup.
 
 ---
 
@@ -17,6 +19,8 @@ Zero art assets. Zero audio files. Every stone in the floor, every ember, every 
 **v1 — written by Kimi (OKComputer).** The original prototype: the engine skeleton, the Input/Player/Boss/Game architecture, souls-style input buffering, the two-phase boss with six attacks, the procedural Web Audio engine, the parchment-and-grace-gold art direction, and the writing ("a boss waits at the end of grace"). That version was already a real game — it just hadn't been polished.
 
 **v2 — extended by Claude (Opus 4.8).** Combat depth, a third phase, a full rendering pass, persistence, and a headless verification gate. Details in [DESIGN.md](DESIGN.md).
+
+**v2.4–v2.5 — audio extended by Codex (GPT-5).** Attack-specific procedural cues, spatial mix protection, and the MiniMax-generated score with a procedural fallback. The generation prompt and file hash are recorded in [`public/audio/README.md`](public/audio/README.md).
 
 Directed by [@jonathanwxh-cell](https://github.com/jonathanwxh-cell), who asked for "AAA grade" and meant it.
 
@@ -87,6 +91,20 @@ hard white core and a rotating diamond outline (decoration is round), hostile ri
 leading edge — the part you actually have to clear — and meteors close four ticks inward so the fuse
 reads as motion rather than hue.
 
+## Listening to the fight
+
+The two-minute dark-fantasy score was generated with MiniMax Music 3.0 and ships locally, with a
+procedural fallback if it cannot decode. Combat audio is synthesized in the browser: every attack
+has a stable tell, repeated swings and impacts receive subtle non-repeating variations, and hits use
+different metal, flesh, and low-frequency layers. Malakar has a layered organic roar plus footsteps
+and charge-scrape foley.
+
+World sounds are mixed relative to the player, so distance changes level, brightness, stereo pan,
+and how much of the stone arena tail you hear. Low player health introduces a tension layer, the
+last 30% of boss health raises intensity, and a stagger clears the drums to expose the opening. A
+compressor and -1 dBFS peak ceiling protect dense phase-three collisions. Headphones give the best
+spatial read, but the transient and sub limits are designed to remain legible on a phone speaker.
+
 ## Running it
 
 ```bash
@@ -101,7 +119,8 @@ Production is a zero-dependency Node static server (`server.mjs`) in front of `d
 
 ```
 src/game/engine.ts   the entire game — Input, Player, Boss, Game + render layer (~2.1k lines)
-src/game/audio.ts    procedural Web Audio: SFX primitives, drone, phase-aware drums
+src/game/audio.ts    hybrid Web Audio: procedural SFX/fallback + generated score
+public/audio/        MiniMax score and generation provenance
 src/pages/Home.tsx   mounts a canvas. that's all it does.
 qa/verify.cjs        headless Playwright gate — the thing that decides "done"
 DESIGN.md            per-version reasoning log
@@ -114,7 +133,7 @@ scripts/provenance.sh  regenerates that ledger from git trailers
 
 ## On "done"
 
-Nothing here shipped on a claim. `qa/verify.cjs` drives a real Chromium at 1280×800 and 390×844 and asserts the canvas actually has ink in it, that the console is clean, that all three phases trigger, that victory computes a grade, that saves round-trip through localStorage, and that a perfect dodge really does refund stamina without taking damage. Green, or it isn't done.
+Nothing here shipped on a claim. `qa/verify.cjs` drives a real Chromium at 1280×800 and 390×844 and asserts the canvas actually has ink in it, that the console is clean, that the generated soundtrack decodes, that all three phases trigger, that victory computes a grade, that saves round-trip through localStorage, and that a perfect dodge really does refund stamina without taking damage. Green, or it isn't done.
 
 ## License
 

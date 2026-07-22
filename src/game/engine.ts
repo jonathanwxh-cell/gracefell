@@ -1,5 +1,5 @@
 // GRACEFELL — boss-arena ARPG engine (canvas 2D, procedural, no assets)
-import { GameAudio } from './audio';
+import { GameAudio, type SpatialAudio } from './audio';
 
 // ------------------------------------------------------------------ utils
 export const TAU = Math.PI * 2;
@@ -241,7 +241,7 @@ export class Player {
         this.rollDir = m > 0.1 ? Math.atan2(ax.y, ax.x) : this.facing;
         this.stam -= 20; this.stamDelay = 0.55;
         this.iframes = Math.max(this.iframes, 0.34 * game.mods.iframe);
-        game.audio.dodge();
+        game.audio.dodge(game.audioSpatial(this.x, this.y));
         game.burst(this.x, this.y, 8, '#8f8776', 120, 0.35, 3);
       } else if (this.stam >= 12 && this.state !== 'flask' && input.consume('light')) {
         const step = this.comboWindow > 0 ? this.comboStep : 0;
@@ -253,14 +253,15 @@ export class Player {
         if (b && b.hp > 0) this.facing = angTo(this.x, this.y, b.x, b.y);
         const lunge = 340 + step * 55;
         this.lungeVx = Math.cos(this.facing) * lunge; this.lungeVy = Math.sin(this.facing) * lunge;
-        if (step === 2) game.audio.swingHeavy(); else game.audio.swing();
+        const spatial = game.audioSpatial(this.x, this.y);
+        if (step === 2) game.audio.swingHeavy(spatial); else game.audio.swing(step, spatial);
       } else if (this.stam >= 26 && this.state !== 'flask' && input.consume('heavy')) {
         this.state = 'heavy'; this.t = 0.62; this.attackHit = false;
         this.stam -= 26; this.stamDelay = 0.7;
         const b = game.boss;
         if (b && b.hp > 0) this.facing = angTo(this.x, this.y, b.x, b.y);
         this.lungeVx = Math.cos(this.facing) * 300; this.lungeVy = Math.sin(this.facing) * 300;
-        game.audio.swingHeavy();
+        game.audio.swingHeavy(game.audioSpatial(this.x, this.y));
       } else if (this.flasks > 0 && this.hp < this.maxHp && this.state === 'move' && input.consume('flask')) {
         this.state = 'flask'; this.t = 1.0;
         this.flasks--;
@@ -364,7 +365,8 @@ export class Player {
     this.hurtFlash = 0.35;
     const a = angTo(sx, sy, this.x, this.y);
     this.vx = Math.cos(a) * 330; this.vy = Math.sin(a) * 330;
-    game.audio.playerHurt();
+    game.audio.playerHurt(game.audioSpatial(this.x, this.y));
+    game.vibrate(dmg >= 20 ? [24, 24, 38] : [18, 18, 24]);
     game.shake(10, 0.3);
     game.redFlash = 0.5;
     game.burst(this.x, this.y, 14, PAL.blood, 200, 0.5, 3.5);
@@ -504,6 +506,7 @@ export class Boss {
   phaseRoarDone = false;
   phase3Done = false;
   spiralLeft = 0; spiralAng = 0; spiralTick = 0;
+  foleyT = 0; chargeFoleyT = 0;
 
   extraSpeed = 1; // set from Game.mods — the grace dial
   get speedMul() { return (this.phase >= 3 ? 1.42 : this.phase === 2 ? 1.28 : 1) * this.extraSpeed; }
@@ -514,6 +517,8 @@ export class Boss {
     this.aura = Math.max(0, this.aura - dt);
     this.hurtFlash = Math.max(0, this.hurtFlash - dt);
     this.embers += dt;
+    this.foleyT -= dt;
+    this.chargeFoleyT -= dt;
     for (const k of Object.keys(this.cooldowns) as BossAttack[]) this.cooldowns[k] = Math.max(0, this.cooldowns[k] - dt);
     const dToP = dist(this.x, this.y, p.x, p.y);
     const aToP = angTo(this.x, this.y, p.x, p.y);
@@ -540,6 +545,10 @@ export class Boss {
         const spd = 148 * this.speedMul * want;
         this.vx = Math.cos(this.facing + wob * 0.35) * spd;
         this.vy = Math.sin(this.facing + wob * 0.35) * spd;
+        if (this.foleyT <= 0 && spd > 45) {
+          game.audio.bossStep(game.audioSpatial(this.x, this.y), 0.85 + this.phase * 0.08);
+          this.foleyT = 0.46 / this.speedMul;
+        }
         if (this.t <= 0) this.chooseAttack(game, dToP);
         break;
       }
@@ -555,6 +564,10 @@ export class Boss {
           this.chargeTime -= dt;
           this.vx = Math.cos(this.chargeDir) * 880;
           this.vy = Math.sin(this.chargeDir) * 880;
+          if (this.chargeFoleyT <= 0) {
+            game.audio.chargeScrape(game.audioSpatial(this.x, this.y));
+            this.chargeFoleyT = 0.09;
+          }
           game.addParticle({
             x: this.x - Math.cos(this.chargeDir) * this.r, y: this.y - Math.sin(this.chargeDir) * this.r,
             vx: rand(-40, 40), vy: rand(-40, 40), life: 0.4, maxLife: 0.4, size: rand(4, 8), sizeEnd: 0,
@@ -567,7 +580,7 @@ export class Boss {
           const dc = Math.hypot(this.x, this.y);
           if (this.chargeTime <= 0 || dc > game.arenaR - this.r - 8) {
             game.shake(14, 0.4);
-            game.audio.slam();
+            game.audio.slam(game.audioSpatial(this.x, this.y));
             game.burst(this.x, this.y, 26, '#8a7a5c', 260, 0.6, 5);
             this.endStrike(0.8);
           }
@@ -579,7 +592,7 @@ export class Boss {
             this.comboLeft--;
             if (this.comboLeft > 0 && dToP < 190) {
               this.state = 'windup'; this.t = 0.34 / this.speedMul;
-              game.audio.telegraph();
+              game.audio.telegraph('swipe', game.audioSpatial(this.x, this.y));
             } else this.endStrike(0.55 / this.speedMul);
           }
         } else if (this.attack === 'slam') {
@@ -590,6 +603,7 @@ export class Boss {
         } else if (this.attack === 'ring') {
           if (this.t <= 0) {
             game.bossSlam(this.x, this.y, 150, 16);
+            game.audio.ring(game.audioSpatial(this.x, this.y));
             game.rings.push({ x: this.x, y: this.y, r: 60, speed: 265, thickness: 26, dmg: 18, maxR: game.arenaR + 60, hostile: true, hitDone: false });
             if (this.phase >= 3) game.rings.push({ x: this.x, y: this.y, r: 10, speed: 205, thickness: 22, dmg: 14, maxR: game.arenaR + 60, hostile: true, hitDone: false });
             this.endStrike(0.8);
@@ -606,7 +620,7 @@ export class Boss {
                 hue: PAL.danger,
               });
             }
-            game.audio.projectile();
+            game.audio.projectile(game.audioSpatial(this.x, this.y));
             this.endStrike(0.6 / this.speedMul);
           }
         } else if (this.attack === 'spiral') {
@@ -623,7 +637,7 @@ export class Boss {
               });
             }
             this.spiralAng += 0.44;
-            if (this.spiralLeft % 3 === 0) game.audio.projectile();
+            if (this.spiralLeft % 3 === 0) game.audio.projectile(game.audioSpatial(this.x, this.y));
           }
           if (this.spiralLeft <= 0) this.endStrike(0.85);
         } else if (this.attack === 'meteor') {
@@ -650,7 +664,7 @@ export class Boss {
       this.phase = 2;
       this.state = 'windup'; this.attack = 'ring'; this.t = 1.1;
       game.audio.setPhase(2);
-      game.audio.roar(true);
+      game.audio.roar(true, game.audioSpatial(this.x, this.y));
       game.shake(20, 0.9);
       game.goldFlash = 0.4;
       game.banner('THE SOVEREIGN BURNS', 'phase');
@@ -664,7 +678,7 @@ export class Boss {
       this.poise = this.maxPoise;
       for (const k of Object.keys(this.cooldowns) as BossAttack[]) this.cooldowns[k] = 0;
       game.audio.setPhase(3);
-      game.audio.roar(true);
+      game.audio.roar(true, game.audioSpatial(this.x, this.y));
       game.shake(24, 1.1);
       game.redFlash = Math.max(game.redFlash, 0.3);
       game.goldFlash = 0.5;
@@ -682,7 +696,7 @@ export class Boss {
       if (next.fuse <= 0) {
         game.meteors.push({ ...next, fuse: 0.85, maxFuse: 0.85 });
         this.meteorQueue.shift();
-        game.audio.telegraph();
+        game.audio.meteorWarning(game.audioSpatial(next.x, next.y));
       }
     }
 
@@ -713,19 +727,19 @@ export class Boss {
     switch (pick) {
       case 'swipe':
         this.t = 0.55 / mul; this.comboLeft = this.phase === 2 ? 3 : 2;
-        this.cooldowns.swipe = 2.2; game.audio.telegraph(); break;
+        this.cooldowns.swipe = 2.2; game.audio.telegraph('swipe', game.audioSpatial(this.x, this.y)); break;
       case 'slam':
-        this.t = 0.95 / mul; this.cooldowns.slam = 5; game.audio.roar(false); break;
+        this.t = 0.95 / mul; this.cooldowns.slam = 5; game.audio.telegraph('slam', game.audioSpatial(this.x, this.y)); break;
       case 'charge':
         this.t = 0.8 / mul; this.chargeDir = angTo(this.x, this.y, game.player.x, game.player.y);
-        this.cooldowns.charge = 6; game.audio.roar(false); break;
+        this.cooldowns.charge = 6; game.audio.telegraph('charge', game.audioSpatial(this.x, this.y)); break;
       case 'volley':
-        this.t = 0.6 / mul; this.cooldowns.volley = 4.5; game.audio.telegraph(); break;
+        this.t = 0.6 / mul; this.cooldowns.volley = 4.5; game.audio.telegraph('volley', game.audioSpatial(this.x, this.y)); break;
       case 'spiral':
         this.t = 0.75 / mul; this.cooldowns.spiral = 8;
         this.spiralLeft = 16; this.spiralTick = 0;
         this.spiralAng = angTo(this.x, this.y, game.player.x, game.player.y) + 0.5;
-        game.audio.roar(false);
+        game.audio.telegraph('spiral', game.audioSpatial(this.x, this.y));
         break;
       case 'meteor': {
         this.t = 0.7 / mul; this.cooldowns.meteor = this.phase >= 3 ? 7.5 : 9;
@@ -737,24 +751,24 @@ export class Boss {
           const py = i === 0 ? p.y : p.y + rand(-160, 160);
           this.meteorQueue.push({ x: px, y: py, fuse: 0.25 + i * (this.phase >= 3 ? 0.27 : 0.34), maxFuse: 0.25 + i * 0.34, r: 95, dmg: 20 });
         }
-        this.state = 'strike'; this.t = 999; game.audio.roar(false);
+        this.state = 'strike'; this.t = 999; game.audio.telegraph('meteor', game.audioSpatial(this.x, this.y));
         break;
       }
       case 'ring':
-        this.t = 0.9 / mul; this.cooldowns.ring = 7; game.audio.roar(false); break;
+        this.t = 0.9 / mul; this.cooldowns.ring = 7; game.audio.telegraph('ring', game.audioSpatial(this.x, this.y)); break;
     }
   }
 
   private beginStrike(game: Game) {
     this.state = 'strike';
     switch (this.attack) {
-      case 'swipe': this.t = 0.1; game.audio.swingHeavy(); break;
+      case 'swipe': this.t = 0.1; game.audio.swingHeavy(game.audioSpatial(this.x, this.y)); break;
       case 'slam': this.t = 0.06; break;
       case 'ring': this.t = 0.06; break;
-      case 'charge': this.chargeTime = 0.42; game.audio.swingHeavy(); break;
+      case 'charge': this.chargeTime = 0.42; this.chargeFoleyT = 0; game.audio.swingHeavy(game.audioSpatial(this.x, this.y)); break;
       case 'volley': this.t = 0.02; break;
       case 'meteor': this.t = 999; break;
-      case 'spiral': this.t = 999; game.audio.swingHeavy(); break;
+      case 'spiral': this.t = 999; game.audio.swingHeavy(game.audioSpatial(this.x, this.y)); break;
     }
   }
 
@@ -774,7 +788,7 @@ export class Boss {
     game.hitstop = Math.max(game.hitstop, dmg > 20 ? 0.09 : 0.05);
     if (dmg > 20) game.zoomPunch = Math.max(game.zoomPunch, 0.045);
     game.shake(dmg > 20 ? 7 : 4, 0.2);
-    game.audio.hit(dmg > 20);
+    game.audio.hit(dmg > 20, game.audioSpatial(this.x, this.y), game.player.comboStep);
     const a = angTo(fromX, fromY, this.x, this.y);
     game.sparks(this.x - Math.cos(a) * this.r * 0.5, this.y - Math.sin(a) * this.r * 0.5, dmg > 20 ? 16 : 9);
     game.addDamageNum(this.x + rand(-16, 16), this.y - this.r - 8, Math.round(final).toString(), dmg > 20 ? PAL.goldBright : PAL.parchment, dmg > 20 ? 26 : 19);
@@ -796,7 +810,7 @@ export class Boss {
     if (game.mods.noStagger) { this.poise = this.maxPoise; return; }
     this.state = 'staggered'; this.t = 1.7;
     this.poise = this.maxPoise;
-    game.audio.stagger();
+    game.audio.stagger(game.audioSpatial(this.x, this.y));
     game.goldFlash = 0.35;
     game.banner('STAGGERED', 'stagger');
     game.shake(8, 0.35);
@@ -1144,6 +1158,7 @@ export class Game {
     this.destroyed = true;
     cancelAnimationFrame(this.raf);
     this.input.destroy();
+    this.audio.destroy();
     window.removeEventListener('resize', this.resize);
     (window as any).__graceTouch = undefined;
   }
@@ -1169,6 +1184,11 @@ export class Game {
     const d = Math.hypot(e.x, e.y);
     const max = this.arenaR - e.r - 6;
     if (d > max) { e.x = (e.x / d) * max; e.y = (e.y / d) * max; }
+  }
+  audioSpatial(x: number, y: number): SpatialAudio {
+    const dx = x - this.player.x;
+    const dy = y - this.player.y;
+    return { pan: clamp(dx / 400, -0.9, 0.9), distance: Math.hypot(dx, dy) };
   }
   shake(amp: number, dur: number) {
     if (!this.shakeEnabled) return;
@@ -1382,7 +1402,8 @@ export class Game {
     p.stam = clamp(p.stam + 30, 0, p.maxStam);
     this.slowT = 0.34; this.timeScale = 0.25;
     this.goldFlash = Math.max(this.goldFlash, 0.28);
-    this.audio.parrySpark();
+    this.audio.parrySpark(this.audioSpatial(p.x, p.y));
+    this.vibrate([10, 35, 18]);
     this.addDamageNum(p.x, p.y - 30, 'PERFECT', PAL.spirit, 21);
     this.sparks(p.x, p.y, 14);
     this.boss.applyPoise(16, this);
@@ -1396,7 +1417,7 @@ export class Game {
     }
   }
   bossSlam(x: number, y: number, r: number, dmg: number) {
-    this.audio.slam();
+    this.audio.slam(this.audioSpatial(x, y));
     this.shake(16, 0.5);
     this.addScorch(x, y, r * 0.55, 'rgba(10,6,3,0.85)', 0.32);
     this.addScorch(x, y, r * 0.3, 'rgba(60,30,10,0.9)', 0.25);
@@ -1417,7 +1438,7 @@ export class Game {
   onBossDeath() {
     this.boss.state = 'dying';
     this.slowT = 1.5; this.timeScale = 0.22;
-    this.audio.roar(true);
+    this.audio.roar(true, this.audioSpatial(this.boss.x, this.boss.y));
     this.shake(18, 1);
     this.burst(this.boss.x, this.boss.y, 80, PAL.amber, 380, 1.6, 5);
     this.burst(this.boss.x, this.boss.y, 40, PAL.goldBright, 260, 2, 4);
@@ -1547,13 +1568,13 @@ export class Game {
       if (row.id === 'grace') {
         // left third decreases, right third increases, middle does nothing
         const gm = this.menuGeom();
-        if (tx < gm.decZone) { this.setGrace(this.grace - 1); this.audio.telegraph(); return true; }
-        if (tx > gm.incZone) { this.setGrace(this.grace + 1); this.audio.telegraph(); return true; }
+        if (tx < gm.decZone) { this.setGrace(this.grace - 1); this.audio.ui(); return true; }
+        if (tx > gm.incZone) { this.setGrace(this.grace + 1); this.audio.ui(); return true; }
         return true; // swallow: they aimed at the row, not at "start"
       }
-      if (row.id === 'shake') { this.shakeEnabled = !this.shakeEnabled; this.persist(); this.audio.telegraph(); return true; }
-      if (row.id === 'flash') { this.flashReduced = !this.flashReduced; this.persist(); this.audio.telegraph(); return true; }
-      if (row.id === 'haptics') { this.hapticsEnabled = !this.hapticsEnabled; this.persist(); this.audio.telegraph(); this.vibrate(15); return true; }
+      if (row.id === 'shake') { this.shakeEnabled = !this.shakeEnabled; this.persist(); this.audio.ui(); return true; }
+      if (row.id === 'flash') { this.flashReduced = !this.flashReduced; this.persist(); this.audio.ui(); return true; }
+      if (row.id === 'haptics') { this.hapticsEnabled = !this.hapticsEnabled; this.persist(); this.audio.ui(); this.vibrate(15); return true; }
     }
     return false;
   }
@@ -1565,8 +1586,8 @@ export class Game {
       if (this.menuHit(t.x, t.y)) ate = true;
     }
     // keyboard: left/right nudge the dial without touching the start binding
-    if (this.input.consume('left')) { this.setGrace(this.grace - 1); this.audio.telegraph(); }
-    if (this.input.consume('right')) { this.setGrace(this.grace + 1); this.audio.telegraph(); }
+    if (this.input.consume('left')) { this.setGrace(this.grace - 1); this.audio.ui(); }
+    if (this.input.consume('right')) { this.setGrace(this.grace + 1); this.audio.ui(); }
     return ate;
   }
 
@@ -1609,7 +1630,7 @@ export class Game {
       if (this.stateT > 2.6 || (this.stateT > 0.6 && this.input.consume('confirm'))) {
         this.state = 'fight'; this.stateT = 0;
         this.boss.state = 'stalk'; this.boss.t = 0.4;
-        this.audio.roar(true);
+        this.audio.roar(true, this.audioSpatial(this.boss.x, this.boss.y));
       }
     } else if (this.state === 'dead') {
       if (this.stateT > 1.4 && this.input.consume('confirm')) {
@@ -1633,6 +1654,11 @@ export class Game {
       if (this.state === 'fight') this.fightTime += dt;
       this.player.update(dt, this.input, this);
       if (this.boss.hp > 0) this.boss.update(dt, this);
+      this.audio.updateCombatState(
+        this.player.hp / Math.max(1, this.player.maxHp),
+        this.boss.hp / Math.max(1, this.boss.maxHp),
+        this.boss.state === 'staggered',
+      );
       this.updateProjectiles(dt);
       this.updateRings(dt);
       this.updateMeteors(dt);
@@ -1741,7 +1767,7 @@ export class Game {
     for (const m of this.meteors) {
       m.fuse -= dt;
       if (m.fuse <= 0) {
-        this.audio.meteor();
+        this.audio.meteor(this.audioSpatial(m.x, m.y));
         this.shake(9, 0.3);
         this.addScorch(m.x, m.y, m.r * 0.6, 'rgba(8,4,2,0.9)', 0.4);
         this.addScorch(m.x, m.y, m.r * 0.32, 'rgba(120,45,15,0.8)', 0.3);

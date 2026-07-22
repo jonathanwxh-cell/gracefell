@@ -56,6 +56,45 @@ function canvasHasInk(pix) {
       step.stateAfterStart = st1;
       if (st1 !== 'fight') out.errors.push(vp.name + ': did not reach fight state (' + st1 + ')');
 
+      // Audio cannot be heard headlessly, but its runtime architecture and every
+      // distinct boss cue can still be initialized and exercised without errors.
+      const audioState = await pg.evaluate(() => {
+        const g = window.__game;
+        const pan = [-0.8, -0.5, -0.2, 0.2, 0.5, 0.8, 0];
+        ['swipe', 'slam', 'charge', 'volley', 'meteor', 'ring', 'spiral']
+          .forEach((cue, i) => g.audio.telegraph(cue, pan[i]));
+        const farLeft = { pan: -0.8, distance: 470 };
+        const farRight = { pan: 0.8, distance: 430 };
+        g.audio.meteorWarning(farLeft);
+        g.audio.ring(farRight);
+        g.audio.swing(1, { pan: 0, distance: 0 });
+        g.audio.hit(true, farRight, 2);
+        g.audio.bossStep(farLeft, 1.1);
+        g.audio.chargeScrape(farRight);
+        g.audio.roar(true, farLeft);
+        g.audio.updateCombatState(0.12, 0.18, true);
+        return g.audio.debugState();
+      });
+      step.audio = audioState;
+      if (!audioState.initialized || !audioState.hasLimiter || !audioState.hasPeakLimiter || !audioState.hasReusableNoise) {
+        out.errors.push(vp.name + ': audio engine did not initialize its master/noise graph: ' + JSON.stringify(audioState));
+      }
+      if (audioState.activeVoices > audioState.maxVoices) {
+        out.errors.push(vp.name + ': audio voice budget exceeded: ' + JSON.stringify(audioState));
+      }
+      if (audioState.soundtrackState !== 'playing') {
+        out.errors.push(vp.name + ': generated soundtrack did not load: ' + JSON.stringify(audioState));
+      }
+      if (audioState.arenaIrDuration < 1.5 || audioState.irBuildCostMs > 50) {
+        out.errors.push(vp.name + ': arena IR failed duration/init budget: ' + JSON.stringify(audioState));
+      }
+      if (audioState.variationCount < 4 || audioState.maxObservedDistance < 400) {
+        out.errors.push(vp.name + ': variation/spatial audio paths were not exercised: ' + JSON.stringify(audioState));
+      }
+      if (audioState.adaptive.tension < 0.8 || audioState.adaptive.intensity < 0.4 || !audioState.adaptive.staggered) {
+        out.errors.push(vp.name + ': adaptive music state did not engage: ' + JSON.stringify(audioState));
+      }
+
       if (vp.name === 'desktop') {
         // simulate combat: move, roll, attack; force phase transitions via damage
         await pg.keyboard.down('KeyW');
@@ -109,16 +148,25 @@ function canvasHasInk(pix) {
         // perfect dodge unit check
         const pd = await pg.evaluate(() => {
           const g = (window).__game;
+          window.__hapticEvents = [];
+          try {
+            Object.defineProperty(navigator, 'vibrate', {
+              configurable: true,
+              value: (pattern) => { window.__hapticEvents.push(pattern); return true; },
+            });
+          } catch { /* browser may expose a non-configurable vibration stub */ }
           g.state = 'fight';
           const p = g.player;
           p.state = 'roll'; p.t = 0.35; p.iframes = 0.3; p.perfectCd = 0; p.stam = 10;
           const before = g.dmgNums.length;
           const hpBefore = p.hp;
           p.takeDamage(10, p.x + 30, p.y, g);
-          return { stam: p.stam, dmgNums: g.dmgNums.length - before, hpDelta: p.hp - hpBefore };
+          return { stam: p.stam, dmgNums: g.dmgNums.length - before, hpDelta: p.hp - hpBefore,
+                   haptics: window.__hapticEvents.length };
         });
         step.perfectDodge = pd;
         if (pd.stam < 35 || pd.dmgNums < 1 || pd.hpDelta !== 0) out.errors.push('perfect dodge failed: ' + JSON.stringify(pd));
+        if (pd.haptics < 1) out.errors.push('perfect dodge did not request haptic feedback');
 
         // ---- v2.1: grace dial, accessibility, palette discipline
         const acc = await pg.evaluate(() => {
@@ -367,11 +415,9 @@ function canvasHasInk(pix) {
       const atk = t.layout.btns.find((b) => b.id === 'light');
       await pg.evaluate(() => { window.__game.player.state = 'move'; window.__game.player.stam = 100; });
       await pg.touchscreen.tap(atk.x, atk.y);
-      await pg.waitForTimeout(160);
+      await pg.waitForFunction(() => window.__game.player.state === 'light', null, { timeout: 1000 }).catch(() => {});
       t.atkState = await pg.evaluate(() => window.__game.player.state);
-      if (!['light', 'move'].includes(t.atkState)) out.errors.push('touch: ATK button produced state ' + t.atkState);
-      const swung = await pg.evaluate(() => window.__game.__sawLight === true);
-      t.swung = swung;
+      if (t.atkState !== 'light') out.errors.push('touch: ATK button did not enter the light-attack state (' + t.atkState + ')');
 
       // 7. no horizontal overflow, canvas drawing, clean console
       t.overflow = await pg.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
