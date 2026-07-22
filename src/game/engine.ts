@@ -64,6 +64,16 @@ const KEYMAP: Record<string, string> = {
   Enter: 'confirm', KeyM: 'mute',
 };
 
+// Primary-pointer test, not "has a touchscreen" — a laptop with a touch panel
+// still wants the mouse copy. Re-checked on the first real touch event anyway.
+export function coarsePointer(): boolean {
+  try {
+    if (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches) return true;
+    return typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0
+      && !(typeof matchMedia === 'function' && matchMedia('(pointer: fine)').matches);
+  } catch { return false; }
+}
+
 export class Input {
   private canvas: HTMLCanvasElement;
   private onFirstGesture: () => void;
@@ -73,7 +83,7 @@ export class Input {
   // touch
   joyActive = false; joyId = -1; joyOx = 0; joyOy = 0; joyX = 0; joyY = 0;
   btnPressed: Record<string, boolean> = {};
-  isTouch = false;
+  isTouch = coarsePointer();
   taps: { x: number; y: number }[] = []; // consumed by menu hit-tests each frame
 
   constructor(canvas: HTMLCanvasElement, onFirstGesture: () => void) {
@@ -1021,11 +1031,17 @@ export class Boss {
 // ------------------------------------------------------------------ game
 type GameState = 'title' | 'intro' | 'fight' | 'dead' | 'victory';
 
+// Button *shape*; absolute positions come from Game.touchLayout() so they scale
+// with the screen and clear the home indicator. Fixed pixel offsets used to put
+// the flask button inside the joystick zone on phones narrower than ~380px.
+// Thumb cluster, measured in "base" units out from the bottom-right corner.
+// ox/oy are centre offsets (left/up from the corner), ur is radius x base.
+// ATK sits under the thumb; ROLL is the next most-used so it's adjacent.
 const TOUCH_BTNS = [
-  { id: 'light', label: 'ATK', dx: -70, dy: -90, r: 44 },
-  { id: 'roll', label: 'ROLL', dx: -140, dy: -46, r: 38 },
-  { id: 'heavy', label: 'HVY', dx: -56, dy: -176, r: 36 },
-  { id: 'flask', label: 'FLASK', dx: -206, dy: -118, r: 30 },
+  { id: 'light', label: 'ATK', ox: 1.05, oy: 1.05, ur: 1.00 },
+  { id: 'roll', label: 'ROLL', ox: 3.00, oy: 0.95, ur: 0.80 },
+  { id: 'heavy', label: 'HVY', ox: 1.15, oy: 3.10, ur: 0.75 },
+  { id: 'flask', label: 'FLASK', ox: 3.20, oy: 3.00, ur: 0.62 },
 ];
 
 export class Game {
@@ -1074,6 +1090,8 @@ export class Game {
   grace = 0;
   shakeEnabled = true;
   flashReduced = false;
+  hapticsEnabled = true;
+  safeBottom = 0; safeRight = 0;
   static SAVE_VERSION = 2;
 
   constructor(canvas: HTMLCanvasElement) {
@@ -1108,6 +1126,7 @@ export class Game {
       if (typeof sv.grace === 'number') this.grace = clamp(Math.round(sv.grace), -3, 5);
       if (typeof sv.shakeEnabled === 'boolean') this.shakeEnabled = sv.shakeEnabled;
       if (typeof sv.flashReduced === 'boolean') this.flashReduced = sv.flashReduced;
+      if (typeof sv.hapticsEnabled === 'boolean') this.hapticsEnabled = sv.hapticsEnabled;
     } catch { /* first run / private mode */ }
     this.buildFloor();
     this.lastTs = performance.now();
@@ -1130,6 +1149,13 @@ export class Game {
   }
 
   private resize = () => {
+    // CSS env() insets aren't reachable from canvas — index.css publishes them
+    // as custom properties so we can read them here.
+    try {
+      const cs = getComputedStyle(document.documentElement);
+      this.safeBottom = parseFloat(cs.getPropertyValue('--sa-b')) || 0;
+      this.safeRight = parseFloat(cs.getPropertyValue('--sa-r')) || 0;
+    } catch { this.safeBottom = 0; this.safeRight = 0; }
     this.dpr = Math.min(2, window.devicePixelRatio || 1);
     this.w = window.innerWidth; this.h = window.innerHeight;
     this.canvas.width = this.w * this.dpr;
@@ -1218,6 +1244,7 @@ export class Game {
         bestTime: this.bestTime, bests: this.bests, wins: this.wins,
         attempts: this.attempts, muted: this.audio.muted,
         grace: this.grace, shakeEnabled: this.shakeEnabled, flashReduced: this.flashReduced,
+        hapticsEnabled: this.hapticsEnabled,
       }));
     } catch { /* ignore */ }
   }
@@ -1441,17 +1468,51 @@ export class Game {
     }
   }
 
+  // ------------------------------------------------------------ touch layout
+  // Single source of truth for the on-screen controls: the renderer, the
+  // hit-test and the QA assertions all read this. Buttons scale with the
+  // smaller screen dimension, sit clear of the joystick half, and are lifted
+  // above the iOS home indicator / Android gesture bar via safe-area insets.
+  touchLayout() {
+    const padR = 16 + this.safeRight;
+    const padB = 18 + this.safeBottom;
+    const joyZoneR = this.w * 0.45; // left of this belongs to the stick
+    // Shrink the whole cluster on narrow phones rather than letting buttons
+    // collide or spill into the joystick half — the QA overlap test caught
+    // exactly that when this was laid out in a fixed unit square.
+    const widthBudget = (this.w - joyZoneR - padR) / 4.25;
+    const base = clamp(Math.min(Math.min(this.w, this.h) * 0.115, widthBudget), 26, 54);
+    const btns = TOUCH_BTNS.map((b) => ({
+      id: b.id,
+      label: b.label,
+      x: this.w - padR - base * b.ox,
+      y: this.h - padB - base * b.oy,
+      r: base * b.ur,
+    }));
+    return { base, btns, joyZoneR, padB, padR };
+  }
+
+  vibrate(ms: number | number[]) {
+    if (!this.hapticsEnabled) return;
+    try { (navigator as any).vibrate?.(ms); } catch { /* unsupported */ }
+  }
+
   // ------------------------------------------------------------ title menu
   // Laid out once and reused by both the renderer and the hit-test, so the
   // thing you see is provably the thing you can press.
   menuRows(): { id: string; y: number; label: string; value: string }[] {
-    const baseY = this.h * 0.70;
-    const gap = Math.max(30, Math.min(38, this.h * 0.045));
-    return [
+    const rowCount = this.input.isTouch ? 4 : 3;
+    const gap = Math.max(28, Math.min(38, this.h * 0.045));
+    const baseY = this.h * 0.70 - (rowCount - 3) * gap * 0.5;
+    const rows = [
       { id: 'grace', y: baseY, label: 'TRIAL', value: this.graceLabel() },
       { id: 'shake', y: baseY + gap, label: 'SCREEN SHAKE', value: this.shakeEnabled ? 'on' : 'off' },
       { id: 'flash', y: baseY + gap * 2, label: 'FLASHES', value: this.flashReduced ? 'reduced' : 'full' },
     ];
+    if (this.input.isTouch) {
+      rows.push({ id: 'haptics', y: baseY + gap * 3, label: 'HAPTICS', value: this.hapticsEnabled ? 'on' : 'off' });
+    }
+    return rows;
   }
 
   // One geometry function feeds the renderer, the hit-test, AND the layout
@@ -1492,6 +1553,7 @@ export class Game {
       }
       if (row.id === 'shake') { this.shakeEnabled = !this.shakeEnabled; this.persist(); this.audio.telegraph(); return true; }
       if (row.id === 'flash') { this.flashReduced = !this.flashReduced; this.persist(); this.audio.telegraph(); return true; }
+      if (row.id === 'haptics') { this.hapticsEnabled = !this.hapticsEnabled; this.persist(); this.audio.telegraph(); this.vibrate(15); return true; }
     }
     return false;
   }
@@ -1512,17 +1574,15 @@ export class Game {
   private handleTouch(e: TouchEvent, phase: string) {
     if (!this.input.isTouch) return;
     const r = this.canvas.getBoundingClientRect();
-    const btn = (id: string) => TOUCH_BTNS.find((b) => b.id === id)!;
+    const { btns } = this.touchLayout();
     for (let i = 0; i < e.changedTouches.length; i++) {
       const t = e.changedTouches[i];
       const x = t.clientX - r.left, y = t.clientY - r.top;
-      for (const b of TOUCH_BTNS) {
-        const bx = r.width + b.dx, by = r.height + b.dy;
-        if (Math.hypot(x - bx, y - by) < b.r + 8) {
-          if (phase === 'start') this.input.btnPressed[b.id] = true;
+      for (const b of btns) {
+        if (Math.hypot(x - b.x, y - b.y) < b.r + 10) {
+          if (phase === 'start') { this.input.btnPressed[b.id] = true; this.vibrate(8); }
         }
       }
-      void btn;
     }
   }
 
@@ -2095,12 +2155,16 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
   }
 
   // ---- control hints
-  if (this.hintT > 0 && !this.input.isTouch) {
+  if (this.hintT > 0) {
     ctx.globalAlpha = clamp(this.hintT / 2, 0, 1) * 0.75;
     ctx.textAlign = 'center';
-    ctx.font = body(15, 500);
+    ctx.font = body(this.input.isTouch ? 13 : 15, 500);
     ctx.fillStyle = PAL.parchmentDim;
-    ctx.fillText('WASD move · SPACE roll · J / LMB attack · K heavy · F flask · M mute', this.w / 2, this.h - 18);
+    const hint = this.input.isTouch
+      ? 'drag anywhere on the left to move · ROLL is invincible'
+      : 'WASD move · SPACE roll · J / LMB attack · K heavy · F flask · M mute';
+    // sit above the thumb cluster on touch, not underneath it
+    ctx.fillText(hint, this.w / 2, this.input.isTouch ? this.h - this.touchLayout().base * 3.6 : this.h - 18);
     ctx.globalAlpha = 1;
   }
 
@@ -2108,7 +2172,7 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
   ctx.textAlign = 'right';
   ctx.font = body(13, 500);
   ctx.fillStyle = 'rgba(154,143,116,0.7)';
-  ctx.fillText(this.audio.muted ? 'muted [M]' : '[M] sound', this.w - pad, pad + 8);
+  ctx.fillText(this.input.isTouch ? (this.audio.muted ? 'muted' : 'sound on') : (this.audio.muted ? 'muted [M]' : '[M] sound'), this.w - pad, pad + 8);
 };
 
 (Game.prototype as any).drawBanner = function drawBanner(this: Game, ctx: CanvasRenderingContext2D) {
@@ -2260,15 +2324,18 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
     ctx.fillText(
       this.input.isTouch ? 'tap a row to change it \u00b7 tap anywhere else to begin'
                          : '\u2190 \u2192 or click to change \u00b7 the trial is recorded with your grade',
-      cx, rows[2].y + 30,
+      cx, rows[rows.length - 1].y + 30,
     );
   }
 
-  if (!this.input.isTouch) {
-    ctx.font = body(15, 500);
-    ctx.fillStyle = 'rgba(154,143,116,0.7)';
-    ctx.fillText('WASD move \u00b7 SPACE roll \u00b7 J slash \u00b7 K heavy \u00b7 F flask', cx, this.h * 0.655);
-  }
+  ctx.font = body(15, 500);
+  ctx.fillStyle = 'rgba(154,143,116,0.7)';
+  ctx.fillText(
+    this.input.isTouch
+      ? 'left thumb steers \u00b7 right thumb strikes, rolls, drinks'
+      : 'WASD move \u00b7 SPACE roll \u00b7 J slash \u00b7 K heavy \u00b7 F flask',
+    cx, this.h * 0.655,
+  );
   if (this.wins > 0 || this.bestTime > 0) {
     ctx.font = body(15, 500);
     ctx.fillStyle = 'rgba(201,169,89,0.75)';
@@ -2419,8 +2486,9 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
   }
   // buttons
   ctx.textAlign = 'center';
-  for (const b of TOUCH_BTNS) {
-    const bx = this.w + b.dx, by = this.h + b.dy;
+  const { btns: laidOut } = this.touchLayout();
+  for (const b of laidOut) {
+    const bx = b.x, by = b.y;
     const active = this.input.btnPressed[b.id];
     ctx.globalAlpha = active ? 0.6 : 0.22;
     ctx.fillStyle = b.id === 'flask' ? PAL.gold : '#d8cdb2';
@@ -2435,8 +2503,8 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
     ctx.globalAlpha = 1;
   }
   // flask count near button
-  const fb = TOUCH_BTNS[3];
+  const fb = laidOut.find((b) => b.id === 'flask')!;
   ctx.fillStyle = PAL.goldBright;
   ctx.font = serif(13, 700);
-  ctx.fillText(`×${this.player.flasks}`, this.w + fb.dx, this.h + fb.dy - fb.r - 8);
+  ctx.fillText(`×${this.player.flasks}`, fb.x, fb.y - fb.r - 8);
 };

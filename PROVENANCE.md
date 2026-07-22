@@ -21,6 +21,7 @@ Newest last. One row per pass. A "pass" = one continuous working session by one 
 | v2.1 | 2026-07-22 | Claude | Opus 4.8 via Hetzner MCP | @jonathanwxh-cell | Public release: README, provenance system, commit trailer convention |
 | v2.2 | 2026-07-22 | Claude | Opus 4.8 via Hetzner MCP | @jonathanwxh-cell | Clarity + accessibility: reserved hazard hue with shape coding, grace dial (−3..+5), shake/flash toggles, per-trial bests, save schema v2, menu layout assertions |
 | v2.2.1 | 2026-07-22 | Claude | Opus 4.8 via Hetzner MCP | @jonathanwxh-cell | Docs pass: README grace-dial + readability sections, DESIGN v2.1 section backfilled, AGENTS stale entries corrected (save schema, dodge window), listed + featured on sites.alyoechosys.dev |
+| v2.3 | 2026-07-22 | Claude | Opus 4.8 via Hetzner MCP | @jonathanwxh-cell | Mobile-first: up-front coarse-pointer detection, responsive safe-area thumb cluster, touch-first copy, haptics, and a real thumbs-only QA pass |
 
 ---
 

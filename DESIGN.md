@@ -153,3 +153,59 @@ on refresh. Verified with Playwright at 1280 and 390 that the card renders,
 links to the right host, and adds no console errors or overflow. Note the card
 sits ~8th in DOM order; "featured" there means a promoted shelf, not
 top-of-page.
+
+## v2.3 — Claude (Opus 4.8), "mobile-first, properly" (2026-07-22)
+
+Direction from the owner: this is a game designed for mobile, so treat it that
+way. That reframing exposed three genuine bugs, none of which were visible from
+a desktop browser.
+
+### The first impression was wrong
+`Input.isTouch` only became true on the first `touchstart`. So the title screen
+a phone user actually saw said **"CLICK TO RAISE YOUR BLADE"** above a line of
+WASD bindings. It's now seeded at construction from `coarsePointer()` — a
+`(pointer: coarse)` media query, with a `maxTouchPoints` fallback that excludes
+fine-pointer laptops with touchscreens — and still upgrades on a real touch.
+All the copy branches: title legend, HUD hint, mute indicator.
+
+### The controls didn't fit small phones
+Buttons were at fixed pixel offsets from the bottom-right corner. On anything
+narrower than ~380px the FLASK button crossed into the left 45% joystick zone,
+so pressing it also started a stick drag. And nothing accounted for the iOS home
+indicator, so ROLL sat in the system gesture strip.
+
+`touchLayout()` now places buttons in `base` units out from the corner, with
+`base` shrinking when the width budget between the joystick half and the right
+padding gets tight, and `padB`/`padR` including safe-area insets (published as
+`--sa-b`/`--sa-r` from `index.css`, since `env()` can't be read from a canvas).
+Verified clean at 320×568, 360×780, 390×844, 414×896 and landscape.
+
+The first layout attempt used a unit square inside a cluster box and produced
+overlapping ATK/ROLL and ATK/HVY buttons at thumb size. The new touch test
+caught it immediately, which is the whole argument for writing the test first.
+
+### Touch is now actually tested
+`qa/verify.cjs` gained a third pass in a `hasTouch: true, isMobile: true`
+context that plays with thumbs only: taps to start the fight, drives a real drag
+through the touch listeners and asserts the knight moves (55.9px, diagonal), taps
+ATK, and checks every button for overlap, off-screen, joystick-zone intrusion and
+fingertip size (r ≥ 22). Previously touch was render-only in the harness.
+
+### Haptics
+Short vibrations on taking a hit (longer for heavy), a double-tick on a perfect
+dodge, and a tick on every button press. Off-switchable from a HAPTICS row that
+only appears on touch devices. Untestable headlessly — no vibration API — so
+this is the one part of the pass that rests on code reading, not verification.
+
+### On keeping the keyboard
+The instruction floated removing keyboard controls. I kept them. They cost
+nothing at runtime, they're already covered by the desktop QA pass, and deleting
+them would only subtract from anyone on a laptop. What "mobile-first" changes is
+what *decides* the design — sizes, copy, difficulty, readability all now answer
+to the phone — not whether a second input path is allowed to exist. Easy to
+strip later if that turns out to be wrong; hard to re-derive.
+
+### Changed from v2.2
+- Title control legend and HUD hint are no longer desktop-only strings; both branch on `isTouch`.
+- `TOUCH_BTNS` schema changed from `{dx, dy, r}` pixels to `{ox, oy, ur}` base-units. Anything reading the old fields will break.
+- Menu has a 4th row on touch devices; `menuRows()` no longer returns a fixed 3, and the base Y shifts to keep the block centred.

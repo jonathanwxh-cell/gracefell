@@ -2,6 +2,10 @@
 
 A boss-arena souls-like that runs in a single HTML canvas. One knight, one sovereign, one room.
 
+**Built for a phone.** Left thumb steers, right thumb fights. It runs on a desktop too and the
+keyboard still works — but the layout, the control sizes, the difficulty dial and the readability
+rules are all decided by what works one-handed on a 390px screen.
+
 **Play it: [gracefell.alyoechosys.dev](https://gracefell.alyoechosys.dev)**
 
 Zero art assets. Zero audio files. Every stone in the floor, every ember, every wing, and every drum hit is generated at runtime from code — canvas 2D for the visuals, Web Audio for the score and the SFX. The whole thing is one `<canvas>` and about two thousand lines of TypeScript.
@@ -23,16 +27,21 @@ who did which pass, and the rules any future agent follows before touching the c
 
 ## Controls
 
+**On a phone** — the way it's meant to be played:
+
 | | |
 |---|---|
-| **WASD** / arrows | move |
-| **Space** / Shift | roll (invincible — and a *perfect* dodge if you time it into the swing) |
-| **J** / left click | slash — chains into a 3-hit combo |
-| **K** / right click | heavy |
-| **F** | flask (you get three) |
-| **M** | mute |
+| drag anywhere on the **left half** | a floating stick appears under your thumb; steer with it |
+| **ATK** | slash — tap again in rhythm to chain a 3-hit combo |
+| **ROLL** | invincible — roll *into* a swing for a perfect dodge |
+| **HVY** | heavy, slow, big poise damage |
+| **FLASK** | heal (you get three) |
 
-On touch: left half of the screen is a floating stick, buttons are bottom-right.
+The buttons scale with your screen and sit clear of the home indicator. Haptics fire on hits and
+perfect dodges, and can be switched off on the title screen.
+
+**On a desktop**, if that's what you have: WASD/arrows move, Space or Shift rolls, J or left-click
+slashes, K or right-click is heavy, F drinks, M mutes.
 
 ## The fight
 

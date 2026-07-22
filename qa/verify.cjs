@@ -289,6 +289,106 @@ function canvasHasInk(pix) {
       out.steps[vp.name] = step;
       await ctxB.close();
     }
+    // ================= TOUCH DEVICE PASS =================
+    // The touch path had never been driven by a test — only rendered. This
+    // emulates a real phone (hasTouch + isMobile) and plays with thumbs only.
+    {
+      const tctx = await browser.newContext({
+        viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 3,
+      });
+      const pg = await tctx.newPage();
+      const cerr = [];
+      pg.on('console', (m) => { if (m.type() === 'error') cerr.push(m.text()); });
+      pg.on('pageerror', (e) => cerr.push('pageerror: ' + e.message));
+      await pg.goto(URL, { waitUntil: 'load' });
+      await pg.waitForTimeout(1200);
+      const t = {};
+
+      // 1. the game must KNOW it's a phone before any touch happens
+      t.isTouchBeforeAnyTouch = await pg.evaluate(() => window.__game.input.isTouch);
+      if (!t.isTouchBeforeAnyTouch) out.errors.push('touch: game did not detect a coarse pointer before first touch (phone users see mouse/keyboard copy)');
+
+      // 2. touch-appropriate copy, no keyboard bindings shown
+      t.rows = await pg.evaluate(() => window.__game.menuRows().map((r) => r.id));
+      if (!t.rows.includes('haptics')) out.errors.push('touch: haptics row missing from menu');
+
+      // 3. controls layout: inside screen, clear of the joystick half and the safe area
+      t.layout = await pg.evaluate(() => {
+        const g = window.__game; const L = g.touchLayout();
+        return { base: L.base, joyZoneR: L.joyZoneR, w: g.w, h: g.h,
+                 btns: L.btns.map((b) => ({ id: b.id, x: Math.round(b.x), y: Math.round(b.y), r: Math.round(b.r) })) };
+      });
+      for (const b of t.layout.btns) {
+        if (b.x - b.r < t.layout.joyZoneR) out.errors.push(`touch: ${b.id} button overlaps the joystick half`);
+        if (b.x + b.r > t.layout.w) out.errors.push(`touch: ${b.id} button off the right edge`);
+        if (b.y + b.r > t.layout.h) out.errors.push(`touch: ${b.id} button off the bottom edge`);
+        if (b.r < 22) out.errors.push(`touch: ${b.id} button smaller than a fingertip (r=${b.r})`);
+      }
+      // buttons must not overlap each other
+      for (let i = 0; i < t.layout.btns.length; i++) {
+        for (let j = i + 1; j < t.layout.btns.length; j++) {
+          const a = t.layout.btns[i], b = t.layout.btns[j];
+          if (Math.hypot(a.x - b.x, a.y - b.y) < a.r + b.r - 4) out.errors.push(`touch: ${a.id} and ${b.id} buttons overlap`);
+        }
+      }
+
+      // 4. start the fight with a tap
+      await pg.touchscreen.tap(195, 300);
+      await pg.waitForFunction(() => window.__game && window.__game.state === 'fight', null, { timeout: 12000 }).catch(() => {});
+      t.stateAfterTap = await pg.evaluate(() => window.__game.state);
+      if (t.stateAfterTap !== 'fight') out.errors.push('touch: tap did not start the fight (' + t.stateAfterTap + ')');
+
+      // 5. the joystick actually moves the knight
+      const before = await pg.evaluate(() => ({ x: window.__game.player.x, y: window.__game.player.y }));
+      await pg.touchscreen.tap(100, 600); // establishes touch capability path
+      await pg.evaluate(() => {
+        // drive a drag through the real listeners
+        const c = document.querySelector('canvas');
+        const mk = (type, id, x, y) => {
+          const t = new Touch({ identifier: id, target: c, clientX: x, clientY: y });
+          c.dispatchEvent(new TouchEvent(type, { changedTouches: [t], touches: type === 'touchend' ? [] : [t], bubbles: true, cancelable: true }));
+        };
+        mk('touchstart', 1, 90, 600);
+        for (let i = 1; i <= 6; i++) mk('touchmove', 1, 90 + i * 12, 600 - i * 12);
+      });
+      await pg.waitForTimeout(700);
+      const after = await pg.evaluate(() => ({ x: window.__game.player.x, y: window.__game.player.y,
+                                               joy: { a: window.__game.input.joyActive, x: window.__game.input.joyX, y: window.__game.input.joyY } }));
+      t.joystick = { before, after };
+      if (!after.joy.a) out.errors.push('touch: drag on the left half did not engage the joystick');
+      if (Math.hypot(after.x - before.x, after.y - before.y) < 4) out.errors.push('touch: joystick drag did not move the player');
+      await pg.evaluate(() => {
+        const c = document.querySelector('canvas');
+        const t = new Touch({ identifier: 1, target: c, clientX: 160, clientY: 530 });
+        c.dispatchEvent(new TouchEvent('touchend', { changedTouches: [t], touches: [], bubbles: true, cancelable: true }));
+      });
+
+      // 6. the ATK button actually attacks
+      const atk = t.layout.btns.find((b) => b.id === 'light');
+      await pg.evaluate(() => { window.__game.player.state = 'move'; window.__game.player.stam = 100; });
+      await pg.touchscreen.tap(atk.x, atk.y);
+      await pg.waitForTimeout(160);
+      t.atkState = await pg.evaluate(() => window.__game.player.state);
+      if (!['light', 'move'].includes(t.atkState)) out.errors.push('touch: ATK button produced state ' + t.atkState);
+      const swung = await pg.evaluate(() => window.__game.__sawLight === true);
+      t.swung = swung;
+
+      // 7. no horizontal overflow, canvas drawing, clean console
+      t.overflow = await pg.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      if (t.overflow > 1) out.errors.push('touch: horizontal overflow ' + t.overflow);
+      t.ink = await pg.evaluate(() => {
+        const c = document.querySelector('canvas'); const g = c.getContext('2d');
+        const d = g.getImageData(0, 0, c.width, c.height).data; let lit = 0;
+        for (let i = 0; i < d.length; i += 400) if (d[i] + d[i + 1] + d[i + 2] > 60) lit++;
+        return lit;
+      });
+      if (t.ink <= 0) out.errors.push('touch: canvas blank');
+      if (cerr.length) out.errors.push('touch console: ' + cerr.join(' | '));
+      t.consoleErrors = cerr;
+      out.steps.touch = t;
+      await tctx.close();
+    }
+
     out.ok = out.errors.length === 0;
   } catch (e) {
     out.errors.push('harness: ' + e.message);
