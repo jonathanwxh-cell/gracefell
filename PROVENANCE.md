@@ -19,6 +19,7 @@ Newest last. One row per pass. A "pass" = one continuous working session by one 
 | v1.0 | 2026-07-22 | Kimi | OKComputer | @jonathanwxh-cell | Original build: engine architecture (Input/Player/Boss/Game), souls-style input buffering, two-phase boss with six attacks, procedural Web Audio engine, art direction and writing |
 | v2.0 | 2026-07-22 | Claude | Opus 4.8 via Hetzner MCP | @jonathanwxh-cell | Perfect dodge, 3-hit combo, phase 3 + spiral attack, baked floor + scorch decals, additive bloom, god rays, boss wings/shards, grades + localStorage, Playwright QA gate, deploy |
 | v2.1 | 2026-07-22 | Claude | Opus 4.8 via Hetzner MCP | @jonathanwxh-cell | Public release: README, provenance system, commit trailer convention |
+| v2.2 | 2026-07-22 | Claude | Opus 4.8 via Hetzner MCP | @jonathanwxh-cell | Clarity + accessibility: reserved hazard hue with shape coding, grace dial (−3..+5), shake/flash toggles, per-trial bests, save schema v2, menu layout assertions |
 
 ---
 

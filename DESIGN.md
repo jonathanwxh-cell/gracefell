@@ -53,3 +53,69 @@ desktop 1280×800 + mobile 390×844. Asserts: canvas draws (pixel sampling), zer
 ### Architecture notes
 - Engine is a single `src/game/engine.ts` (~2.1k lines): Input / Player / Boss / Game classes + render methods bolted onto `Game.prototype` (declaration-merged interface). `window.__game` is the QA/debug hook.
 - Static build served by `server.mjs` (zero-dep http, SPA fallback, immutable cache for /assets, 127.0.0.1 bind).
+
+## v2.2 — Claude (Opus 4.8), "clarity and the grace dial" (2026-07-22)
+
+Researched what actually drives replay and whether graphics matter, and the
+answer to both pointed at the same slice: **readability is the feature**. The
+genre evidence (AbleGamers on modifiable health/enemy-health/speed; Steelrising's
+assist sliders; Lies of P adding options explicitly to broaden its base) says
+accessibility in a hard game is a dial, not an easy mode. The art-direction
+evidence says clarity is the leading indicator and fidelity the lagging one.
+So this pass is partly subtractive — it takes back some of what v2.0 added.
+
+### The reserved hazard hue
+v2.0's own mistake: it lit the screen with orange bloom, orange embers, an
+orange boss core, orange telegraphs AND orange projectiles. Danger and
+decoration shared a hue, which is exactly the failure mode that makes a busy
+phase-3 screen unreadable.
+
+`PAL.danger` (#ff2d17) + `PAL.dangerEdge` are now **reserved**: hostile
+projectiles, hostile rings, and attack telegraphs only. Decorative fire moved
+to the new `PAL.amber`. The boss core and sword glow are amber too — the boss's
+body is not a hazard; his attacks are. There is a QA assertion that no ambient
+particle ever carries the danger hue, so this can't rot.
+
+Hazards also got **non-colour coding**, for the ~8% of men with a red-green
+deficiency and for anyone on a bad display:
+- projectiles: hard white core + rotating diamond outline (decor is round)
+- hostile rings: bright leading edge, which is the part you actually must clear
+- meteors: four ticks closing inward, so the fuse reads as motion not colour
+
+### The grace dial (−3 … +5)
+One legible dial instead of a settings menu. Negative = aided (slower boss,
+wider i-frames, softer hits, an extra flask, a more forgiving perfect-dodge
+window). Positive = vowed (faster, fewer flasks, harder hits, no stagger at +3).
+Everything derives from `Game.mods`, so there is exactly one place to tune.
+
+The design constraint: aid lengthens the *read*, it does not change the fight.
+The pattern you learn at −3 is the pattern you execute at +5. And the record
+carries the setting — bests are stored per grace level, and the grade seal
+stamps the trial ("S +2") — which answers the standing objection that a shared
+difficulty is what makes "I beat it" mean something.
+
+### Photosensitivity + motion
+Screen shake toggle, and a flash-reduction toggle that scales the red/gold
+full-screen flashes to 25% and replaces the low-HP vignette's 5Hz pulse with a
+steady glow. v2.0 shipped that strobe without flagging it; this is the fix.
+
+### Save schema v2
+`{v:2, bests:{}, grace, shakeEnabled, flashReduced, ...}` with forward
+migration from v1 saves (old `bestTime` is adopted as the grace-0 best). Done
+now, before relics make the shape harder to change.
+
+### Changed from v2.0
+- Ambient/boss embers, boss core, sword glow, impact bursts: `PAL.ember` → `PAL.amber`. Deliberate; do not revert without re-reserving a hazard hue.
+- Title screen's static control-hint block replaced by the live settings rows; the controls line moved above them.
+- `bestTime` is retained but is now a display fallback — `bests[grace]` is authoritative.
+
+### Verification notes
+- `menuGeom()` is the single source of truth for menu layout, consumed by the
+  renderer, the hit-test, and the QA assertions. This exists because I could
+  not visually inspect the screenshots on this pass — so layout correctness had
+  to become numeric: chevrons/labels/pips inside their plate, plate inside the
+  viewport, rows clear of the title block, hit zones not inverted. That check
+  immediately caught the left chevron drawing 5px outside its plate at 390px.
+- Harness gotcha: constructing a second `Game` (for the migration test)
+  overwrites the `window.__game` debug hook and `destroy()` does not restore
+  it — every later assertion then reads a dead instance. Restore it manually.

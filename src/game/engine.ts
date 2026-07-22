@@ -27,6 +27,15 @@ export const PAL = {
   goldBright: '#f0d78c',
   ember: '#ff7a29',
   emberDeep: '#c33d1e',
+  // --- RESERVED HAZARD HUE ---------------------------------------------
+  // PAL.danger (and dangerEdge) mean exactly one thing: THIS WILL HURT YOU.
+  // Hostile projectiles, hostile rings, and attack telegraphs only. Never use
+  // it for ambience, embers, the boss body, or UI chrome — the moment decor
+  // borrows this hue the player stops being able to read the screen at a
+  // glance. Warm decorative fire lives on `ember`/`amber` instead.
+  danger: '#ff2d17',
+  dangerEdge: '#ffd9c9',
+  amber: '#e8a13c',
   blood: '#a42727',
   hpBack: '#2a1210',
   stamina: '#7d9c5a',
@@ -65,6 +74,7 @@ export class Input {
   joyActive = false; joyId = -1; joyOx = 0; joyOy = 0; joyX = 0; joyY = 0;
   btnPressed: Record<string, boolean> = {};
   isTouch = false;
+  taps: { x: number; y: number }[] = []; // consumed by menu hit-tests each frame
 
   constructor(canvas: HTMLCanvasElement, onFirstGesture: () => void) {
     this.canvas = canvas;
@@ -103,6 +113,8 @@ export class Input {
   };
   private onMouseDown = (e: MouseEvent) => {
     this.fireGesture();
+    const r = this.canvas.getBoundingClientRect();
+    this.taps.push({ x: e.clientX - r.left, y: e.clientY - r.top });
     const now = performance.now();
     if (e.button === 0) this.pressed['light'] = now;
     if (e.button === 2) this.pressed['heavy'] = now;
@@ -119,6 +131,7 @@ export class Input {
     for (let i = 0; i < e.changedTouches.length; i++) {
       const t = e.changedTouches[i];
       const x = t.clientX - r.left, y = t.clientY - r.top;
+      this.taps.push({ x, y });
       if (x < r.width * 0.45 && !this.joyActive) {
         this.joyActive = true; this.joyId = t.identifier;
         this.joyOx = x; this.joyOy = y; this.joyX = 0; this.joyY = 0;
@@ -170,7 +183,7 @@ export class Input {
     if (t !== undefined) delete this.pressed[k]; // expired
     return false;
   }
-  endFrame() { this.btnPressed = {}; }
+  endFrame() { this.btnPressed = {}; this.taps = []; }
 }
 
 // ------------------------------------------------------------------ player
@@ -217,7 +230,7 @@ export class Player {
         const m = Math.hypot(ax.x, ax.y);
         this.rollDir = m > 0.1 ? Math.atan2(ax.y, ax.x) : this.facing;
         this.stam -= 20; this.stamDelay = 0.55;
-        this.iframes = Math.max(this.iframes, 0.34);
+        this.iframes = Math.max(this.iframes, 0.34 * game.mods.iframe);
         game.audio.dodge();
         game.burst(this.x, this.y, 8, '#8f8776', 120, 0.35, 3);
       } else if (this.stam >= 12 && this.state !== 'flask' && input.consume('light')) {
@@ -329,12 +342,13 @@ export class Player {
   takeDamage(dmg: number, sx: number, sy: number, game: Game): boolean {
     if (this.iframes > 0 || this.state === 'dead') {
       // perfect dodge: hit lands inside the early roll window
-      if (this.state === 'roll' && this.iframes > 0 && this.t > 0.18 && this.perfectCd <= 0) {
+      if (this.state === 'roll' && this.iframes > 0 && this.t > 0.42 - 0.24 * game.mods.perfectWindow && this.perfectCd <= 0) {
         game.onPerfectDodge();
       }
       return false;
     }
     this.comboStep = 0; this.comboWindow = 0;
+    dmg = Math.max(1, Math.round(dmg * game.mods.dmgTaken));
     this.hp -= dmg;
     this.iframes = 0.9;
     this.hurtFlash = 0.35;
@@ -481,7 +495,8 @@ export class Boss {
   phase3Done = false;
   spiralLeft = 0; spiralAng = 0; spiralTick = 0;
 
-  get speedMul() { return this.phase >= 3 ? 1.42 : this.phase === 2 ? 1.28 : 1; }
+  extraSpeed = 1; // set from Game.mods — the grace dial
+  get speedMul() { return (this.phase >= 3 ? 1.42 : this.phase === 2 ? 1.28 : 1) * this.extraSpeed; }
 
   update(dt: number, game: Game) {
     const p = game.player;
@@ -498,7 +513,7 @@ export class Boss {
       game.addParticle({
         x: this.x + rand(-this.r, this.r), y: this.y + rand(-this.r, this.r),
         vx: rand(-20, 20), vy: rand(-90, -40), life: rand(0.4, 0.9), maxLife: 0.9,
-        size: rand(1.5, 3.5), sizeEnd: 0, color: this.phase >= 3 && Math.random() < 0.4 ? PAL.goldBright : PAL.ember, glow: true, drag: 1, grav: -40, shape: 'circle',
+        size: rand(1.5, 3.5), sizeEnd: 0, color: this.phase >= 3 && Math.random() < 0.4 ? PAL.goldBright : PAL.amber, glow: true, drag: 1, grav: -40, shape: 'circle',
       });
     }
 
@@ -578,7 +593,7 @@ export class Boss {
               game.projectiles.push({
                 x: this.x + Math.cos(a) * (this.r + 8), y: this.y + Math.sin(a) * (this.r + 8),
                 vx: Math.cos(a) * 400, vy: Math.sin(a) * 400, r: 7, dmg: 11, life: 3, hostile: true,
-                hue: this.phase >= 2 ? PAL.ember : '#c66b3d',
+                hue: PAL.danger,
               });
             }
             game.audio.projectile();
@@ -594,7 +609,7 @@ export class Boss {
               game.projectiles.push({
                 x: this.x + Math.cos(a) * (this.r + 10), y: this.y + Math.sin(a) * (this.r + 10),
                 vx: Math.cos(a) * 335, vy: Math.sin(a) * 335, r: 7, dmg: 10, life: 3.2, hostile: true,
-                hue: PAL.ember,
+                hue: PAL.danger,
               });
             }
             this.spiralAng += 0.44;
@@ -768,6 +783,7 @@ export class Boss {
   }
 
   private triggerStagger(game: Game) {
+    if (game.mods.noStagger) { this.poise = this.maxPoise; return; }
     this.state = 'staggered'; this.t = 1.7;
     this.poise = this.maxPoise;
     game.audio.stagger();
@@ -859,7 +875,7 @@ export class Boss {
     ctx.globalCompositeOperation = 'lighter';
     const cg = ctx.createRadialGradient(0, 0, 0, 0, 0, coreR * 2.2);
     cg.addColorStop(0, this.phase >= 3 ? '#fff3d6' : '#ffd9a0');
-    cg.addColorStop(0.4, this.phase >= 2 ? PAL.ember : '#b05030');
+    cg.addColorStop(0.4, this.phase >= 2 ? PAL.amber : '#b05030');
     cg.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = cg;
     ctx.beginPath(); ctx.arc(0, 0, coreR * 2.2, 0, TAU); ctx.fill();
@@ -905,7 +921,7 @@ export class Boss {
     ctx.fillRect(this.r * 0.5 - 4, -9, 8, 18);
     if (this.state === 'windup') {
       ctx.globalAlpha = 0.4 + windupP * 0.5;
-      ctx.fillStyle = this.phase >= 2 ? PAL.ember : '#c34a2e';
+      ctx.fillStyle = this.phase >= 2 ? PAL.amber : '#c34a2e';
       ctx.fillRect(this.r * 0.5, -7, sLen, 14);
     }
     ctx.restore();
@@ -944,24 +960,24 @@ export class Boss {
       // arc sector
       const range = 108, arc = 1.45;
       ctx.globalAlpha = 0.14 + p * 0.22;
-      ctx.fillStyle = '#d8452a';
+      ctx.fillStyle = PAL.danger;
       ctx.beginPath();
       ctx.moveTo(this.x, this.y);
       ctx.arc(this.x, this.y, range, this.facing - arc, this.facing + arc);
       ctx.closePath(); ctx.fill();
       ctx.globalAlpha = 0.5 + p * 0.4;
-      ctx.strokeStyle = '#ff6b3d';
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = PAL.dangerEdge;
+      ctx.lineWidth = 2.5;
       ctx.beginPath();
       ctx.arc(this.x, this.y, range * p, this.facing - arc, this.facing + arc);
       ctx.stroke();
     } else if (this.attack === 'slam' || this.attack === 'ring') {
       const rMax = this.attack === 'slam' ? 188 : 150;
       ctx.globalAlpha = 0.13 + p * 0.2;
-      ctx.fillStyle = '#d8452a';
+      ctx.fillStyle = PAL.danger;
       ctx.beginPath(); ctx.arc(this.x, this.y, rMax, 0, TAU); ctx.fill();
       ctx.globalAlpha = 0.55 + p * 0.4;
-      ctx.strokeStyle = this.attack === 'ring' ? PAL.ember : '#ff6b3d';
+      ctx.strokeStyle = PAL.dangerEdge;
       ctx.lineWidth = 2.5;
       ctx.beginPath(); ctx.arc(this.x, this.y, rMax * p, 0, TAU); ctx.stroke();
       ctx.beginPath(); ctx.arc(this.x, this.y, rMax, 0, TAU); ctx.globalAlpha = 0.3; ctx.stroke();
@@ -970,8 +986,8 @@ export class Boss {
       ctx.save();
       ctx.translate(this.x, this.y);
       ctx.globalAlpha = 0.25 + p * 0.4;
-      ctx.strokeStyle = PAL.ember;
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = PAL.danger;
+      ctx.lineWidth = 2.5;
       const previewA = this.spiralAng;
       for (const off of [0, Math.PI]) {
         ctx.beginPath();
@@ -987,14 +1003,14 @@ export class Boss {
     } else if (this.attack === 'charge') {
       const len = 900;
       ctx.globalAlpha = 0.12 + p * 0.18;
-      ctx.fillStyle = '#d8452a';
+      ctx.fillStyle = PAL.danger;
       ctx.save();
       ctx.translate(this.x, this.y);
       ctx.rotate(this.chargeDir);
       ctx.fillRect(0, -this.r - 6, len, (this.r + 6) * 2);
       ctx.globalAlpha = 0.4 + p * 0.4;
-      ctx.strokeStyle = '#ff6b3d';
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = PAL.dangerEdge;
+      ctx.lineWidth = 2.5;
       ctx.strokeRect(0, -this.r - 6, len * p, (this.r + 6) * 2);
       ctx.restore();
     }
@@ -1050,8 +1066,15 @@ export class Game {
   motes: { x: number; y: number; spd: number; drift: number; size: number; par: number }[] = [];
   zoomPunch = 0;
   hbT = 0;
+  graceAtStart = 0;
   // persistence
   bestTime = 0; wins = 0; newRecord = false; grade = '';
+  bests: Record<string, number> = {};
+  // accessibility / difficulty — one dial, -3 (aided) .. +5 (vowed)
+  grace = 0;
+  shakeEnabled = true;
+  flashReduced = false;
+  static SAVE_VERSION = 2;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -1073,10 +1096,18 @@ export class Game {
     // saved progress
     try {
       const sv = JSON.parse(localStorage.getItem('gracefell') || '{}');
-      if (typeof sv.bestTime === 'number') this.bestTime = sv.bestTime;
+      // v1 saves had a single bestTime and no settings; migrate forward.
       if (typeof sv.wins === 'number') this.wins = sv.wins;
       if (typeof sv.attempts === 'number') this.attempts = Math.max(1, sv.attempts);
       if (sv.muted) this.audio.muted = true;
+      if (sv.bests && typeof sv.bests === 'object') this.bests = sv.bests;
+      if (typeof sv.bestTime === 'number' && sv.bestTime > 0) {
+        this.bestTime = sv.bestTime;
+        if (this.bests['0'] === undefined) this.bests['0'] = sv.bestTime; // v1 runs were all grace 0
+      }
+      if (typeof sv.grace === 'number') this.grace = clamp(Math.round(sv.grace), -3, 5);
+      if (typeof sv.shakeEnabled === 'boolean') this.shakeEnabled = sv.shakeEnabled;
+      if (typeof sv.flashReduced === 'boolean') this.flashReduced = sv.flashReduced;
     } catch { /* first run / private mode */ }
     this.buildFloor();
     this.lastTs = performance.now();
@@ -1113,7 +1144,10 @@ export class Game {
     const max = this.arenaR - e.r - 6;
     if (d > max) { e.x = (e.x / d) * max; e.y = (e.y / d) * max; }
   }
-  shake(amp: number, dur: number) { this.shakeAmp = Math.max(this.shakeAmp, amp); this.shakeT = 0; this.shakeDur = dur; }
+  shake(amp: number, dur: number) {
+    if (!this.shakeEnabled) return;
+    this.shakeAmp = Math.max(this.shakeAmp, amp); this.shakeT = 0; this.shakeDur = dur;
+  }
   addParticle(p: Particle) { if (this.particles.length < 700) this.particles.push(p); }
   burst(x: number, y: number, n: number, color: string, spd: number, life: number, size: number) {
     for (let i = 0; i < n; i++) {
@@ -1142,10 +1176,48 @@ export class Game {
     this.bannerText = text; this.bannerKind = kind; this.bannerSub = sub; this.bannerT = kind === 'phase' ? 2.2 : 1.4;
   }
 
+  // Every difficulty and accessibility lever derives from `grace`. Negative
+  // grace lengthens the read (slower boss, longer telegraphs, wider i-frames,
+  // softer hits) rather than making the fight a different fight — the pattern
+  // you learn at -3 is the same pattern you execute at +5.
+  get mods() {
+    const g = this.grace;
+    const aid = clamp(-g, 0, 3) / 3;
+    const vow = clamp(g, 0, 5) / 5;
+    return {
+      bossSpeed: 1 - aid * 0.22 + vow * 0.30,
+      dmgTaken: 1 - aid * 0.45 + vow * 0.40,
+      iframe: 1 + aid * 0.55,
+      perfectWindow: 1 + aid * 0.6,
+      flasks: 3 + (g <= -2 ? 1 : 0) - (g >= 4 ? 2 : g >= 2 ? 1 : 0),
+      noStagger: g >= 3,
+    };
+  }
+
+  graceLabel(g = this.grace): string {
+    if (g === 0) return 'MEASURED';
+    const names: Record<number, string> = {
+      [-3]: 'UNBURDENED', [-2]: 'SHELTERED', [-1]: 'STEADIED',
+      1: 'HASTE', 2: 'FAMINE', 3: 'IRON', 4: 'FRAILTY', 5: 'FORSAKEN',
+    };
+    return `${names[g] ?? ''} ${g > 0 ? '+' : ''}${g}`.trim();
+  }
+
+  setGrace(g: number) {
+    this.grace = clamp(Math.round(g), -3, 5);
+    this.persist();
+  }
+
+  // shake and flashes are photosensitivity levers as much as feel levers
+  flashScale() { return this.flashReduced ? 0.25 : 1; }
+
   persist() {
     try {
       localStorage.setItem('gracefell', JSON.stringify({
-        bestTime: this.bestTime, wins: this.wins, attempts: this.attempts, muted: this.audio.muted,
+        v: Game.SAVE_VERSION,
+        bestTime: this.bestTime, bests: this.bests, wins: this.wins,
+        attempts: this.attempts, muted: this.audio.muted,
+        grace: this.grace, shakeEnabled: this.shakeEnabled, flashReduced: this.flashReduced,
       }));
     } catch { /* ignore */ }
   }
@@ -1302,7 +1374,7 @@ export class Game {
     this.addScorch(x, y, r * 0.55, 'rgba(10,6,3,0.85)', 0.32);
     this.addScorch(x, y, r * 0.3, 'rgba(60,30,10,0.9)', 0.25);
     this.burst(x, y, 34, '#8a7a5c', 320, 0.7, 6);
-    this.burst(x, y, 16, PAL.ember, 260, 0.6, 4);
+    this.burst(x, y, 16, PAL.amber, 260, 0.6, 4);
     // shockwave ring visual (non-damaging)
     this.rings.push({ x, y, r: 30, speed: 420, thickness: 18, dmg: 0, maxR: r + 40, hostile: false, hitDone: true });
     const p = this.player;
@@ -1320,14 +1392,17 @@ export class Game {
     this.slowT = 1.5; this.timeScale = 0.22;
     this.audio.roar(true);
     this.shake(18, 1);
-    this.burst(this.boss.x, this.boss.y, 80, PAL.ember, 380, 1.6, 5);
+    this.burst(this.boss.x, this.boss.y, 80, PAL.amber, 380, 1.6, 5);
     this.burst(this.boss.x, this.boss.y, 40, PAL.goldBright, 260, 2, 4);
     this.state = 'victory'; this.stateT = 0;
     this.goldFlash = 0.8;
     this.audio.victoryChord();
     this.wins++;
-    this.newRecord = this.bestTime === 0 || this.fightTime < this.bestTime;
-    if (this.newRecord) this.bestTime = this.fightTime;
+    const key = String(this.graceAtStart);
+    const prev = this.bests[key];
+    this.newRecord = prev === undefined || this.fightTime < prev;
+    if (this.newRecord) this.bests[key] = this.fightTime;
+    if (this.bestTime === 0 || this.fightTime < this.bestTime) this.bestTime = this.fightTime;
     this.grade = this.computeGrade();
     this.persist();
   }
@@ -1345,6 +1420,11 @@ export class Game {
   resetFight() {
     this.player = new Player();
     this.boss = new Boss();
+    const m = this.mods;
+    this.boss.extraSpeed = m.bossSpeed;
+    this.player.flasks = m.flasks;
+    this.player.maxFlasks = m.flasks;
+    this.graceAtStart = this.grace;
     this.projectiles = []; this.rings = []; this.meteors = [];
     this.particles = []; this.dmgNums = [];
     this.fightTime = 0; this.damageDealt = 0; this.hitsTaken = 0;
@@ -1359,6 +1439,73 @@ export class Game {
       this.scorchCtx.clearRect(0, 0, this.scorchCanvas.width, this.scorchCanvas.height);
       this.scorchCtx.restore();
     }
+  }
+
+  // ------------------------------------------------------------ title menu
+  // Laid out once and reused by both the renderer and the hit-test, so the
+  // thing you see is provably the thing you can press.
+  menuRows(): { id: string; y: number; label: string; value: string }[] {
+    const baseY = this.h * 0.70;
+    const gap = Math.max(30, Math.min(38, this.h * 0.045));
+    return [
+      { id: 'grace', y: baseY, label: 'TRIAL', value: this.graceLabel() },
+      { id: 'shake', y: baseY + gap, label: 'SCREEN SHAKE', value: this.shakeEnabled ? 'on' : 'off' },
+      { id: 'flash', y: baseY + gap * 2, label: 'FLASHES', value: this.flashReduced ? 'reduced' : 'full' },
+    ];
+  }
+
+  // One geometry function feeds the renderer, the hit-test, AND the layout
+  // assertions in qa/verify.cjs — so what you see is provably what you can
+  // press, at any viewport, without a human eyeballing a screenshot.
+  menuGeom() {
+    const cx = this.w / 2;
+    const halfW = Math.min(300, this.w * 0.42);
+    const pad = 18;
+    const pipStep = Math.min(16, halfW * 0.055);
+    return {
+      cx, halfW, pad, pipStep,
+      plateL: cx - halfW,
+      plateR: cx + halfW,
+      rowH: 30,
+      chevLx: cx - halfW + pad,
+      chevRx: cx + halfW - pad,
+      valueRx: cx + halfW - pad * 2.2,
+      labelLx: cx - halfW + pad * 0.8,
+      pipX: (g: number) => cx + (g - 1) * pipStep,
+      decZone: cx - halfW * 0.42,
+      incZone: cx + halfW * 0.42,
+    };
+  }
+
+  private menuHit(tx: number, ty: number): boolean {
+    const rows = this.menuRows();
+    const { cx, halfW } = this.menuGeom();
+    for (const row of rows) {
+      if (Math.abs(ty - row.y) > 18) continue;
+      if (Math.abs(tx - cx) > halfW) continue;
+      if (row.id === 'grace') {
+        // left third decreases, right third increases, middle does nothing
+        const gm = this.menuGeom();
+        if (tx < gm.decZone) { this.setGrace(this.grace - 1); this.audio.telegraph(); return true; }
+        if (tx > gm.incZone) { this.setGrace(this.grace + 1); this.audio.telegraph(); return true; }
+        return true; // swallow: they aimed at the row, not at "start"
+      }
+      if (row.id === 'shake') { this.shakeEnabled = !this.shakeEnabled; this.persist(); this.audio.telegraph(); return true; }
+      if (row.id === 'flash') { this.flashReduced = !this.flashReduced; this.persist(); this.audio.telegraph(); return true; }
+    }
+    return false;
+  }
+
+  // Returns true if the tap was eaten by the menu (so it must not start the fight).
+  handleTitleInput(): boolean {
+    let ate = false;
+    for (const t of this.input.taps) {
+      if (this.menuHit(t.x, t.y)) ate = true;
+    }
+    // keyboard: left/right nudge the dial without touching the start binding
+    if (this.input.consume('left')) { this.setGrace(this.grace - 1); this.audio.telegraph(); }
+    if (this.input.consume('right')) { this.setGrace(this.grace + 1); this.audio.telegraph(); }
+    return ate;
   }
 
   // ------------------------------------------------------------ touch buttons
@@ -1391,7 +1538,9 @@ export class Game {
 
     // global state transitions
     if (this.state === 'title') {
-      if (this.input.consume('confirm')) {
+      const ateTap = this.handleTitleInput();
+      if (ateTap) this.input.consume('confirm'); // swallow — they pressed a setting
+      if (!ateTap && this.input.consume('confirm')) {
         this.state = 'intro'; this.stateT = 0;
         this.resetFight();
         this.audio.init();
@@ -1536,7 +1685,7 @@ export class Game {
         this.shake(9, 0.3);
         this.addScorch(m.x, m.y, m.r * 0.6, 'rgba(8,4,2,0.9)', 0.4);
         this.addScorch(m.x, m.y, m.r * 0.32, 'rgba(120,45,15,0.8)', 0.3);
-        this.burst(m.x, m.y, 26, PAL.ember, 300, 0.7, 5);
+        this.burst(m.x, m.y, 26, PAL.amber, 300, 0.7, 5);
         this.burst(m.x, m.y, 12, '#6b5a41', 220, 0.6, 6);
         if (dist(m.x, m.y, p.x, p.y) < m.r + p.r * 0.3) p.takeDamage(m.dmg, m.x, m.y, this);
       }
@@ -1661,12 +1810,22 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
   for (const m of this.meteors) {
     const p = 1 - m.fuse / m.maxFuse;
     ctx.globalAlpha = 0.16 + p * 0.25;
-    ctx.fillStyle = '#d8452a';
+    ctx.fillStyle = PAL.danger;
     ctx.beginPath(); ctx.arc(m.x, m.y, m.r, 0, TAU); ctx.fill();
     ctx.globalAlpha = 0.6 + p * 0.4;
-    ctx.strokeStyle = PAL.ember;
+    ctx.strokeStyle = PAL.dangerEdge;
     ctx.lineWidth = 2.5;
     ctx.beginPath(); ctx.arc(m.x, m.y, m.r * p, 0, TAU); ctx.stroke();
+    // shape coding — four ticks closing in, readable without colour
+    ctx.lineWidth = 3;
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * TAU + Math.PI / 4;
+      const r0 = m.r * (1 - p * 0.7), r1 = r0 + 12;
+      ctx.beginPath();
+      ctx.moveTo(m.x + Math.cos(a) * r0, m.y + Math.sin(a) * r0);
+      ctx.lineTo(m.x + Math.cos(a) * r1, m.y + Math.sin(a) * r1);
+      ctx.stroke();
+    }
     ctx.globalAlpha = 1;
   }
 
@@ -1674,9 +1833,16 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
   for (const rg of this.rings) {
     const fade = 1 - rg.r / rg.maxR;
     ctx.globalAlpha = clamp(fade * 1.4, 0, 1) * (rg.hostile ? 0.85 : 0.4);
-    ctx.strokeStyle = rg.hostile ? PAL.ember : '#c9b58a';
+    ctx.strokeStyle = rg.hostile ? PAL.danger : '#c9b58a';
     ctx.lineWidth = rg.thickness * clamp(fade, 0.3, 1);
     ctx.beginPath(); ctx.arc(rg.x, rg.y, rg.r, 0, TAU); ctx.stroke();
+    if (rg.hostile) {
+      // bright leading edge — the thing you actually have to clear
+      ctx.globalAlpha = clamp(fade * 1.6, 0, 1);
+      ctx.strokeStyle = PAL.dangerEdge;
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(rg.x, rg.y, rg.r + rg.thickness / 2, 0, TAU); ctx.stroke();
+    }
     ctx.globalAlpha = 1;
   }
 
@@ -1685,11 +1851,31 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
   ctx.globalCompositeOperation = 'lighter';
   for (const pr of this.projectiles) {
     const g = ctx.createRadialGradient(pr.x, pr.y, 0, pr.x, pr.y, pr.r * 2.6);
-    g.addColorStop(0, '#ffd9a0');
-    g.addColorStop(0.4, pr.hue);
+    g.addColorStop(0, '#fff4ec');
+    g.addColorStop(0.35, pr.hue);
     g.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = g;
     ctx.beginPath(); ctx.arc(pr.x, pr.y, pr.r * 2.6, 0, TAU); ctx.fill();
+    // hard white core — survives any colour deficiency or dark display
+    ctx.fillStyle = PAL.dangerEdge;
+    ctx.beginPath(); ctx.arc(pr.x, pr.y, pr.r * 0.5, 0, TAU); ctx.fill();
+  }
+  ctx.restore();
+  // shape coding pass — hazards are diamonds, decoration is round
+  ctx.save();
+  ctx.strokeStyle = PAL.dangerEdge;
+  ctx.lineWidth = 1.6;
+  ctx.globalAlpha = 0.9;
+  for (const pr of this.projectiles) {
+    const spin = this.time * 3 + pr.x * 0.01;
+    ctx.save();
+    ctx.translate(pr.x, pr.y);
+    ctx.rotate(spin);
+    ctx.beginPath();
+    ctx.moveTo(0, -pr.r * 1.5); ctx.lineTo(pr.r * 1.5, 0);
+    ctx.lineTo(0, pr.r * 1.5); ctx.lineTo(-pr.r * 1.5, 0);
+    ctx.closePath(); ctx.stroke();
+    ctx.restore();
   }
   ctx.restore();
 
@@ -1751,7 +1937,7 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
     const frac = this.player.hp / this.player.maxHp;
     if (frac < 0.3) {
       const sev = 1 - frac / 0.3;
-      const pulse = 0.6 + Math.sin(this.time * 5.2) * 0.4;
+      const pulse = this.flashReduced ? 0.85 : 0.6 + Math.sin(this.time * 5.2) * 0.4;
       const dg = ctx.createRadialGradient(this.w / 2, this.h / 2, Math.min(this.w, this.h) * 0.32, this.w / 2, this.h / 2, Math.max(this.w, this.h) * 0.66);
       dg.addColorStop(0, 'rgba(120,10,8,0)');
       dg.addColorStop(1, `rgba(120,10,8,${(0.22 + sev * 0.3) * pulse})`);
@@ -1759,15 +1945,16 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
       ctx.fillRect(0, 0, this.w, this.h);
     }
   }
+  const fscale = this.flashScale();
   if (this.redFlash > 0) {
     const rg = ctx.createRadialGradient(this.w / 2, this.h / 2, Math.min(this.w, this.h) * 0.3, this.w / 2, this.h / 2, Math.max(this.w, this.h) * 0.7);
     rg.addColorStop(0, 'rgba(150,20,10,0)');
-    rg.addColorStop(1, `rgba(150,20,10,${this.redFlash * 0.55})`);
+    rg.addColorStop(1, `rgba(150,20,10,${this.redFlash * 0.55 * fscale})`);
     ctx.fillStyle = rg;
     ctx.fillRect(0, 0, this.w, this.h);
   }
   if (this.goldFlash > 0) {
-    ctx.fillStyle = `rgba(240,215,140,${this.goldFlash * 0.22})`;
+    ctx.fillStyle = `rgba(240,215,140,${this.goldFlash * 0.22 * fscale})`;
     ctx.fillRect(0, 0, this.w, this.h);
   }
 
@@ -2015,17 +2202,72 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
   ctx.globalAlpha = blink;
   ctx.font = serif(clamp(this.w * 0.018, 15, 20), 600);
   ctx.fillStyle = PAL.goldBright;
-  ctx.fillText(this.input.isTouch ? 'TOUCH TO RAISE YOUR BLADE' : 'CLICK TO RAISE YOUR BLADE', cx, this.h * 0.62);
+  ctx.fillText(this.input.isTouch ? 'TOUCH TO RAISE YOUR BLADE' : 'CLICK TO RAISE YOUR BLADE', cx, this.h * 0.60);
   ctx.globalAlpha = 1;
 
+  // ---- settings dial: trial / shake / flashes
+  {
+    const rows = this.menuRows();
+    const gm = this.menuGeom();
+    const halfW = gm.halfW;
+    for (const row of rows) {
+      const isGrace = row.id === 'grace';
+      // row plate
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = 'rgba(10,8,5,0.55)';
+      ctx.fillRect(cx - halfW, row.y - 15, halfW * 2, 30);
+      ctx.strokeStyle = 'rgba(201,169,89,0.25)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(cx - halfW, row.y - 15, halfW * 2, 30);
+      ctx.globalAlpha = 1;
+
+      ctx.textAlign = 'left';
+      ctx.font = body(14, 600);
+      ctx.fillStyle = PAL.parchmentDim;
+      ctx.fillText(row.label, gm.labelLx, row.y + 5);
+
+      ctx.textAlign = 'right';
+      ctx.font = serif(14, 700);
+      ctx.fillStyle = isGrace
+        ? (this.grace > 0 ? PAL.danger : this.grace < 0 ? PAL.spirit : PAL.goldBright)
+        : PAL.parchment;
+      ctx.fillText(row.value, isGrace ? gm.valueRx : gm.plateR - gm.pad * 0.8, row.y + 5);
+
+      if (isGrace) {
+        // chevrons — dimmed at the ends of the range so the limit is visible
+        ctx.textAlign = 'center';
+        ctx.font = serif(17, 700);
+        ctx.fillStyle = this.grace > -3 ? PAL.gold : 'rgba(201,169,89,0.25)';
+        ctx.fillText('\u25c0', gm.chevLx, row.y + 6);
+        ctx.fillStyle = this.grace < 5 ? PAL.gold : 'rgba(201,169,89,0.25)';
+        ctx.fillText('\u25b6', gm.chevRx, row.y + 6);
+        // pip scale
+        ctx.textAlign = 'center';
+        for (let g = -3; g <= 5; g++) {
+          const px = gm.pipX(g);
+          const on = g <= this.grace && g < 0 ? true : g >= 0 && g <= this.grace;
+          ctx.globalAlpha = g === this.grace ? 1 : on ? 0.55 : 0.18;
+          ctx.fillStyle = g > 0 ? PAL.danger : g < 0 ? PAL.spirit : PAL.gold;
+          const sz = g === this.grace ? 4 : 2.4;
+          ctx.beginPath(); ctx.arc(px, row.y + 1, sz, 0, TAU); ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
+    }
+    ctx.textAlign = 'center';
+    ctx.font = body(12, 500);
+    ctx.fillStyle = 'rgba(154,143,116,0.65)';
+    ctx.fillText(
+      this.input.isTouch ? 'tap a row to change it \u00b7 tap anywhere else to begin'
+                         : '\u2190 \u2192 or click to change \u00b7 the trial is recorded with your grade',
+      cx, rows[2].y + 30,
+    );
+  }
+
   if (!this.input.isTouch) {
-    ctx.font = body(16, 500);
-    ctx.fillStyle = PAL.parchmentDim;
-    const lines = [
-      'WASD — move      SPACE — roll (invincible)',
-      'J / click — slash      K — heavy      F — flask',
-    ];
-    lines.forEach((l, i) => ctx.fillText(l, cx, this.h * 0.7 + i * 24));
+    ctx.font = body(15, 500);
+    ctx.fillStyle = 'rgba(154,143,116,0.7)';
+    ctx.fillText('WASD move \u00b7 SPACE roll \u00b7 J slash \u00b7 K heavy \u00b7 F flask', cx, this.h * 0.655);
   }
   if (this.wins > 0 || this.bestTime > 0) {
     ctx.font = body(15, 500);
@@ -2034,7 +2276,7 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
     const parts: string[] = [];
     if (this.wins > 0) parts.push(`${this.wins} victor${this.wins === 1 ? 'y' : 'ies'}`);
     if (this.bestTime > 0) parts.push(`best ${bm}:${bs2.toString().padStart(2, '0')}`);
-    ctx.fillText(parts.join('   \u00b7   '), cx, this.h * 0.62 + 34);
+    ctx.fillText(parts.join('   \u00b7   '), cx, this.h * 0.60 + 26);
   }
   ctx.font = body(13, 400);
   ctx.fillStyle = 'rgba(154,143,116,0.55)';
@@ -2136,14 +2378,18 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
     ctx.fillStyle = gcol;
     if (this.grade === 'S') { ctx.shadowColor = gcol; ctx.shadowBlur = 22; }
     ctx.fillText(this.grade, 0, 12);
+    ctx.font = body(11, 600);
+    ctx.fillText(this.graceAtStart > 0 ? `+${this.graceAtStart}` : `${this.graceAtStart}`, 0, 26);
     ctx.shadowBlur = 0;
     ctx.restore();
   }
   ctx.font = body(19, 500);
   ctx.fillStyle = PAL.parchment;
   const mins = Math.floor(this.fightTime / 60), secs = Math.floor(this.fightTime % 60);
-  const bm = Math.floor(this.bestTime / 60), bs2 = Math.floor(this.bestTime % 60);
+  const bestForTrial = this.bests[String(this.graceAtStart)] ?? this.bestTime;
+  const bm = Math.floor(bestForTrial / 60), bs2 = Math.floor(bestForTrial % 60);
   const stats = [
+    `trial \u2014 ${this.graceLabel(this.graceAtStart)}`,
     `time \u2014 ${mins}:${secs.toString().padStart(2, '0')}${this.newRecord ? '  \u2726 new record' : `   (best ${bm}:${bs2.toString().padStart(2, '0')})`}`,
     `attempts \u2014 ${this.attempts}`,
     `damage dealt \u2014 ${Math.round(this.damageDealt)}`,

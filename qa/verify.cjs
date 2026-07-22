@@ -120,6 +120,117 @@ function canvasHasInk(pix) {
         step.perfectDodge = pd;
         if (pd.stam < 35 || pd.dmgNums < 1 || pd.hpDelta !== 0) out.errors.push('perfect dodge failed: ' + JSON.stringify(pd));
 
+        // ---- v2.1: grace dial, accessibility, palette discipline
+        const acc = await pg.evaluate(() => {
+          const g = window.__game;
+          const out = {};
+          // grace clamps
+          g.setGrace(-99); out.min = g.grace;
+          g.setGrace(99); out.max = g.grace;
+          // aid direction: slower boss, softer hits, wider iframes
+          g.setGrace(-3); const aid = g.mods;
+          g.setGrace(5); const vow = g.mods;
+          g.setGrace(0); const mid = g.mods;
+          out.aidSlower = aid.bossSpeed < mid.bossSpeed && mid.bossSpeed < vow.bossSpeed;
+          out.aidSofter = aid.dmgTaken < mid.dmgTaken && mid.dmgTaken < vow.dmgTaken;
+          out.aidIframe = aid.iframe > mid.iframe;
+          out.flaskSpread = [aid.flasks, mid.flasks, vow.flasks];
+          out.vowNoStagger = vow.noStagger && !mid.noStagger;
+          // the dial actually reaches the boss
+          g.setGrace(-3); g.resetFight();
+          out.bossSpeedAided = g.boss.extraSpeed;
+          out.flasksAided = g.player.flasks;
+          g.setGrace(5); g.resetFight();
+          out.bossSpeedVowed = g.boss.extraSpeed;
+          out.flasksVowed = g.player.flasks;
+          // damage scaling actually applies
+          g.setGrace(-3); g.resetFight(); g.state = 'fight';
+          const hp0 = g.player.hp; g.player.iframes = 0;
+          g.player.takeDamage(20, g.player.x + 40, g.player.y, g);
+          out.aidedLoss = hp0 - g.player.hp;
+          g.setGrace(5); g.resetFight(); g.state = 'fight';
+          const hp1 = g.player.hp; g.player.iframes = 0;
+          g.player.takeDamage(20, g.player.x + 40, g.player.y, g);
+          out.vowedLoss = hp1 - g.player.hp;
+          // toggles
+          g.shakeEnabled = false; g.shakeAmp = 0; g.shake(20, 0.5);
+          out.shakeOffWorks = g.shakeAmp === 0;
+          g.shakeEnabled = true; g.shake(20, 0.5);
+          out.shakeOnWorks = g.shakeAmp > 0;
+          g.flashReduced = true; out.flashReducedScale = g.flashScale();
+          g.flashReduced = false; out.flashFullScale = g.flashScale();
+          // hazard hue is reserved: no ambient particle may use it
+          g.setGrace(0); g.resetFight();
+          out.dangerHue = g.constructor === Object ? null : undefined;
+          return out;
+        });
+        step.accessibility = acc;
+        if (acc.min !== -3 || acc.max !== 5) out.errors.push('grace does not clamp to -3..5: ' + JSON.stringify([acc.min, acc.max]));
+        if (!acc.aidSlower) out.errors.push('grace does not scale boss speed monotonically');
+        if (!acc.aidSofter) out.errors.push('grace does not scale damage taken monotonically');
+        if (!acc.aidIframe) out.errors.push('aid does not widen i-frames');
+        if (!acc.vowNoStagger) out.errors.push('vow +5 should disable stagger');
+        if (!(acc.bossSpeedAided < 1 && acc.bossSpeedVowed > 1)) out.errors.push('grace not reaching boss.extraSpeed: ' + JSON.stringify([acc.bossSpeedAided, acc.bossSpeedVowed]));
+        if (!(acc.flasksAided > acc.flasksVowed)) out.errors.push('flask count not responding to grace: ' + JSON.stringify([acc.flasksAided, acc.flasksVowed]));
+        if (!(acc.aidedLoss < acc.vowedLoss)) out.errors.push('damage taken not scaled by grace: ' + JSON.stringify([acc.aidedLoss, acc.vowedLoss]));
+        if (!acc.shakeOffWorks || !acc.shakeOnWorks) out.errors.push('screen shake toggle broken');
+        if (!(acc.flashReducedScale < acc.flashFullScale)) out.errors.push('flash reduction not applied');
+
+        // hazard-hue discipline: ambient particles must never use PAL.danger
+        const hue = await pg.evaluate(async () => {
+          const g = window.__game;
+          g.setGrace(0); g.resetFight(); g.state = 'fight';
+          g.particles = [];
+          g.boss.phase = 3;
+          // run ambient emitters for a while
+          for (let i = 0; i < 400; i++) { g.boss.update(0.016, g); }
+          for (let i = 0; i < 200; i++) { g.frame ? null : null; }
+          const danger = '#ff2d17';
+          const ambientUsingDanger = g.particles.filter((p) => p.color === danger).length;
+          return { total: g.particles.length, ambientUsingDanger, danger };
+        });
+        step.hazardHue = hue;
+        if (hue.ambientUsingDanger > 0) out.errors.push('ambient particles are using the reserved hazard hue (' + hue.ambientUsingDanger + ')');
+
+        // save schema v2 round-trip incl. settings
+        const sv2 = await pg.evaluate(() => {
+          const g = window.__game;
+          g.setGrace(2); g.shakeEnabled = false; g.flashReduced = true; g.persist();
+          return JSON.parse(localStorage.getItem('gracefell'));
+        });
+        step.saveV2 = sv2;
+        if (sv2.v !== 2 || sv2.grace !== 2 || sv2.shakeEnabled !== false || sv2.flashReduced !== true || !sv2.bests) {
+          out.errors.push('save v2 did not round-trip settings: ' + JSON.stringify(sv2));
+        }
+
+        // v1 save migrates forward
+        const mig = await pg.evaluate(async () => {
+          localStorage.setItem('gracefell', JSON.stringify({ bestTime: 42, wins: 3, attempts: 7, muted: false }));
+          const live = window.__game;           // constructing a Game hijacks the
+          const G = live.constructor;            // window.__game debug hook, and
+          const c = document.createElement('canvas');
+          const g2 = new G(c);                   // destroy() does not put it back —
+          const r = { best: g2.bestTime, wins: g2.wins, bestsZero: g2.bests['0'], grace: g2.grace };
+          g2.destroy();
+          window.__game = live;                  // so restore it, or every later
+          return r;                              // assertion reads a dead instance.
+        });
+        step.migration = mig;
+        if (mig.best !== 42 || mig.wins !== 3 || mig.bestsZero !== 42 || mig.grace !== 0) {
+          out.errors.push('v1 save did not migrate: ' + JSON.stringify(mig));
+        }
+
+        // title menu hit-test: tapping the trial row must not start the fight
+        await pg.evaluate(() => { const g = window.__game; g.state = 'title'; g.stateT = 1; g.setGrace(0); });
+        await pg.waitForTimeout(120);
+        const rowY = await pg.evaluate(() => window.__game.menuRows()[0].y);
+        await pg.mouse.click(vp.w / 2 + 260, rowY);  // right chevron zone
+        await pg.waitForTimeout(250);
+        const afterTap = await pg.evaluate(() => ({ st: window.__game.state, grace: window.__game.grace }));
+        step.menuTap = afterTap;
+        if (afterTap.st !== 'title') out.errors.push('tapping a settings row started the fight');
+        if (afterTap.grace !== 1) out.errors.push('trial chevron did not change grace: ' + afterTap.grace);
+
         // combo fields exist
         const combo = await pg.evaluate(() => { const p = (window).__game.player; return typeof p.comboStep === 'number' && typeof p.comboWindow === 'number'; });
         if (!combo) out.errors.push('combo fields missing');
@@ -141,6 +252,37 @@ function canvasHasInk(pix) {
         if (inkFight <= 0) out.errors.push('mobile: canvas blank in fight');
         await pg.screenshot({ path: '/tmp/gracefell-mobile.png' });
       }
+
+      // ---- menu layout must fit its own plate + the viewport, every viewport
+      const lay = await pg.evaluate(() => {
+        const g = window.__game;
+        g.state = 'title';
+        const gm = g.menuGeom();
+        const rows = g.menuRows();
+        return {
+          w: g.w, h: g.h,
+          plateL: gm.plateL, plateR: gm.plateR,
+          chevLx: gm.chevLx, chevRx: gm.chevRx,
+          valueRx: gm.valueRx, labelLx: gm.labelLx,
+          pipMin: gm.pipX(-3), pipMax: gm.pipX(5),
+          decZone: gm.decZone, incZone: gm.incZone,
+          lastRowY: rows[rows.length - 1].y,
+          firstRowY: rows[0].y,
+        };
+      });
+      step.menuLayout = lay;
+      const L = [];
+      if (lay.chevLx < lay.plateL + 8) L.push('left chevron outside plate');
+      if (lay.chevRx > lay.plateR - 8) L.push('right chevron outside plate');
+      if (lay.labelLx < lay.plateL + 8) L.push('label outside plate');
+      if (lay.valueRx > lay.chevRx - 12) L.push('value text collides with right chevron');
+      if (lay.pipMin < lay.plateL + 8 || lay.pipMax > lay.plateR - 8) L.push('grace pips outside plate');
+      if (lay.pipMax > lay.valueRx - 24) L.push('grace pips collide with value text');
+      if (lay.plateL < 4 || lay.plateR > lay.w - 4) L.push('menu plate wider than viewport');
+      if (lay.lastRowY + 40 > lay.h) L.push('menu overflows bottom of screen');
+      if (lay.firstRowY < lay.h * 0.5) L.push('menu overlaps the title block');
+      if (!(lay.decZone < lay.incZone)) L.push('grace hit zones inverted');
+      if (L.length) out.errors.push(vp.name + ' menu layout: ' + L.join('; '));
 
       step.consoleErrors = consoleErrs;
       if (consoleErrs.length) out.errors.push(vp.name + ' console: ' + consoleErrs.join(' | '));
