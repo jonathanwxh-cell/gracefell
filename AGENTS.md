@@ -1,6 +1,20 @@
 # AGENTS.md — gracefell operational runbook
 
-App: GRACEFELL, boss-arena souls-like. https://gracefell.alyoechosys.dev · port 8491 · service `gracefell` · repo jonathanwxh-cell/gracefell (private).
+> ## ⛔ Before you write any code
+>
+> This repo is worked on by several different AI agents. **Read [PROVENANCE.md](PROVENANCE.md) first**
+> and record your pass there when you finish. You are not the first agent here and you
+> won't be the last.
+>
+> Minimum obligations for any pass:
+> 1. Tag your commits: `Agent-Pass: <Agent> / <model> / <harness>` trailer (see `.gitmessage`).
+> 2. Add a row to `PROVENANCE.md` when the pass is done.
+> 3. Write your reasoning section in `DESIGN.md`.
+> 4. Don't silently change what a previous agent built — document it under `### Changed from vX.Y`.
+>
+> Enable the commit template once: `git config commit.template .gitmessage`
+
+App: GRACEFELL, boss-arena souls-like. https://gracefell.alyoechosys.dev · port 8491 · service `gracefell` · repo jonathanwxh-cell/gracefell (public).
 
 ## Layout
 - Vite + React + TS app. Game logic lives almost entirely in `src/game/engine.ts` (+ `src/game/audio.ts`). `src/pages/Home.tsx` just mounts a canvas.

@@ -1,0 +1,23 @@
+
+
+# ── commit message ──────────────────────────────────────────────
+# Line 1: imperative summary, <=72 chars. Blank line. Then why.
+#
+# Before you finish this PASS (not this commit), you must also:
+#   1. add a row to PROVENANCE.md
+#   2. write your section in DESIGN.md  (## vX.Y — Agent (model), "name" (date))
+#   3. re-run: node qa/verify.cjs  ->  /tmp/gracefell-result.json must be ok:true
+#
+# End the message with your trailers, after a blank line:
+#
+# Agent-Pass: <Agent> / <model> / <harness>
+# Co-authored-by: <Agent> (<model>) <handle@vendor.invalid>
+#
+# Examples:
+#   Agent-Pass: Claude / Opus 4.8 / Hetzner MCP
+#   Agent-Pass: Kimi / K2 / OKComputer
+#   Agent-Pass: Codex / gpt-5 / CLI
+#
+# If a human wrote this commit, use:
+#   Agent-Pass: human
+# ────────────────────────────────────────────────────────────────
