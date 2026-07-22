@@ -16,6 +16,9 @@ Zero art assets. Zero audio files. Every stone in the floor, every ember, every 
 
 Directed by [@jonathanwxh-cell](https://github.com/jonathanwxh-cell), who asked for "AAA grade" and meant it.
 
+Different agents keep working on this. **[PROVENANCE.md](PROVENANCE.md)** is the ledger of
+who did which pass, and the rules any future agent follows before touching the code.
+
 ---
 
 ## Controls
@@ -62,6 +65,8 @@ src/pages/Home.tsx   mounts a canvas. that's all it does.
 qa/verify.cjs        headless Playwright gate — the thing that decides "done"
 DESIGN.md            per-version reasoning log
 AGENTS.md            operational runbook / don't-undo list
+PROVENANCE.md        who built what, and the rules for the next agent
+scripts/provenance.sh  regenerates that ledger from git trailers
 ```
 
 `window.__game` is live in the console if you want to poke at it.
