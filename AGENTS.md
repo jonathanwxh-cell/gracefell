@@ -58,6 +58,7 @@ secondary path, and no feature should require a keyboard.
 - `vary()` is the central SFX anti-repetition policy. Keep hostile telegraph timing exact; apply variation to performance and impact sounds, and retain repeat masking/critical-voice reservations rather than adding unbounded layers at call sites.
 - The generated score, procedural drone, drums and tension pad have separate submix gains. `updateCombatState()` owns low-health, boss-intensity and stagger transitions. The master route must remain `master -> compressor -> peakLimiter -> destination`.
 - The arena IR sample data is prepared once during idle and copied into its Web Audio buffer on startup. It should stay above 1.5 seconds while the measured first-gesture buffer build remains below the QA budget. Distance processing owns attenuation, low-pass and room-send changes together; do not add call-site volume hacks.
+- Prepared noise/IR data uses a 48 kHz canonical rate, but the runtime AudioBuffers must be resampled to `AudioContext.sampleRate`. Chromium may open at 44.1 kHz and rejects a mismatched convolver buffer before the fight can start.
 - Boss stalk footsteps and charge scrape are state foley. Charge scrape must stop with charge state; it is intentionally requested in short grains rather than held as an orphanable looping node.
 
 ## Headless QA facts (hard-won)

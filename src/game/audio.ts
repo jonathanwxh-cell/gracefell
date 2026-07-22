@@ -9,6 +9,7 @@ export interface SpatialAudio {
 
 type VoicePriority = 'normal' | 'critical';
 type SpatialInput = SpatialAudio | number;
+const PREPARED_SAMPLE_RATE = 48000;
 
 interface VoiceVariation {
   pitch: number;
@@ -255,6 +256,8 @@ export class GameAudio {
       hasPeakLimiter: Boolean(this.peakLimiter?.curve),
       hasReusableNoise: Boolean(this.noiseBuffer),
       arenaIrDuration: this.reverb?.buffer?.duration ?? 0,
+      contextSampleRate: this.ctx?.sampleRate ?? 0,
+      arenaIrSampleRate: this.reverb?.buffer?.sampleRate ?? 0,
       activeVoices: this.activeVoices,
       maxVoices: this.maxVoices,
       variationCount: this.variationCount,
@@ -356,8 +359,8 @@ export class GameAudio {
   }
 
   private ensureWaveData() {
-    if (!this.preparedNoise) this.preparedNoise = this.buildNoiseData(2.5, 48000);
-    if (!this.preparedImpulse) this.preparedImpulse = this.buildImpulseData(1.9, 48000);
+    if (!this.preparedNoise) this.preparedNoise = this.buildNoiseData(2.5, PREPARED_SAMPLE_RATE);
+    if (!this.preparedImpulse) this.preparedImpulse = this.buildImpulseData(1.9, PREPARED_SAMPLE_RATE);
   }
 
   private buildNoiseData(seconds: number, sampleRate: number) {
@@ -391,18 +394,39 @@ export class GameAudio {
   private buildNoiseBuffer() {
     const ctx = this.ctx!;
     const data = this.preparedNoise!;
-    const buf = ctx.createBuffer(1, data.length, 48000);
-    buf.getChannelData(0).set(data);
+    const length = Math.max(1, Math.round(data.length * ctx.sampleRate / PREPARED_SAMPLE_RATE));
+    const buf = ctx.createBuffer(1, length, ctx.sampleRate);
+    this.copyPreparedData(data, buf.getChannelData(0));
     return buf;
   }
 
   private buildArenaImpulse() {
     const ctx = this.ctx!;
     const channels = this.preparedImpulse!;
-    const impulse = ctx.createBuffer(2, channels[0].length, 48000);
-    impulse.getChannelData(0).set(channels[0]);
-    impulse.getChannelData(1).set(channels[1]);
+    const length = Math.max(1, Math.round(channels[0].length * ctx.sampleRate / PREPARED_SAMPLE_RATE));
+    const impulse = ctx.createBuffer(2, length, ctx.sampleRate);
+    this.copyPreparedData(channels[0], impulse.getChannelData(0));
+    this.copyPreparedData(channels[1], impulse.getChannelData(1));
     return impulse;
+  }
+
+  private copyPreparedData(source: Float32Array, target: Float32Array) {
+    if (source.length === target.length) {
+      target.set(source);
+      return;
+    }
+    if (target.length === 1) {
+      target[0] = source[0] ?? 0;
+      return;
+    }
+    const scale = (source.length - 1) / (target.length - 1);
+    for (let i = 0; i < target.length; i++) {
+      const sourceIndex = i * scale;
+      const lower = Math.floor(sourceIndex);
+      const upper = Math.min(source.length - 1, lower + 1);
+      const fraction = sourceIndex - lower;
+      target[i] = source[lower] + (source[upper] - source[lower]) * fraction;
+    }
   }
 
   private allowCue(key: string, gap: number) {

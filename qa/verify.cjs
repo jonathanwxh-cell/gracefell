@@ -7,6 +7,7 @@ const { chromium } = require('playwright');
 const URL = process.env.GRACEFELL_URL || 'http://127.0.0.1:8491/';
 const ARTIFACT_DIR = process.env.GRACEFELL_QA_DIR || path.join(os.tmpdir(), 'gracefell-qa');
 const RESULT_PATH = process.env.GRACEFELL_QA_RESULT || path.join(ARTIFACT_DIR, 'result.json');
+const FORCED_AUDIO_SAMPLE_RATE = Number(process.env.GRACEFELL_AUDIO_SAMPLE_RATE || 44100);
 fs.mkdirSync(ARTIFACT_DIR, { recursive: true });
 const out = { ok: false, errors: [], steps: {} };
 
@@ -19,6 +20,19 @@ function canvasHasInk(pix) {
   return lit;
 }
 
+async function installAudioSampleRate(context) {
+  if (!Number.isFinite(FORCED_AUDIO_SAMPLE_RATE) || FORCED_AUDIO_SAMPLE_RATE <= 0) return;
+  await context.addInitScript((sampleRate) => {
+    const NativeAudioContext = window.AudioContext;
+    if (!NativeAudioContext) return;
+    window.AudioContext = class extends NativeAudioContext {
+      constructor(options = {}) {
+        super({ ...options, sampleRate });
+      }
+    };
+  }, FORCED_AUDIO_SAMPLE_RATE);
+}
+
 (async () => {
   const launchOptions = { headless: true, args: ['--no-sandbox'] };
   if (process.env.PLAYWRIGHT_CHROMIUM_PATH) launchOptions.executablePath = process.env.PLAYWRIGHT_CHROMIUM_PATH;
@@ -26,6 +40,7 @@ function canvasHasInk(pix) {
   try {
     for (const vp of [{ name: 'desktop', w: 1280, h: 800 }, { name: 'mobile', w: 390, h: 844 }]) {
       const ctxB = await browser.newContext({ viewport: { width: vp.w, height: vp.h } });
+      await installAudioSampleRate(ctxB);
       const pg = await ctxB.newPage();
       const consoleErrs = [];
       pg.on('console', (m) => { if (m.type() === 'error') consoleErrs.push(m.text()); });
@@ -106,6 +121,9 @@ function canvasHasInk(pix) {
       }
       if (audioState.arenaIrDuration < 1.5 || audioState.irBuildCostMs > 50) {
         out.errors.push(vp.name + ': arena IR failed duration/init budget: ' + JSON.stringify(audioState));
+      }
+      if (audioState.contextSampleRate !== audioState.arenaIrSampleRate) {
+        out.errors.push(vp.name + ': arena IR sample rate does not match the AudioContext: ' + JSON.stringify(audioState));
       }
       if (audioState.variationCount < 4 || audioState.maxObservedDistance < 400) {
         out.errors.push(vp.name + ': variation/spatial audio paths were not exercised: ' + JSON.stringify(audioState));
@@ -402,6 +420,7 @@ function canvasHasInk(pix) {
       const tctx = await browser.newContext({
         viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 3,
       });
+      await installAudioSampleRate(tctx);
       const pg = await tctx.newPage();
       const cerr = [];
       pg.on('console', (m) => { if (m.type() === 'error') cerr.push(m.text()); });

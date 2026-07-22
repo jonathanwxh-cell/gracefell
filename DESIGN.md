@@ -419,3 +419,10 @@ hazard red, keeping the combat danger language exclusive to damaging telegraphs.
 - `qa/verify.cjs` no longer depends on one Linux checkout or Chromium binary. `npm run qa` owns a
   fixed loopback test server, and GitHub Actions runs lint, build, desktop, mobile, and real-touch
   paths on every push and pull request.
+
+### Changed from v2.7
+
+The idle-prepared noise and arena impulse still use one canonical 48 kHz data set, but runtime
+AudioBuffers are now linearly resampled to the actual `AudioContext.sampleRate`. This preserves
+their intended duration and avoids Chromium rejecting a 48 kHz convolver buffer when a device or
+CI runner opens Web Audio at 44.1 kHz. QA now asserts the context and impulse rates match.
