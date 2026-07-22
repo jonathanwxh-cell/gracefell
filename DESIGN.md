@@ -360,3 +360,62 @@ voices in the stress burst, and emitted no console warnings or errors. Desktop a
 views reached combat. The legacy repo QA script still points at a Linux-only Chromium path on
 this Windows checkout, so its expanded assertions are recorded but were not executed here.
 Final timbre and balance remain a human listening decision on headphones and a phone speaker.
+
+## v2.7 — Codex (GPT-5), "polish without weight" (2026-07-22)
+
+The owner chose not to add generated 3D assets because the existing Canvas2D silhouettes and
+telegraphs already carry the fight, while heavier assets would spend the mobile memory and frame
+budget in the wrong place. Three independent review lanes instead found that the largest quality
+gains were input trust, interruption safety, readable supporting UI, and startup cost.
+
+### Input and lifecycle are part of combat feel
+
+Touch buttons used to set a one-frame flag while keyboard and mouse actions entered the 190 ms
+buffer. Hit-stop clears one-frame flags, so a phone tap during a 50–90 ms impact freeze could be
+silently lost. Touch actions now enter the same buffer while retaining the short visual pressed
+state. Input teardown also owns every listener it creates and resets held keys, taps, and joystick
+state when the page loses focus.
+
+Blur and `visibilitychange` now stop the RAF rather than merely relying on browser throttling,
+suspend the AudioContext, pause the streamed score, and resume with a fresh timestamp. The fight
+therefore cannot advance while the player is handling a phone interruption. Active projectiles,
+rings, and meteors are cleared on defeat so hazard graphics cannot obscure the retry surface.
+
+### Keep the music; stop decoding it all at once
+
+The MiniMax recording is still the musical identity and still routes through
+`soundtrackFilter -> soundtrackMusic -> music -> master`. The source is now a looping
+`HTMLAudioElement` connected through a `MediaElementAudioSourceNode`, so the browser streams the
+compressed MP3 instead of retaining the whole two-minute stereo recording as decoded PCM.
+
+Noise and impulse sample data are prepared during an idle window before the first gesture. The
+gesture still creates and unlocks the real AudioContext, but its expensive random-fill work has
+already happened. The arena floor cache also derives its supersampling from viewport zoom and DPR;
+a 390 px phone no longer allocates the same 2680×2680 surface as a high-DPI desktop.
+
+### A companion layer, not a dashboard
+
+The canvas remains the visual game. A tiny DOM companion exposes the title, live state,
+instructions, start/retry action, trial dial, sound, shake, flash, and haptic controls to screen
+readers and keyboard focus. It stays visually clipped until focused, then opens as one restrained
+parchment-and-ash toolbar. This preserves the playfield while ending the previous all-or-nothing
+accessibility boundary.
+
+Inside the canvas, supporting copy and settings plates receive enough contrast to survive a phone
+display, touch settings have 44 px hit regions, the first-play hint sits clear of the combat
+buttons, a temporary MOVE affordance reveals the joystick zone, and sound is a real touch target.
+System-level reduced-motion preference now supplies the first-run shake/flash defaults, while a
+saved explicit choice still wins. Positive trial pips use ember rather than the reserved hostile
+hazard red, keeping the combat danger language exclusive to damaging telegraphs.
+
+### Changed from v2.6
+
+- The generated score is streamed rather than fetched and decoded into an `AudioBuffer`.
+- Noise/IR random-fill work is prepared before first interaction; their Web Audio buffers are still
+  created once and the 1.9-second room contract remains intact.
+- The floor bake is still offscreen and one-time, but its supersample scale is adaptive.
+- The product is no longer literally canvas-only: the visual game is one canvas with one semantic,
+  focus-revealed DOM companion.
+- `qa/verify.cjs` no longer depends on one Linux checkout or Chromium binary. `npm run qa` owns a
+  fixed loopback test server, and GitHub Actions runs lint, build, desktop, mobile, and real-touch
+  paths on every push and pull request.

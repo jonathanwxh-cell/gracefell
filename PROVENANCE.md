@@ -25,6 +25,7 @@ Newest last. One row per pass. A "pass" = one continuous working session by one 
 | v2.4 | 2026-07-22 | Codex | GPT-5 / Codex Desktop | @jonathanwxh-cell | Procedural audio clarity pass: attack-specific tells, layered spatial impacts, arena reverb, mastering and ducking, reusable noise, scheduled music, cleanup, combat haptics, and audio-state QA |
 | v2.5 | 2026-07-22 | Codex + MiniMax | GPT-5 / Codex Desktop + Music 3.0 free | @jonathanwxh-cell | Generated and integrated an original two-minute dark-fantasy score, crossfaded through the existing music bus with procedural fallback, combat ducking, local asset provenance, and decode QA |
 | v2.6 | 2026-07-22 | Codex | GPT-5 / Codex Desktop | @jonathanwxh-cell | Implemented the six open audio enhancements locally: organic boss vocals, centralized non-repeating SFX variation, player-relative distance audio, material impacts and boss foley, adaptive music buses, true-peak protection, and a longer spectrally shaped arena reverb |
+| v2.7 | 2026-07-22 | Codex | GPT-5 / Codex Desktop | @jonathanwxh-cell | Responsiveness and performance polish: buffered touch actions through hit-stop, interruption-safe pause/audio lifecycle, streamed MiniMax score, adaptive floor cache, readable mobile HUD, semantic companion controls, clean defeat state, and portable CI playtests |
 
 ---
 

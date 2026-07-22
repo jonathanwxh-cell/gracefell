@@ -1,9 +1,13 @@
-// GRACEFELL headless QA gate — writes /tmp/gracefell-result.json
+// GRACEFELL headless QA gate — portable across local machines and CI.
 const fs = require('fs');
-const pw = require('/home/alyosha/workspace/projects/uptime-kuma/node_modules/playwright-core/index.js');
-const { chromium } = pw;
+const os = require('os');
+const path = require('path');
+const { chromium } = require('playwright');
 
-const URL = 'http://127.0.0.1:8491/';
+const URL = process.env.GRACEFELL_URL || 'http://127.0.0.1:8491/';
+const ARTIFACT_DIR = process.env.GRACEFELL_QA_DIR || path.join(os.tmpdir(), 'gracefell-qa');
+const RESULT_PATH = process.env.GRACEFELL_QA_RESULT || path.join(ARTIFACT_DIR, 'result.json');
+fs.mkdirSync(ARTIFACT_DIR, { recursive: true });
 const out = { ok: false, errors: [], steps: {} };
 
 function canvasHasInk(pix) {
@@ -16,10 +20,9 @@ function canvasHasInk(pix) {
 }
 
 (async () => {
-  const browser = await chromium.launch({
-    executablePath: '/home/alyosha/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome',
-    args: ['--no-sandbox', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
-  });
+  const launchOptions = { headless: true, args: ['--no-sandbox'] };
+  if (process.env.PLAYWRIGHT_CHROMIUM_PATH) launchOptions.executablePath = process.env.PLAYWRIGHT_CHROMIUM_PATH;
+  const browser = await chromium.launch(launchOptions);
   try {
     for (const vp of [{ name: 'desktop', w: 1280, h: 800 }, { name: 'mobile', w: 390, h: 844 }]) {
       const ctxB = await browser.newContext({ viewport: { width: vp.w, height: vp.h } });
@@ -31,6 +34,15 @@ function canvasHasInk(pix) {
       await pg.waitForTimeout(1200);
 
       const step = {};
+      step.semantics = await pg.evaluate(() => ({
+        canvasRole: document.querySelector('canvas')?.getAttribute('role'),
+        labelledCanvas: Boolean(document.querySelector('canvas')?.getAttribute('aria-label')),
+        liveStatus: Boolean(document.querySelector('[aria-live="polite"]')),
+        semanticControls: document.querySelectorAll('.game-accessibility button').length,
+      }));
+      if (step.semantics.canvasRole !== 'application' || !step.semantics.labelledCanvas || !step.semantics.liveStatus || step.semantics.semanticControls < 6) {
+        out.errors.push(vp.name + ': semantic companion controls missing: ' + JSON.stringify(step.semantics));
+      }
       // canvas exists and draws
       const ink0 = await pg.evaluate(() => {
         const c = document.querySelector('canvas');
@@ -84,6 +96,13 @@ function canvasHasInk(pix) {
       }
       if (audioState.soundtrackState !== 'playing') {
         out.errors.push(vp.name + ': generated soundtrack did not load: ' + JSON.stringify(audioState));
+      }
+      if (audioState.soundtrackMode !== 'stream') {
+        out.errors.push(vp.name + ': soundtrack is not using the streaming path: ' + JSON.stringify(audioState));
+      }
+      const audioInitBudgetMs = vp.name === 'mobile' ? 20 : 25;
+      if (audioState.initCostMs > audioInitBudgetMs) {
+        out.errors.push(vp.name + ': first-gesture audio init exceeded ' + audioInitBudgetMs + 'ms: ' + JSON.stringify(audioState));
       }
       if (audioState.arenaIrDuration < 1.5 || audioState.irBuildCostMs > 50) {
         out.errors.push(vp.name + ': arena IR failed duration/init budget: ' + JSON.stringify(audioState));
@@ -144,6 +163,45 @@ function canvasHasInk(pix) {
         const st2 = await pg.evaluate(() => (window).__game.state);
         step.restart = st2;
         if (st2 !== 'intro' && st2 !== 'fight') out.errors.push('restart flow broken (' + st2 + ')');
+
+        // focus loss must freeze both simulation and audio, then resume cleanly
+        const pauseBefore = await pg.evaluate(async () => {
+          const g = window.__game;
+          g.state = 'fight';
+          g.fightTime = 10;
+          window.dispatchEvent(new Event('blur'));
+          await new Promise((resolve) => setTimeout(resolve, 80));
+          return { paused: g.paused, fightTime: g.fightTime, audio: g.audio.debugState().contextState };
+        });
+        await pg.waitForTimeout(500);
+        const pauseAfter = await pg.evaluate(() => ({
+          paused: window.__game.paused,
+          fightTime: window.__game.fightTime,
+          audio: window.__game.audio.debugState().contextState,
+        }));
+        step.interruptionPause = { before: pauseBefore, after: pauseAfter };
+        if (!pauseAfter.paused || Math.abs(pauseAfter.fightTime - pauseBefore.fightTime) > 0.01 || pauseAfter.audio !== 'suspended') {
+          out.errors.push('focus loss did not pause cleanly: ' + JSON.stringify(step.interruptionPause));
+        }
+        await pg.evaluate(() => window.dispatchEvent(new Event('focus')));
+        await pg.waitForFunction(() => !window.__game.paused, null, { timeout: 1500 }).catch(() => {});
+        if (await pg.evaluate(() => window.__game.paused)) out.errors.push('focus return did not resume the game');
+
+        // failure overlays must not inherit active phase-three hazards
+        const deathCleanup = await pg.evaluate(() => {
+          const g = window.__game;
+          g.resetFight();
+          g.state = 'fight';
+          g.projectiles.push({ x: 0, y: 0, vx: 0, vy: 0, r: 10, dmg: 1, life: 1, hostile: true, hue: '#ff2d17' });
+          g.rings.push({ x: 0, y: 0, r: 40, speed: 10, thickness: 10, dmg: 1, maxR: 500, hostile: true, hitDone: false });
+          g.meteors.push({ x: 0, y: 0, fuse: 1, maxFuse: 1, r: 20, dmg: 1 });
+          g.onPlayerDeath();
+          return { state: g.state, projectiles: g.projectiles.length, rings: g.rings.length, meteors: g.meteors.length };
+        });
+        step.deathCleanup = deathCleanup;
+        if (deathCleanup.state !== 'dead' || deathCleanup.projectiles || deathCleanup.rings || deathCleanup.meteors) {
+          out.errors.push('death did not clear active hazards: ' + JSON.stringify(deathCleanup));
+        }
 
         // perfect dodge unit check
         const pd = await pg.evaluate(() => {
@@ -285,7 +343,7 @@ function canvasHasInk(pix) {
         step.combo = combo;
 
         // fight-scene screenshot
-        await pg.screenshot({ path: '/tmp/gracefell-desktop.png' });
+        await pg.screenshot({ path: path.join(ARTIFACT_DIR, 'desktop.png') });
       } else {
         // mobile: fight ink + touch UI presence + screenshot
         const inkFight = await pg.evaluate(() => {
@@ -298,7 +356,7 @@ function canvasHasInk(pix) {
         });
         step.fightInk = inkFight;
         if (inkFight <= 0) out.errors.push('mobile: canvas blank in fight');
-        await pg.screenshot({ path: '/tmp/gracefell-mobile.png' });
+        await pg.screenshot({ path: path.join(ARTIFACT_DIR, 'mobile.png') });
       }
 
       // ---- menu layout must fit its own plate + the viewport, every viewport
@@ -359,13 +417,15 @@ function canvasHasInk(pix) {
       // 2. touch-appropriate copy, no keyboard bindings shown
       t.rows = await pg.evaluate(() => window.__game.menuRows().map((r) => r.id));
       if (!t.rows.includes('haptics')) out.errors.push('touch: haptics row missing from menu');
+      await pg.screenshot({ path: path.join(ARTIFACT_DIR, 'touch-title.png') });
 
       // 3. controls layout: inside screen, clear of the joystick half and the safe area
       t.layout = await pg.evaluate(() => {
         const g = window.__game; const L = g.touchLayout();
-        return { base: L.base, joyZoneR: L.joyZoneR, w: g.w, h: g.h,
+        return { base: L.base, joyZoneR: L.joyZoneR, w: g.w, h: g.h, floorCacheWidth: g.floorCanvas?.width || 0,
                  btns: L.btns.map((b) => ({ id: b.id, x: Math.round(b.x), y: Math.round(b.y), r: Math.round(b.r) })) };
       });
+      if (t.layout.floorCacheWidth > 1800) out.errors.push(`touch: floor cache is oversized (${t.layout.floorCacheWidth}px)`);
       for (const b of t.layout.btns) {
         if (b.x - b.r < t.layout.joyZoneR) out.errors.push(`touch: ${b.id} button overlaps the joystick half`);
         if (b.x + b.r > t.layout.w) out.errors.push(`touch: ${b.id} button off the right edge`);
@@ -413,13 +473,43 @@ function canvasHasInk(pix) {
 
       // 6. the ATK button actually attacks
       const atk = t.layout.btns.find((b) => b.id === 'light');
-      await pg.evaluate(() => { window.__game.player.state = 'move'; window.__game.player.stam = 100; });
+      await pg.evaluate(() => {
+        const g = window.__game;
+        g.resetFight();
+        g.state = 'fight';
+        g.boss.state = 'staggered';
+        g.boss.t = 0;
+        g.player.state = 'move';
+        g.player.stam = 100;
+      });
       await pg.touchscreen.tap(atk.x, atk.y);
       await pg.waitForFunction(() => window.__game.player.state === 'light', null, { timeout: 1000 }).catch(() => {});
       t.atkState = await pg.evaluate(() => window.__game.player.state);
       if (t.atkState !== 'light') out.errors.push('touch: ATK button did not enter the light-attack state (' + t.atkState + ')');
 
-      // 7. no horizontal overflow, canvas drawing, clean console
+      // 7. touch actions share the keyboard/mouse buffer through hit-stop
+      const roll = t.layout.btns.find((b) => b.id === 'roll');
+      await pg.evaluate(() => {
+        const g = window.__game;
+        g.player.state = 'move';
+        g.player.stam = 100;
+        g.hitstop = 0.09;
+      });
+      await pg.touchscreen.tap(roll.x, roll.y);
+      await pg.waitForFunction(() => window.__game.player.state === 'roll', null, { timeout: 1500 }).catch(() => {});
+      t.bufferedRollState = await pg.evaluate(() => window.__game.player.state);
+      if (t.bufferedRollState !== 'roll') out.errors.push('touch: roll was lost during hit-stop (' + t.bufferedRollState + ')');
+
+      // 8. sound is an actual touch target, not a passive status label
+      const sound = await pg.evaluate(() => window.__game.soundButtonRect());
+      const mutedBefore = await pg.evaluate(() => window.__game.audio.muted);
+      await pg.touchscreen.tap(sound.x + sound.width / 2, sound.y + sound.height / 2);
+      await pg.waitForTimeout(120);
+      const mutedAfter = await pg.evaluate(() => window.__game.audio.muted);
+      t.touchMute = { before: mutedBefore, after: mutedAfter };
+      if (mutedAfter === mutedBefore) out.errors.push('touch: sound control did not toggle mute');
+
+      // 9. no horizontal overflow, canvas drawing, clean console
       t.overflow = await pg.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
       if (t.overflow > 1) out.errors.push('touch: horizontal overflow ' + t.overflow);
       t.ink = await pg.evaluate(() => {
@@ -432,6 +522,7 @@ function canvasHasInk(pix) {
       if (cerr.length) out.errors.push('touch console: ' + cerr.join(' | '));
       t.consoleErrors = cerr;
       out.steps.touch = t;
+      await pg.screenshot({ path: path.join(ARTIFACT_DIR, 'touch-combat.png') });
       await tctx.close();
     }
 
@@ -440,7 +531,8 @@ function canvasHasInk(pix) {
     out.errors.push('harness: ' + e.message);
   } finally {
     await browser.close();
-    fs.writeFileSync('/tmp/gracefell-result.json', JSON.stringify(out, null, 2));
-    console.log(JSON.stringify({ ok: out.ok, nErrors: out.errors.length }));
+    fs.writeFileSync(RESULT_PATH, JSON.stringify(out, null, 2));
+    console.log(JSON.stringify({ ok: out.ok, nErrors: out.errors.length, result: RESULT_PATH, artifacts: ARTIFACT_DIR }));
+    if (!out.ok) process.exitCode = 1;
   }
 })();

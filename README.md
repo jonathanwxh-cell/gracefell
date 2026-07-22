@@ -8,7 +8,7 @@ rules are all decided by what works one-handed on a 390px screen.
 
 **Play it: [gracefell.alyoechosys.dev](https://gracefell.alyoechosys.dev)**
 
-Zero art assets, one generated music track. Every stone in the floor, every ember, every wing, and every combat cue is generated at runtime from code — canvas 2D for the visuals and Web Audio for the SFX. A MiniMax Music 3.0 instrumental now supplies the score, with the original procedural drone and phase-aware drums kept underneath and available as the offline fallback. The whole game is still one `<canvas>` and about two thousand lines of TypeScript.
+Zero art assets, one generated music track. Every stone in the floor, every ember, every wing, and every combat cue is generated at runtime from code — canvas 2D for the visuals and Web Audio for the SFX. A MiniMax Music 3.0 instrumental supplies the score, with the original procedural drone and phase-aware drums kept underneath and available as the offline fallback. The visual game remains one `<canvas>`; a focus-revealed semantic companion exposes controls and safety settings to keyboards and assistive technology without covering the playfield.
 
 The sovereign has an audio language, not one generic warning: swipes whistle, charges rise, volleys crystallise, rings resonate, meteors fall and the spiral winds itself tight. Impacts are layered and positioned across the arena, the stone room supplies a generated reverb tail, and the whole score ducks and limits itself when phase three gets crowded. The shipped MP3 is music only; every combat sound, noise source and room impulse is still synthesized at startup.
 
@@ -78,6 +78,8 @@ supposed to mean something; it just shouldn't require the same reflexes from eve
 Also on the title screen: **screen shake** and **flash reduction** toggles. The low-health vignette
 pulses at about 5Hz by default, which is a photosensitivity concern — reduced mode makes it a
 steady glow and drops the full-screen flashes to a quarter strength.
+New players whose system requests reduced motion start with shake off and reduced flashes; an
+existing saved preference remains authoritative.
 
 ## Reading the screen
 
@@ -105,12 +107,20 @@ last 30% of boss health raises intensity, and a stagger clears the drums to expo
 compressor and -1 dBFS peak ceiling protect dense phase-three collisions. Headphones give the best
 spatial read, but the transient and sub limits are designed to remain legible on a phone speaker.
 
+The MP3 is streamed through the Web Audio music bus instead of being fully decoded into memory.
+Generated noise and the arena response are prepared before the first gesture, keeping the first
+attack responsive while preserving the same spatial mix, ducking, and limiter path.
+
+If the tab loses focus or a phone interruption hides the page, simulation and audio pause together.
+Returning resumes from the same fight frame rather than letting Malakar attack an absent player.
+
 ## Running it
 
 ```bash
 npm install     # npm ci fails on this lockfile — use install
 npm run build   # tsc -b && vite build
 npm run dev     # or just: vite on :3000
+npm run qa      # build + portable desktop/mobile/touch Playwright gate
 ```
 
 Production is a zero-dependency Node static server (`server.mjs`) in front of `dist/`, behind a Cloudflare tunnel.
@@ -121,8 +131,9 @@ Production is a zero-dependency Node static server (`server.mjs`) in front of `d
 src/game/engine.ts   the entire game — Input, Player, Boss, Game + render layer (~2.1k lines)
 src/game/audio.ts    hybrid Web Audio: procedural SFX/fallback + generated score
 public/audio/        MiniMax score and generation provenance
-src/pages/Home.tsx   mounts a canvas. that's all it does.
-qa/verify.cjs        headless Playwright gate — the thing that decides "done"
+src/pages/Home.tsx   mounts the canvas + semantic companion controls
+qa/run.cjs           starts an isolated 127.0.0.1:8492 QA server
+qa/verify.cjs        portable headless Playwright gate — the thing that decides "done"
 DESIGN.md            per-version reasoning log
 AGENTS.md            operational runbook / don't-undo list
 PROVENANCE.md        who built what, and the rules for the next agent
@@ -133,7 +144,7 @@ scripts/provenance.sh  regenerates that ledger from git trailers
 
 ## On "done"
 
-Nothing here shipped on a claim. `qa/verify.cjs` drives a real Chromium at 1280×800 and 390×844 and asserts the canvas actually has ink in it, that the console is clean, that the generated soundtrack decodes, that all three phases trigger, that victory computes a grade, that saves round-trip through localStorage, and that a perfect dodge really does refund stamina without taking damage. Green, or it isn't done.
+Nothing here ships on a claim. `npm run qa` drives a real Chromium at 1280×800 and 390×844 and asserts the canvas has ink, the console is clean, the generated soundtrack streams through the mix, interruption pause works, touch actions survive hit-stop, semantic controls exist, all three phases trigger, victory computes a grade, saves round-trip, and a perfect dodge refunds stamina without taking damage. Green, or it isn't done.
 
 ## License
 

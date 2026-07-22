@@ -1,6 +1,13 @@
 // GRACEFELL — boss-arena ARPG engine (canvas 2D, procedural, no assets)
 import { GameAudio, type SpatialAudio } from './audio';
 
+declare global {
+  interface Window {
+    __game?: Game;
+    __graceTouch?: (event: TouchEvent, phase: string) => void;
+  }
+}
+
 // ------------------------------------------------------------------ utils
 export const TAU = Math.PI * 2;
 export const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
@@ -22,7 +29,7 @@ export const PAL = {
   floorRing: '#241d13',
   rune: '#3d3320',
   parchment: '#ece0c4',
-  parchmentDim: '#9a8f74',
+  parchmentDim: '#b8aa8a',
   gold: '#c9a959',
   goldBright: '#f0d78c',
   ember: '#ff7a29',
@@ -93,7 +100,7 @@ export class Input {
     window.addEventListener('keyup', this.onKeyUp);
     canvas.addEventListener('mousedown', this.onMouseDown);
     window.addEventListener('mouseup', this.onMouseUp);
-    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    canvas.addEventListener('contextmenu', this.onContextMenu);
     canvas.addEventListener('touchstart', this.onTouchStart, { passive: false });
     canvas.addEventListener('touchmove', this.onTouchMove, { passive: false });
     canvas.addEventListener('touchend', this.onTouchEnd, { passive: false });
@@ -104,6 +111,12 @@ export class Input {
     window.removeEventListener('keyup', this.onKeyUp);
     this.canvas.removeEventListener('mousedown', this.onMouseDown);
     window.removeEventListener('mouseup', this.onMouseUp);
+    this.canvas.removeEventListener('contextmenu', this.onContextMenu);
+    this.canvas.removeEventListener('touchstart', this.onTouchStart);
+    this.canvas.removeEventListener('touchmove', this.onTouchMove);
+    this.canvas.removeEventListener('touchend', this.onTouchEnd);
+    this.canvas.removeEventListener('touchcancel', this.onTouchEnd);
+    this.reset();
   }
   private gestureFired = false;
   private fireGesture() { if (!this.gestureFired) { this.gestureFired = true; this.onFirstGesture(); } }
@@ -131,6 +144,7 @@ export class Input {
     this.pressed['confirm'] = now;
   };
   private onMouseUp = () => {};
+  private onContextMenu = (event: MouseEvent) => event.preventDefault();
 
   // touch → joystick on left 45% of screen, buttons handled by game hit test
   private onTouchStart = (e: TouchEvent) => {
@@ -148,7 +162,7 @@ export class Input {
       }
     }
     this.pressed['confirm'] = performance.now();
-    (window as any).__graceTouch?.(e, 'start');
+    window.__graceTouch?.(e, 'start');
   };
   private onTouchMove = (e: TouchEvent) => {
     e.preventDefault();
@@ -172,8 +186,24 @@ export class Input {
         this.joyActive = false; this.joyX = 0; this.joyY = 0;
       }
     }
-    (window as any).__graceTouch?.(e, 'end');
+    window.__graceTouch?.(e, 'end');
   };
+
+  bufferPress(action: string) {
+    this.pressed[action] = performance.now();
+    this.btnPressed[action] = true;
+  }
+
+  reset() {
+    this.held = {};
+    this.pressed = {};
+    this.btnPressed = {};
+    this.taps = [];
+    this.joyActive = false;
+    this.joyId = -1;
+    this.joyX = 0;
+    this.joyY = 0;
+  }
 
   axis(): { x: number; y: number } {
     let x = 0, y = 0;
@@ -1045,6 +1075,23 @@ export class Boss {
 // ------------------------------------------------------------------ game
 type GameState = 'title' | 'intro' | 'fight' | 'dead' | 'victory';
 
+export interface GameUiSnapshot {
+  state: GameState;
+  status: string;
+  muted: boolean;
+  grace: number;
+  graceLabel: string;
+  shakeEnabled: boolean;
+  flashReduced: boolean;
+  hapticsEnabled: boolean;
+  touch: boolean;
+}
+
+export function reducedMotionPreferred(): boolean {
+  try { return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches; }
+  catch { return false; }
+}
+
 // Button *shape*; absolute positions come from Game.touchLayout() so they scale
 // with the screen and clear the home indicator. Fixed pixel offsets used to put
 // the flask button inside the joystick zone on phones narrower than ~380px.
@@ -1088,6 +1135,7 @@ export class Game {
   hintT = 0;
   bossBarFill = 0;
   destroyed = false;
+  paused = false;
   // rendering layers
   floorCanvas: HTMLCanvasElement | null = null;
   scorchCanvas: HTMLCanvasElement | null = null;
@@ -1102,20 +1150,29 @@ export class Game {
   bests: Record<string, number> = {};
   // accessibility / difficulty — one dial, -3 (aided) .. +5 (vowed)
   grace = 0;
-  shakeEnabled = true;
-  flashReduced = false;
+  shakeEnabled = !reducedMotionPreferred();
+  flashReduced = reducedMotionPreferred();
   hapticsEnabled = true;
   safeBottom = 0; safeRight = 0;
   static SAVE_VERSION = 2;
+  private previousTouchBridge?: (event: TouchEvent, phase: string) => void;
+  private previousGame?: Game;
+  private readonly touchBridge = (event: TouchEvent, phase: string) => this.handleTouch(event, phase);
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d')!;
     this.input = new Input(canvas, () => { this.audio.init(); if (this.audio.muted) this.audio.setMuted(true); });
-    (window as any).__graceTouch = (e: TouchEvent, phase: string) => this.handleTouch(e, phase);
+    this.audio.prepare();
+    this.previousTouchBridge = window.__graceTouch;
+    window.__graceTouch = this.touchBridge;
     this.resize();
     window.addEventListener('resize', this.resize);
-    (window as any).__game = this; // QA / debug hook
+    window.addEventListener('blur', this.pauseForInterruption);
+    window.addEventListener('focus', this.resumeFromInterruption);
+    document.addEventListener('visibilitychange', this.onVisibilityChange);
+    this.previousGame = window.__game;
+    window.__game = this; // QA / debug hook
     // scatter floor detail
     for (let i = 0; i < 130; i++) {
       const a = rand(0, TAU), r = Math.sqrt(Math.random()) * (this.arenaR - 20);
@@ -1143,15 +1200,7 @@ export class Game {
       if (typeof sv.hapticsEnabled === 'boolean') this.hapticsEnabled = sv.hapticsEnabled;
     } catch { /* first run / private mode */ }
     this.buildFloor();
-    this.lastTs = performance.now();
-    const loop = (ts: number) => {
-      if (this.destroyed) return;
-      const rawDt = Math.min(0.05, (ts - this.lastTs) / 1000);
-      this.lastTs = ts;
-      this.frame(rawDt);
-      this.raf = requestAnimationFrame(loop);
-    };
-    this.raf = requestAnimationFrame(loop);
+    this.startLoop();
   }
 
   destroy() {
@@ -1160,8 +1209,47 @@ export class Game {
     this.input.destroy();
     this.audio.destroy();
     window.removeEventListener('resize', this.resize);
-    (window as any).__graceTouch = undefined;
+    window.removeEventListener('blur', this.pauseForInterruption);
+    window.removeEventListener('focus', this.resumeFromInterruption);
+    document.removeEventListener('visibilitychange', this.onVisibilityChange);
+    if (window.__graceTouch === this.touchBridge) window.__graceTouch = this.previousTouchBridge;
+    if (window.__game === this) window.__game = this.previousGame;
   }
+
+  private readonly loop = (timestamp: number) => {
+    if (this.destroyed || this.paused) return;
+    const rawDt = Math.min(0.05, (timestamp - this.lastTs) / 1000);
+    this.lastTs = timestamp;
+    this.frame(rawDt);
+    this.raf = requestAnimationFrame(this.loop);
+  };
+
+  private startLoop() {
+    if (this.destroyed || this.paused || this.raf) return;
+    this.lastTs = performance.now();
+    this.raf = requestAnimationFrame(this.loop);
+  }
+
+  private pauseForInterruption = () => {
+    if (this.paused || this.destroyed) return;
+    this.paused = true;
+    if (this.raf) cancelAnimationFrame(this.raf);
+    this.raf = 0;
+    this.input.reset();
+    this.audio.suspend();
+  };
+
+  private resumeFromInterruption = () => {
+    if (!this.paused || this.destroyed || document.visibilityState === 'hidden') return;
+    this.paused = false;
+    this.audio.resume();
+    this.startLoop();
+  };
+
+  private onVisibilityChange = () => {
+    if (document.visibilityState === 'hidden') this.pauseForInterruption();
+    else this.resumeFromInterruption();
+  };
 
   private resize = () => {
     // CSS env() insets aren't reachable from canvas — index.css publishes them
@@ -1269,12 +1357,63 @@ export class Game {
     } catch { /* ignore */ }
   }
 
+  toggleMuted() {
+    this.audio.setMuted(!this.audio.muted);
+    this.persist();
+  }
+
+  toggleShake() {
+    this.shakeEnabled = !this.shakeEnabled;
+    this.persist();
+    this.audio.ui();
+  }
+
+  toggleFlashes() {
+    this.flashReduced = !this.flashReduced;
+    this.persist();
+    this.audio.ui();
+  }
+
+  toggleHaptics() {
+    this.hapticsEnabled = !this.hapticsEnabled;
+    this.persist();
+    this.audio.ui();
+    this.vibrate(15);
+  }
+
+  confirm() {
+    this.audio.init();
+    this.input.bufferPress('confirm');
+  }
+
+  uiSnapshot(): GameUiSnapshot {
+    const status = this.paused ? 'Paused' : this.state === 'title' ? 'Title screen'
+      : this.state === 'intro' ? 'Malakar enters the arena'
+      : this.state === 'fight' ? 'Battle in progress'
+      : this.state === 'dead' ? `Defeated. Malakar has ${Math.max(1, Math.ceil((this.boss.hp / this.boss.maxHp) * 100))}% health remaining`
+      : `Victory. Grade ${this.grade}`;
+    return {
+      state: this.state,
+      status,
+      muted: this.audio.muted,
+      grace: this.grace,
+      graceLabel: this.graceLabel(),
+      shakeEnabled: this.shakeEnabled,
+      flashReduced: this.flashReduced,
+      hapticsEnabled: this.hapticsEnabled,
+      touch: this.input.isTouch,
+    };
+  }
+
   // bake the arena floor once at 2x — rich detail with zero per-frame cost
   buildFloor() {
     const R = this.arenaR;
     const S = (R + 110) * 2;
     this.floorSize = S;
-    const ss = 2; // supersample
+    // Match the cache to the physical pixels the arena can occupy. A phone at
+    // 0.55x camera zoom does not benefit from the old unconditional 2x bake.
+    const displayScale = clamp(Math.min(this.w / 1250, this.h / 900), 0.55, 1.35) * this.dpr;
+    const ss = clamp(Math.ceil(displayScale * 4) / 4, 1, 2);
     const c = document.createElement('canvas');
     c.width = S * ss; c.height = S * ss;
     const g = c.getContext('2d')!;
@@ -1432,6 +1571,9 @@ export class Game {
   onPlayerDeath() {
     this.audio.deathSting();
     this.slowT = 1.2; this.timeScale = 0.3;
+    this.projectiles = [];
+    this.rings = [];
+    this.meteors = [];
     this.state = 'dead'; this.stateT = 0;
     this.persist();
   }
@@ -1513,6 +1655,13 @@ export class Game {
     return { base, btns, joyZoneR, padB, padR };
   }
 
+  soundButtonRect() {
+    const width = 76;
+    const height = 38;
+    const right = 12 + this.safeRight;
+    return { x: this.w - right - width, y: 12, width, height };
+  }
+
   vibrate(ms: number | number[]) {
     if (!this.hapticsEnabled) return;
     try { (navigator as any).vibrate?.(ms); } catch { /* unsupported */ }
@@ -1523,8 +1672,8 @@ export class Game {
   // thing you see is provably the thing you can press.
   menuRows(): { id: string; y: number; label: string; value: string }[] {
     const rowCount = this.input.isTouch ? 4 : 3;
-    const gap = Math.max(28, Math.min(38, this.h * 0.045));
-    const baseY = this.h * 0.70 - (rowCount - 3) * gap * 0.5;
+    const gap = this.input.isTouch ? 44 : Math.max(30, Math.min(38, this.h * 0.045));
+    const baseY = this.h * (this.input.isTouch ? 0.72 : 0.70) - (rowCount - 3) * gap * 0.5;
     const rows = [
       { id: 'grace', y: baseY, label: 'TRIAL', value: this.graceLabel() },
       { id: 'shake', y: baseY + gap, label: 'SCREEN SHAKE', value: this.shakeEnabled ? 'on' : 'off' },
@@ -1548,7 +1697,7 @@ export class Game {
       cx, halfW, pad, pipStep,
       plateL: cx - halfW,
       plateR: cx + halfW,
-      rowH: 30,
+      rowH: this.input.isTouch ? 40 : 32,
       chevLx: cx - halfW + pad,
       chevRx: cx + halfW - pad,
       valueRx: cx + halfW - pad * 2.2,
@@ -1561,9 +1710,9 @@ export class Game {
 
   private menuHit(tx: number, ty: number): boolean {
     const rows = this.menuRows();
-    const { cx, halfW } = this.menuGeom();
+    const { cx, halfW, rowH } = this.menuGeom();
     for (const row of rows) {
-      if (Math.abs(ty - row.y) > 18) continue;
+      if (Math.abs(ty - row.y) > Math.max(22, rowH / 2)) continue;
       if (Math.abs(tx - cx) > halfW) continue;
       if (row.id === 'grace') {
         // left third decreases, right third increases, middle does nothing
@@ -1572,9 +1721,9 @@ export class Game {
         if (tx > gm.incZone) { this.setGrace(this.grace + 1); this.audio.ui(); return true; }
         return true; // swallow: they aimed at the row, not at "start"
       }
-      if (row.id === 'shake') { this.shakeEnabled = !this.shakeEnabled; this.persist(); this.audio.ui(); return true; }
-      if (row.id === 'flash') { this.flashReduced = !this.flashReduced; this.persist(); this.audio.ui(); return true; }
-      if (row.id === 'haptics') { this.hapticsEnabled = !this.hapticsEnabled; this.persist(); this.audio.ui(); this.vibrate(15); return true; }
+      if (row.id === 'shake') { this.toggleShake(); return true; }
+      if (row.id === 'flash') { this.toggleFlashes(); return true; }
+      if (row.id === 'haptics') { this.toggleHaptics(); return true; }
     }
     return false;
   }
@@ -1599,9 +1748,19 @@ export class Game {
     for (let i = 0; i < e.changedTouches.length; i++) {
       const t = e.changedTouches[i];
       const x = t.clientX - r.left, y = t.clientY - r.top;
+      const sound = this.soundButtonRect();
+      if (
+        phase === 'start' && this.state === 'fight'
+        && x >= sound.x && x <= sound.x + sound.width
+        && y >= sound.y && y <= sound.y + sound.height
+      ) {
+        this.toggleMuted();
+        this.vibrate(8);
+        continue;
+      }
       for (const b of btns) {
         if (Math.hypot(x - b.x, y - b.y) < b.r + 10) {
-          if (phase === 'start') { this.input.btnPressed[b.id] = true; this.vibrate(8); }
+          if (phase === 'start') { this.input.bufferPress(b.id); this.vibrate(8); }
         }
       }
     }
@@ -1611,7 +1770,7 @@ export class Game {
   private frame(rawDt: number) {
     // hitstop freezes simulation but keeps rendering
     if (this.hitstop > 0) { this.hitstop -= rawDt; this.render(); this.input.endFrame(); return; }
-    let dt = rawDt * this.timeScale;
+    const dt = rawDt * this.timeScale;
     if (this.slowT > 0) { this.slowT -= rawDt; if (this.slowT <= 0) this.timeScale = 1; }
 
     this.time += dt;
@@ -1646,7 +1805,7 @@ export class Game {
       }
     }
 
-    if (this.input.consume('mute')) this.audio.setMuted(!this.audio.muted);
+    if (this.input.consume('mute')) this.toggleMuted();
 
     // simulation
     const fighting = this.state === 'fight' || this.state === 'intro';
@@ -2182,23 +2341,42 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
 
   // ---- control hints
   if (this.hintT > 0) {
-    ctx.globalAlpha = clamp(this.hintT / 2, 0, 1) * 0.75;
+    const hintAlpha = clamp(this.hintT / 2, 0, 1);
+    ctx.globalAlpha = hintAlpha;
     ctx.textAlign = 'center';
     ctx.font = body(this.input.isTouch ? 13 : 15, 500);
-    ctx.fillStyle = PAL.parchmentDim;
     const hint = this.input.isTouch
       ? 'drag anywhere on the left to move · ROLL is invincible'
       : 'WASD move · SPACE roll · J / LMB attack · K heavy · F flask · M mute';
-    // sit above the thumb cluster on touch, not underneath it
-    ctx.fillText(hint, this.w / 2, this.input.isTouch ? this.h - this.touchLayout().base * 3.6 : this.h - 18);
+    const hintY = this.input.isTouch ? this.h - 208 : this.h - 18;
+    if (this.input.isTouch) {
+      ctx.fillStyle = 'rgba(8,6,4,0.82)';
+      ctx.fillRect(16, hintY - 18, this.w - 32, 28);
+      ctx.strokeStyle = 'rgba(201,169,89,0.38)';
+      ctx.strokeRect(16, hintY - 18, this.w - 32, 28);
+    }
+    ctx.fillStyle = this.input.isTouch ? PAL.parchment : PAL.parchmentDim;
+    ctx.fillText(hint, this.w / 2, hintY);
     ctx.globalAlpha = 1;
   }
 
   // mute indicator
-  ctx.textAlign = 'right';
-  ctx.font = body(13, 500);
-  ctx.fillStyle = 'rgba(154,143,116,0.7)';
-  ctx.fillText(this.input.isTouch ? (this.audio.muted ? 'muted' : 'sound on') : (this.audio.muted ? 'muted [M]' : '[M] sound'), this.w - pad, pad + 8);
+  if (this.input.isTouch) {
+    const sound = this.soundButtonRect();
+    ctx.fillStyle = 'rgba(8,6,4,0.78)';
+    ctx.fillRect(sound.x, sound.y, sound.width, sound.height);
+    ctx.strokeStyle = 'rgba(201,169,89,0.58)';
+    ctx.strokeRect(sound.x, sound.y, sound.width, sound.height);
+    ctx.textAlign = 'center';
+    ctx.font = body(13, 650);
+    ctx.fillStyle = PAL.parchment;
+    ctx.fillText(this.audio.muted ? 'SOUND OFF' : 'SOUND ON', sound.x + sound.width / 2, sound.y + 24);
+  } else {
+    ctx.textAlign = 'right';
+    ctx.font = body(13, 500);
+    ctx.fillStyle = 'rgba(184,170,138,0.86)';
+    ctx.fillText(this.audio.muted ? 'muted [M]' : '[M] sound', this.w - pad, pad + 8);
+  }
 };
 
 (Game.prototype as any).drawBanner = function drawBanner(this: Game, ctx: CanvasRenderingContext2D) {
@@ -2288,7 +2466,7 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
   ctx.fillStyle = PAL.gold; ctx.fillRect(-4, -4, 8, 8);
   ctx.restore();
 
-  const blink = 0.55 + Math.sin(this.time * 3.2) * 0.45;
+  const blink = 0.9 + Math.sin(this.time * 3.2) * 0.1;
   ctx.globalAlpha = blink;
   ctx.font = serif(clamp(this.w * 0.018, 15, 20), 600);
   ctx.fillStyle = PAL.goldBright;
@@ -2303,23 +2481,22 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
     for (const row of rows) {
       const isGrace = row.id === 'grace';
       // row plate
-      ctx.globalAlpha = 0.5;
-      ctx.fillStyle = 'rgba(10,8,5,0.55)';
-      ctx.fillRect(cx - halfW, row.y - 15, halfW * 2, 30);
-      ctx.strokeStyle = 'rgba(201,169,89,0.25)';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(cx - halfW, row.y - 15, halfW * 2, 30);
       ctx.globalAlpha = 1;
+      ctx.fillStyle = 'rgba(10,8,5,0.76)';
+      ctx.fillRect(cx - halfW, row.y - gm.rowH / 2, halfW * 2, gm.rowH);
+      ctx.strokeStyle = 'rgba(201,169,89,0.48)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(cx - halfW, row.y - gm.rowH / 2, halfW * 2, gm.rowH);
 
       ctx.textAlign = 'left';
       ctx.font = body(14, 600);
       ctx.fillStyle = PAL.parchmentDim;
-      ctx.fillText(row.label, gm.labelLx, row.y + 5);
+      ctx.fillText(row.label, isGrace ? gm.chevLx + 24 : gm.labelLx, row.y + 5);
 
       ctx.textAlign = 'right';
       ctx.font = serif(14, 700);
       ctx.fillStyle = isGrace
-        ? (this.grace > 0 ? PAL.danger : this.grace < 0 ? PAL.spirit : PAL.goldBright)
+        ? (this.grace > 0 ? PAL.ember : this.grace < 0 ? PAL.spirit : PAL.goldBright)
         : PAL.parchment;
       ctx.fillText(row.value, isGrace ? gm.valueRx : gm.plateR - gm.pad * 0.8, row.y + 5);
 
@@ -2337,7 +2514,7 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
           const px = gm.pipX(g);
           const on = g <= this.grace && g < 0 ? true : g >= 0 && g <= this.grace;
           ctx.globalAlpha = g === this.grace ? 1 : on ? 0.55 : 0.18;
-          ctx.fillStyle = g > 0 ? PAL.danger : g < 0 ? PAL.spirit : PAL.gold;
+          ctx.fillStyle = g > 0 ? PAL.emberDeep : g < 0 ? PAL.spirit : PAL.gold;
           const sz = g === this.grace ? 4 : 2.4;
           ctx.beginPath(); ctx.arc(px, row.y + 1, sz, 0, TAU); ctx.fill();
         }
@@ -2346,7 +2523,7 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
     }
     ctx.textAlign = 'center';
     ctx.font = body(12, 500);
-    ctx.fillStyle = 'rgba(154,143,116,0.65)';
+    ctx.fillStyle = 'rgba(184,170,138,0.9)';
     ctx.fillText(
       this.input.isTouch ? 'tap a row to change it \u00b7 tap anywhere else to begin'
                          : '\u2190 \u2192 or click to change \u00b7 the trial is recorded with your grade',
@@ -2355,12 +2532,12 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
   }
 
   ctx.font = body(15, 500);
-  ctx.fillStyle = 'rgba(154,143,116,0.7)';
+  ctx.fillStyle = 'rgba(184,170,138,0.92)';
   ctx.fillText(
     this.input.isTouch
       ? 'left thumb steers \u00b7 right thumb strikes, rolls, drinks'
       : 'WASD move \u00b7 SPACE roll \u00b7 J slash \u00b7 K heavy \u00b7 F flask',
-    cx, this.h * 0.655,
+    cx, this.h * (this.input.isTouch ? 0.64 : 0.655),
   );
   if (this.wins > 0 || this.bestTime > 0) {
     ctx.font = body(15, 500);
@@ -2372,7 +2549,7 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
     ctx.fillText(parts.join('   \u00b7   '), cx, this.h * 0.60 + 26);
   }
   ctx.font = body(13, 400);
-  ctx.fillStyle = 'rgba(154,143,116,0.55)';
+  ctx.fillStyle = 'rgba(184,170,138,0.78)';
   ctx.fillText('headphones advised \u00b7 the sovereign does not forgive', cx, this.h - 26);
 };
 
@@ -2428,7 +2605,7 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
     ctx.globalAlpha = a * (0.55 + Math.sin(this.time * 3) * 0.4);
     ctx.font = serif(17, 600);
     ctx.fillStyle = PAL.goldBright;
-    ctx.fillText(this.input.isTouch ? 'touch to rise again' : 'click to rise again', this.w / 2, this.h * 0.44 + size * 0.7 + 46);
+    ctx.fillText(this.input.isTouch ? 'touch to rise again' : 'click or press Enter to rise again', this.w / 2, this.h * 0.44 + size * 0.7 + 46);
   }
   ctx.globalAlpha = 1;
 };
@@ -2493,7 +2670,7 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
     ctx.globalAlpha = a * (0.55 + Math.sin(this.time * 3) * 0.4);
     ctx.font = serif(16, 600);
     ctx.fillStyle = PAL.gold;
-    ctx.fillText(this.input.isTouch ? 'touch to face him again' : 'click to face him again', this.w / 2, this.h * 0.4 + size * 0.9 + 62 + stats.length * 26 + 30);
+    ctx.fillText(this.input.isTouch ? 'touch to face him again' : 'click or press Enter to face him again', this.w / 2, this.h * 0.4 + size * 0.9 + 62 + stats.length * 26 + 30);
   }
   ctx.globalAlpha = 1;
 };
@@ -2509,6 +2686,17 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
     ctx.fillStyle = PAL.parchment;
     ctx.beginPath(); ctx.arc(this.input.joyOx + this.input.joyX * 52, this.input.joyOy + this.input.joyY * 52, 22, 0, TAU); ctx.fill();
     ctx.globalAlpha = 1;
+  } else if (this.hintT > 0) {
+    const guideX = this.w * 0.22;
+    const guideY = this.h - Math.max(84, 72 + this.safeBottom);
+    ctx.globalAlpha = 0.38 * clamp(this.hintT / 2, 0, 1);
+    ctx.strokeStyle = PAL.parchment;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(guideX, guideY, 44, 0, TAU); ctx.stroke();
+    ctx.font = body(11, 650);
+    ctx.fillStyle = PAL.parchment;
+    ctx.fillText('MOVE', guideX, guideY + 4);
+    ctx.globalAlpha = 1;
   }
   // buttons
   ctx.textAlign = 'center';
@@ -2516,15 +2704,18 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
   for (const b of laidOut) {
     const bx = b.x, by = b.y;
     const active = this.input.btnPressed[b.id];
-    ctx.globalAlpha = active ? 0.6 : 0.22;
-    ctx.fillStyle = b.id === 'flask' ? PAL.gold : '#d8cdb2';
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = active
+      ? (b.id === 'flask' ? PAL.goldBright : PAL.parchment)
+      : 'rgba(12,10,7,0.78)';
     ctx.beginPath(); ctx.arc(bx, by, b.r, 0, TAU); ctx.fill();
-    ctx.globalAlpha = 0.75;
+    ctx.globalAlpha = 0.92;
     ctx.strokeStyle = PAL.parchment;
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 1.8;
     ctx.beginPath(); ctx.arc(bx, by, b.r, 0, TAU); ctx.stroke();
-    ctx.fillStyle = '#0d0b08';
-    ctx.font = serif(b.r > 40 ? 14 : 11, 700);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = active ? '#0d0b08' : PAL.parchment;
+    ctx.font = serif(b.r > 40 ? 15 : 12, 700);
     ctx.fillText(b.label, bx, by + 4);
     ctx.globalAlpha = 1;
   }

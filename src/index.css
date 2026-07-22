@@ -81,3 +81,81 @@ html, body, #root {
   overflow: hidden;
   overscroll-behavior: none;
 }
+
+.game-shell,
+.game-shell canvas {
+  position: fixed;
+  inset: 0;
+}
+
+.game-shell canvas {
+  display: block;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: crosshair;
+  outline: none;
+}
+
+.game-accessibility {
+  position: fixed;
+  z-index: 10;
+  top: 10px;
+  left: 50%;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  color: #ece0c4;
+  background: rgba(11, 9, 7, 0.96);
+  border: 1px solid rgba(201, 169, 89, 0.72);
+  transform: translateX(-50%);
+}
+
+.game-accessibility:focus-within {
+  width: min(620px, calc(100vw - 24px));
+  height: auto;
+  padding: 16px;
+  overflow: visible;
+  clip-path: none;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.75);
+}
+
+.game-accessibility h1 {
+  margin: 0 0 6px;
+  font: 700 20px Cinzel, "Times New Roman", serif;
+  letter-spacing: 0.12em;
+}
+
+.game-accessibility p {
+  margin: 4px 0 10px;
+  color: #c7b99b;
+  font: 600 15px "Cormorant Garamond", Georgia, serif;
+}
+
+.game-accessibility__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.game-accessibility button,
+.game-accessibility output {
+  min-height: 44px;
+  padding: 8px 12px;
+  color: #ece0c4;
+  background: #17120d;
+  border: 1px solid rgba(201, 169, 89, 0.62);
+  font: 700 14px "Cormorant Garamond", Georgia, serif;
+}
+
+.game-accessibility button:focus-visible {
+  outline: 3px solid #f0d78c;
+  outline-offset: 2px;
+}
+
+.game-accessibility button:disabled {
+  opacity: 0.48;
+}

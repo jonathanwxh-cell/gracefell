@@ -23,7 +23,7 @@ safe-area insets. Desktop/keyboard support is kept because it costs nothing — 
 secondary path, and no feature should require a keyboard.
 
 ## Layout
-- Vite + React + TS app. Game logic lives almost entirely in `src/game/engine.ts` (+ `src/game/audio.ts`). `src/pages/Home.tsx` just mounts a canvas.
+- Vite + React + TS app. Game logic lives almost entirely in `src/game/engine.ts` (+ `src/game/audio.ts`). `src/pages/Home.tsx` mounts the canvas and its focus-revealed semantic companion controls.
 - `server.mjs` — zero-dep static server for `dist/`, binds **127.0.0.1** (never localhost), SPA fallback, `/health`.
 - `qa/verify.cjs` — the Playwright gate. Run before claiming DONE.
 - `PROVENANCE.md` / `scripts/provenance.sh` — the multi-agent ledger and its regenerator.
@@ -32,14 +32,14 @@ secondary path, and no feature should require a keyboard.
 1. Edit `src/**`.
 2. `npm run build` (tsc -b && vite build) — MUST pass; tsc is the syntax gate.
 3. `restart_service gracefell` (isolated call — never chained).
-4. `node qa/verify.cjs` → check `/tmp/gracefell-result.json` has `"ok": true`. Run long via `setsid ... & ` + poll; the harness takes ~60–90s.
+4. `npm run qa` → build + isolated 127.0.0.1:8492 desktop/mobile/touch playtest. The result and screenshots are written under the platform temp directory's `gracefell-qa` folder.
 
 ## Don't-undo list
 - `window.__game` debug hook — QA depends on it.
 - Baked floor (`buildFloor`) + scorch canvas: floor detail is rendered ONCE offscreen. If you add floor detail, add it inside `buildFloor`, not in `drawArena` (per-frame).
 - Particle/projectile bloom uses `globalCompositeOperation = 'lighter'` inside save/restore pairs — keep the restores or everything turns additive.
 - `resetFight` must clear the scorch canvas (setTransform reset → clearRect → restore) — the ctx carries a center translate.
-- localStorage key `gracefell` — schema **v2**: `{v, bestTime, bests{}, wins, attempts, muted, grace, shakeEnabled, flashReduced}`. Bump `Game.SAVE_VERSION` and add a migration branch in the constructor if you change it; there is a QA test that a v1 save still loads.
+- localStorage key `gracefell` — schema **v2**: `{v, bestTime, bests{}, wins, attempts, muted, grace, shakeEnabled, flashReduced, hapticsEnabled}`. Bump `Game.SAVE_VERSION` and add a migration branch in the constructor if you change it; there is a QA test that a v1 save still loads.
 - `bests[grace]` is authoritative for records; top-level `bestTime` is only a display fallback.
 - Phase-3 transition intentionally resets all boss cooldowns.
 - **The reserved hazard hue.** `PAL.danger` / `PAL.dangerEdge` mean one thing: this will hurt you. Hostile projectiles, hostile rings, attack telegraphs — nothing else. Decorative fire uses `PAL.amber`. A QA assertion fails if any ambient particle carries the danger hue. If you need a new warm colour, add one; do not borrow this one.
@@ -52,19 +52,19 @@ secondary path, and no feature should require a keyboard.
 - `shake()` early-returns when `shakeEnabled` is false, and `flashScale()` gates full-screen flashes. Don't bypass them with direct `shakeAmp` writes — they're photosensitivity controls, not polish.
 - Perfect dodge window scales with grace: `t > 0.42 - 0.24 * mods.perfectWindow`; `perfectCd` prevents multi-trigger from one swing.
 - `GameAudio` owns synthesis, soundtrack loading, player-relative distance/pan, arena reverb, adaptive music, ducking, limiting, voice pressure, scheduling and teardown. Gameplay code should name the event and pass `audioSpatial(x, y)`; it should not build Web Audio nodes itself.
-- `public/audio/gracefell-sovereigns-fall.mp3` is the MiniMax Music 3.0 score. It must remain routed through `soundtrackMusic -> music -> master` so combat ducking, mute and the limiter still apply. The procedural drone/drums start immediately, crossfade under the MP3, and remain the network/decode fallback.
-- Noise is generated once in `GameAudio.init()` and reused. Do not return to allocating/filling an `AudioBuffer` for every projectile or impact — phase-three storms make that a mobile GC problem.
+- `public/audio/gracefell-sovereigns-fall.mp3` is the MiniMax Music 3.0 score. It streams through `MediaElementAudioSourceNode -> soundtrackFilter -> soundtrackMusic -> music -> master` so combat ducking, mute and the limiter still apply. The procedural drone/drums start immediately, crossfade under the MP3, and remain the network/playback fallback. Do not return to decoding the full two-minute file into an `AudioBuffer` on mobile.
+- Noise and arena-IR sample data are generated once during an idle preparation window, then copied into their Web Audio buffers when the first gesture unlocks the context. Do not return to allocating/filling an `AudioBuffer` for every projectile or impact — phase-three storms make that a mobile GC problem.
 - Boss windups use `audio.telegraph(attack, spatial)`. The seven attack names are an audio readability contract: a player should be able to distinguish swipe, slam, charge, volley, meteor, ring and spiral before the hit lands.
 - `vary()` is the central SFX anti-repetition policy. Keep hostile telegraph timing exact; apply variation to performance and impact sounds, and retain repeat masking/critical-voice reservations rather than adding unbounded layers at call sites.
 - The generated score, procedural drone, drums and tension pad have separate submix gains. `updateCombatState()` owns low-health, boss-intensity and stagger transitions. The master route must remain `master -> compressor -> peakLimiter -> destination`.
-- The arena IR is generated once at startup and should stay above 1.5 seconds while its measured build remains below 50 ms on the QA browser. Distance processing owns attenuation, low-pass and room-send changes together; do not add call-site volume hacks.
+- The arena IR sample data is prepared once during idle and copied into its Web Audio buffer on startup. It should stay above 1.5 seconds while the measured first-gesture buffer build remains below the QA budget. Distance processing owns attenuation, low-pass and room-send changes together; do not add call-site volume hacks.
 - Boss stalk footsteps and charge scrape are state foley. Charge scrape must stop with charge state; it is intentionally requested in short grains rather than held as an orphanable looping node.
 
 ## Headless QA facts (hard-won)
-- chromium path: `~/.cache/ms-playwright/chromium-1228/...` (1223 does not exist on this box).
+- Playwright is a repo dev dependency. `npm run qa` starts an isolated fixed-port server and uses Playwright's installed Chromium; `PLAYWRIGHT_CHROMIUM_PATH` remains available for unusual hosts.
 - Constructing a second `Game` (e.g. to test save migration) **overwrites the `window.__game` hook**, and `destroy()` does not restore it — every later assertion then silently reads a dead instance. Save and restore it around the construction.
 - Screenshots are not always reviewable by an agent. When they aren't, make correctness numeric instead of eyeballing: that's why `menuGeom()` exists and why the layout assertions caught a chevron drawing 5px outside its plate at 390px.
-- RAF runs ~0.6x real time under swiftshader → gate on `waitForFunction(game.stateT/state)`, never wall-clock sleeps, for sim-time thresholds.
+- Headless RAF timing varies → gate on `waitForFunction(game.stateT/state)`, never wall-clock sleeps, for sim-time thresholds.
 - Boss ignores damage while `state === 'spawn'` (intro). Wait for `game.state === 'fight'` first.
 - AudioContext works headlessly but is silent. QA asserts initialization, MiniMax MP3 decode, limiter/noise-pool presence, voice pressure, every boss-cue code path and haptic requests; actual timbre and mix balance still require a listening pass on phone speaker + headphones.
 

@@ -66,10 +66,16 @@ export class GameAudio {
   private reverb!: ConvolverNode;
   private reverbWet!: GainNode;
   private noiseBuffer: AudioBuffer | null = null;
+  private preparedNoise: Float32Array | null = null;
+  private preparedImpulse: [Float32Array, Float32Array] | null = null;
+  private prepareHandle: number | null = null;
+  private prepareUsesIdleCallback = false;
   private musicNodes: AudioNode[] = [];
-  private soundtrackSource: AudioBufferSourceNode | null = null;
+  private soundtrackElement: HTMLAudioElement | null = null;
+  private soundtrackSource: MediaElementAudioSourceNode | null = null;
   private soundtrackLoadToken = 0;
   private soundtrackState: 'idle' | 'loading' | 'playing' | 'fallback' = 'idle';
+  private suspended = false;
   private schedulerTimer: number | null = null;
   private nextBeatAt = 0;
   private beat = 0;
@@ -86,6 +92,25 @@ export class GameAudio {
   private adaptive = { tension: 0, intensity: 0, staggered: false };
   muted = false;
   phase = 1;
+
+  prepare() {
+    if (this.preparedNoise || this.prepareHandle !== null) return;
+    this.prepareSoundtrackElement();
+    const run = () => {
+      this.prepareHandle = null;
+      this.prepareUsesIdleCallback = false;
+      this.ensureWaveData();
+    };
+    const idleWindow = window as typeof window & {
+      requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+    };
+    if (idleWindow.requestIdleCallback) {
+      this.prepareUsesIdleCallback = true;
+      this.prepareHandle = idleWindow.requestIdleCallback(run, { timeout: 500 });
+    } else {
+      this.prepareHandle = window.setTimeout(run, 80);
+    }
+  }
 
   init() {
     if (this.ctx) {
@@ -145,10 +170,12 @@ export class GameAudio {
     this.soundtrackFilter.Q.value = 0.45;
     this.soundtrackFilter.connect(this.soundtrackMusic);
 
-    this.noiseBuffer = this.buildNoiseBuffer(2.5);
+    this.cancelPreparation();
+    this.ensureWaveData();
+    this.noiseBuffer = this.buildNoiseBuffer();
     this.reverb = this.ctx.createConvolver();
     const irStartedAt = performance.now();
-    this.reverb.buffer = this.buildArenaImpulse(1.9);
+    this.reverb.buffer = this.buildArenaImpulse();
     this.irBuildCostMs = performance.now() - irStartedAt;
     this.reverbWet = this.ctx.createGain();
     this.reverbWet.gain.value = 0.19;
@@ -160,6 +187,7 @@ export class GameAudio {
   }
 
   destroy() {
+    this.cancelPreparation();
     if (this.schedulerTimer !== null) {
       window.clearInterval(this.schedulerTimer);
       this.schedulerTimer = null;
@@ -172,6 +200,12 @@ export class GameAudio {
       } catch { /* already stopped or disconnected */ }
     }
     this.soundtrackLoadToken++;
+    if (this.soundtrackElement) {
+      this.soundtrackElement.pause();
+      this.soundtrackElement.removeAttribute('src');
+      this.soundtrackElement.load();
+    }
+    this.soundtrackElement = null;
     this.soundtrackSource = null;
     this.soundtrackState = 'idle';
     this.musicNodes = [];
@@ -186,8 +220,26 @@ export class GameAudio {
     const ctx = this.ctx;
     this.ctx = null;
     this.noiseBuffer = null;
+    this.preparedNoise = null;
+    this.preparedImpulse = null;
     this.activeVoices = 0;
+    this.suspended = false;
     if (ctx && ctx.state !== 'closed') void ctx.close().catch(() => {});
+  }
+
+  suspend() {
+    this.suspended = true;
+    this.soundtrackElement?.pause();
+    if (this.ctx?.state === 'running') void this.ctx.suspend().catch(() => {});
+  }
+
+  resume() {
+    this.suspended = false;
+    if (!this.ctx) return;
+    if (this.ctx.state === 'suspended') void this.ctx.resume().catch(() => {});
+    if (this.soundtrackState === 'playing' && this.soundtrackElement) {
+      void this.soundtrackElement.play().catch(() => this.useProceduralFallback());
+    }
   }
 
   setMuted(m: boolean) {
@@ -213,6 +265,8 @@ export class GameAudio {
       adaptive: { ...this.adaptive },
       phase: this.phase,
       soundtrackState: this.soundtrackState,
+      soundtrackMode: this.soundtrackSource ? 'stream' : 'fallback',
+      waveDataPrepared: Boolean(this.preparedNoise && this.preparedImpulse),
     };
   }
 
@@ -281,26 +335,47 @@ export class GameAudio {
     };
   }
 
-  private buildNoiseBuffer(seconds: number) {
-    const ctx = this.ctx!;
-    const len = Math.max(1, Math.floor(ctx.sampleRate * seconds));
-    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
-    const data = buf.getChannelData(0);
+  private prepareSoundtrackElement() {
+    if (this.soundtrackElement) return this.soundtrackElement;
+    const base = import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL : `${import.meta.env.BASE_URL}/`;
+    const element = new Audio(`${base}audio/gracefell-sovereigns-fall.mp3`);
+    element.loop = true;
+    element.preload = 'auto';
+    this.soundtrackElement = element;
+    element.load();
+    return element;
+  }
+
+  private cancelPreparation() {
+    if (this.prepareHandle === null) return;
+    const idleWindow = window as typeof window & { cancelIdleCallback?: (handle: number) => void };
+    if (this.prepareUsesIdleCallback) idleWindow.cancelIdleCallback?.(this.prepareHandle);
+    else window.clearTimeout(this.prepareHandle);
+    this.prepareHandle = null;
+    this.prepareUsesIdleCallback = false;
+  }
+
+  private ensureWaveData() {
+    if (!this.preparedNoise) this.preparedNoise = this.buildNoiseData(2.5, 48000);
+    if (!this.preparedImpulse) this.preparedImpulse = this.buildImpulseData(1.9, 48000);
+  }
+
+  private buildNoiseData(seconds: number, sampleRate: number) {
+    const data = new Float32Array(Math.max(1, Math.floor(sampleRate * seconds)));
     let brown = 0;
-    for (let i = 0; i < len; i++) {
+    for (let i = 0; i < data.length; i++) {
       const white = Math.random() * 2 - 1;
       brown = (brown + 0.025 * white) / 1.025;
       data[i] = white * 0.72 + brown * 0.8;
     }
-    return buf;
+    return data;
   }
 
-  private buildArenaImpulse(seconds: number) {
-    const ctx = this.ctx!;
-    const len = Math.max(1, Math.floor(ctx.sampleRate * seconds));
-    const impulse = ctx.createBuffer(2, len, ctx.sampleRate);
-    for (let ch = 0; ch < impulse.numberOfChannels; ch++) {
-      const data = impulse.getChannelData(ch);
+  private buildImpulseData(seconds: number, sampleRate: number): [Float32Array, Float32Array] {
+    const len = Math.max(1, Math.floor(sampleRate * seconds));
+    const channels: [Float32Array, Float32Array] = [new Float32Array(len), new Float32Array(len)];
+    for (let ch = 0; ch < channels.length; ch++) {
+      const data = channels[ch];
       let low = 0;
       for (let i = 0; i < len; i++) {
         const white = Math.random() * 2 - 1;
@@ -310,6 +385,23 @@ export class GameAudio {
         data[i] = stoneMid * decay * (ch === 0 ? 0.92 : 0.87);
       }
     }
+    return channels;
+  }
+
+  private buildNoiseBuffer() {
+    const ctx = this.ctx!;
+    const data = this.preparedNoise!;
+    const buf = ctx.createBuffer(1, data.length, 48000);
+    buf.getChannelData(0).set(data);
+    return buf;
+  }
+
+  private buildArenaImpulse() {
+    const ctx = this.ctx!;
+    const channels = this.preparedImpulse!;
+    const impulse = ctx.createBuffer(2, channels[0].length, 48000);
+    impulse.getChannelData(0).set(channels[0]);
+    impulse.getChannelData(1).set(channels[1]);
     return impulse;
   }
 
@@ -727,27 +819,14 @@ export class GameAudio {
     const token = ++this.soundtrackLoadToken;
     this.soundtrackState = 'loading';
     try {
-      const base = import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL : `${import.meta.env.BASE_URL}/`;
-      const response = await fetch(`${base}audio/gracefell-sovereigns-fall.mp3`, { cache: 'force-cache' });
-      if (!response.ok) throw new Error(`soundtrack request failed (${response.status})`);
-      const buffer = await ctx.decodeAudioData(await response.arrayBuffer());
-      if (this.ctx !== ctx || token !== this.soundtrackLoadToken) return;
-
-      const source = ctx.createBufferSource();
-      source.buffer = buffer;
-      source.loop = true;
+      const element = this.prepareSoundtrackElement();
+      const source = ctx.createMediaElementSource(element);
       source.connect(this.soundtrackFilter);
-      source.onended = () => {
-        if (this.ctx !== ctx || this.soundtrackSource !== source) return;
-        this.soundtrackSource = null;
-        this.soundtrackState = 'fallback';
-        const now = ctx.currentTime;
-        this.proceduralMusic.gain.cancelScheduledValues(now);
-        this.proceduralMusic.gain.setTargetAtTime(1, now, 0.3);
-      };
-      source.start(ctx.currentTime + 0.04);
       this.soundtrackSource = source;
       this.musicNodes.push(source);
+      await element.play();
+      if (this.ctx !== ctx || token !== this.soundtrackLoadToken) return;
+      if (this.suspended) element.pause();
       this.soundtrackState = 'playing';
 
       const now = ctx.currentTime;
@@ -758,8 +837,17 @@ export class GameAudio {
       this.proceduralMusic.gain.setValueAtTime(Math.max(0.0001, this.proceduralMusic.gain.value), now);
       this.proceduralMusic.gain.exponentialRampToValueAtTime(0.18, now + 1.8);
     } catch {
-      if (this.ctx === ctx && token === this.soundtrackLoadToken) this.soundtrackState = 'fallback';
+      if (this.ctx === ctx && token === this.soundtrackLoadToken) this.useProceduralFallback();
     }
+  }
+
+  private useProceduralFallback() {
+    this.soundtrackState = 'fallback';
+    this.soundtrackElement?.pause();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    this.proceduralMusic.gain.cancelScheduledValues(now);
+    this.proceduralMusic.gain.setTargetAtTime(1, now, 0.3);
   }
 
   private startDrone() {
