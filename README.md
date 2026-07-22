@@ -1,73 +1,75 @@
-# React + TypeScript + Vite
+# GRACEFELL
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A boss-arena souls-like that runs in a single HTML canvas. One knight, one sovereign, one room.
 
-Currently, two official plugins are available:
+**Play it: [gracefell.alyoechosys.dev](https://gracefell.alyoechosys.dev)**
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+Zero art assets. Zero audio files. Every stone in the floor, every ember, every wing, and every drum hit is generated at runtime from code — canvas 2D for the visuals, Web Audio for the score and the SFX. The whole thing is one `<canvas>` and about two thousand lines of TypeScript.
 
-## React Compiler
+---
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Credits
 
-## Expanding the ESLint configuration
+**v1 — written by Kimi (OKComputer).** The original prototype: the engine skeleton, the Input/Player/Boss/Game architecture, souls-style input buffering, the two-phase boss with six attacks, the procedural Web Audio engine, the parchment-and-grace-gold art direction, and the writing ("a boss waits at the end of grace"). That version was already a real game — it just hadn't been polished.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+**v2 — extended by Claude (Opus 4.8).** Combat depth, a third phase, a full rendering pass, persistence, and a headless verification gate. Details in [DESIGN.md](DESIGN.md).
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+Directed by [@jonathanwxh-cell](https://github.com/jonathanwxh-cell), who asked for "AAA grade" and meant it.
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+---
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Controls
+
+| | |
+|---|---|
+| **WASD** / arrows | move |
+| **Space** / Shift | roll (invincible — and a *perfect* dodge if you time it into the swing) |
+| **J** / left click | slash — chains into a 3-hit combo |
+| **K** / right click | heavy |
+| **F** | flask (you get three) |
+| **M** | mute |
+
+On touch: left half of the screen is a floating stick, buttons are bottom-right.
+
+## The fight
+
+Malakar has three phases and does not scale to your skill.
+
+1. **Ashen Sovereign** — swipes, slams, charges, volleys. Learn the tells.
+2. **The Burning Sovereign** (55% HP) — wings unfurl, everything speeds up, meteors and expanding rings enter the rotation.
+3. **Grace-Forsaken** (22% HP) — cooldowns reset, ring attacks come in pairs, meteors come nine at a time, and a two-armed rotating spiral fills the arena with fire.
+
+Break his poise to stagger him; staggered hits do 1.4×. Land a roll *into* an incoming attack for a perfect dodge — slow-motion, stamina back, and poise damage. Defense is how you win.
+
+Victory is graded S through C on time and wounds taken. Your best time and win count persist locally. A no-hit run is an S.
+
+## Running it
+
+```bash
+npm install     # npm ci fails on this lockfile — use install
+npm run build   # tsc -b && vite build
+npm run dev     # or just: vite on :3000
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Production is a zero-dependency Node static server (`server.mjs`) in front of `dist/`, behind a Cloudflare tunnel.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Structure
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
 ```
+src/game/engine.ts   the entire game — Input, Player, Boss, Game + render layer (~2.1k lines)
+src/game/audio.ts    procedural Web Audio: SFX primitives, drone, phase-aware drums
+src/pages/Home.tsx   mounts a canvas. that's all it does.
+qa/verify.cjs        headless Playwright gate — the thing that decides "done"
+DESIGN.md            per-version reasoning log
+AGENTS.md            operational runbook / don't-undo list
+```
+
+`window.__game` is live in the console if you want to poke at it.
+
+## On "done"
+
+Nothing here shipped on a claim. `qa/verify.cjs` drives a real Chromium at 1280×800 and 390×844 and asserts the canvas actually has ink in it, that the console is clean, that all three phases trigger, that victory computes a grade, that saves round-trip through localStorage, and that a perfect dodge really does refund stamina without taking damage. Green, or it isn't done.
+
+## License
+
+No license specified — all rights reserved for now. Ask if you want to use it.

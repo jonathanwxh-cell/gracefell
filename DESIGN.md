@@ -1,8 +1,20 @@
 # GRACEFELL — design log
 
-Boss-arena souls-like ARPG. Canvas 2D, fully procedural (zero assets), procedural Web Audio. One boss: MALAKAR. Uploaded as an OKComputer prototype; overhauled to v2.0 on 2026-07-22.
+Boss-arena souls-like ARPG. Canvas 2D, fully procedural (zero assets), procedural Web Audio. One boss: MALAKAR.
 
-## v2.0 — "the AAA pass" (2026-07-22)
+## v1.0 — Kimi (OKComputer)
+
+The original build. Established everything the sequel stands on:
+- Engine architecture: `Input` / `Player` / `Boss` / `Game` classes, render methods merged onto `Game.prototype`.
+- Souls-style input buffering (190ms press window, `consume()` semantics).
+- Two-phase boss with six attacks (swipe combo, slam, charge, volley, meteor, ring), weighted range-gated attack selection, poise/stagger, telegraph rendering under entities.
+- Player kit: roll i-frames, light/heavy with lunge + sword-tip ribbon, flasks, stamina economy.
+- Procedural Web Audio engine — tone/noise primitives, drone bed, phase-aware drum scheduler, all SFX.
+- Art direction: parchment & grace-gold on ash-black, the whole PAL palette, torchlight pools, YOU DIED / GREAT ENEMY FELLED screens, and the writing.
+
+The prototype was already a working game with good bones. What follows is polish on top of it, not a rewrite.
+
+## v2.0 — Claude (Opus 4.8), "the AAA pass" (2026-07-22)
 
 Goal: take a solid one-boss prototype and push polish/fun/graphics hard, verified live.
 
