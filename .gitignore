@@ -25,3 +25,7 @@ dist-ssr
 
 .env
 .env.*
+
+# Explicit local QA evidence directories. The default gate writes to the
+# platform temp directory; named release runs may opt into this repo-local path.
+.artifacts/

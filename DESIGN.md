@@ -624,3 +624,28 @@ and death/retry coverage remains in the same zero-error gate. `touch-forsaken-ti
   player damage, projectile/ring travel, music, SFX, arena rendering, and render budgets did not.
 - This pass was implemented and documented by Codex after the multi-agent findings were verified
   independently against local and production v2.9.1.
+
+## v2.10.1 — Codex (GPT-5), "the evidence is part of the release" (2026-07-23)
+
+This is a documentation and package-metadata pass; gameplay, rendering, audio, save data, and
+deployment code are unchanged. The repo already explained the v2.10 design but did not preserve
+the complete acceptance trail in one discoverable document. `info.md` still described the generic
+scaffold and a dead `/mnt/agents/output/app` path, the npm package still called itself
+`my-app@0.0.0`, and the runbook prescribed a restart helper absent from the actual SSH shell.
+
+`docs/releases/v2.10.md` now records the three reviewer lanes by agent and remit, every reproduced
+pre-fix defect, the negative findings that protected good combat behavior from churn, the complete
+nine-level curve, implementation invariants, exact local/GitHub/production measurements, merged
+SHA, PR/release links, production service/HTTP checks, generated artifact names, the 20.4 ms
+timing-only miss and 14 ms accepted rerun, and remaining device/listening limits.
+
+The README links that record from the release summary and structure map. `info.md` is now a concise
+current project index. npm metadata is `gracefell@2.10.1`. `AGENTS.md` documents the real
+user-systemd production sequence and exact-SHA/public-URL acceptance. `.artifacts/` is ignored so
+named local evidence runs remain available without polluting a future commit.
+
+### Changed from v2.10
+
+- Documentation discoverability, package identity, and operational instructions changed.
+- No v2.10 gameplay claim was broadened: graphics proposals remain future work and are not
+  attributed to the difficulty release.

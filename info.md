@@ -1,31 +1,42 @@
-Using Node.js 20, Tailwind CSS v3.4.19, and Vite v7.2.4
+# GRACEFELL project facts
 
-Tailwind CSS has been set up with the shadcn theme
+- Current package: `gracefell@2.10.1`
+- Gameplay release: `v2.10`
+- Documentation follow-through: `v2.10.1`
+- Production: <https://gracefell.alyoechosys.dev>
+- Repository: <https://github.com/jonathanwxh-cell/gracefell>
 
-Setup complete: /mnt/agents/output/app
+GRACEFELL is a mobile-first, single-arena boss game rendered in Canvas 2D. React mounts the
+canvas and provides focus-revealed semantic controls; the combat engine lives in
+`src/game/engine.ts`, procedural sound and the streamed MiniMax score are managed by
+`src/game/audio.ts`, and `server.mjs` serves the production build.
 
-Components (40+):
-  accordion, alert-dialog, alert, aspect-ratio, avatar, badge, breadcrumb,
-  button-group, button, calendar, card, carousel, chart, checkbox, collapsible,
-  command, context-menu, dialog, drawer, dropdown-menu, empty, field, form,
-  hover-card, input-group, input-otp, input, item, kbd, label, menubar,
-  navigation-menu, pagination, popover, progress, radio-group, resizable,
-  scroll-area, select, separator, sheet, sidebar, skeleton, slider, sonner,
-  spinner, switch, table, tabs, textarea, toggle-group, toggle, tooltip
+## Runtime and commands
 
-Usage:
-  import { Button } from '@/components/ui/button'
-  import { Card, CardHeader, CardTitle } from '@/components/ui/card'
+- Node.js 20
+- React 19
+- TypeScript 5.9
+- Vite 7
+- Playwright 1.61
+- Tailwind CSS 3.4
 
-Structure:
-  src/sections/        Page sections
-  src/hooks/           Custom hooks
-  src/types/           Type definitions
-  src/App.css          Styles specific to the Webapp
-  src/App.tsx          Root React component
-  src/index.css        Global styles
-  src/main.tsx         Entry point for rendering the Webapp
-  index.html           Entry point for the Webapp
-  tailwind.config.js   Configures Tailwind's theme, plugins, etc.
-  vite.config.ts       Main build and dev server settings for Vite
-  postcss.config.js    Config file for CSS post-processing tools
+```bash
+npm install
+npm run lint
+npm run build
+npm run qa
+```
+
+`npm run qa` is the acceptance gate. It builds the app, starts an isolated server on
+`127.0.0.1:8492`, and drives desktop, mobile, and real-touch Chromium paths. See
+[`docs/releases/v2.10.md`](docs/releases/v2.10.md) for the shipped difficulty pass and its
+local, GitHub Actions, and production evidence.
+
+## Authoritative documentation
+
+- [`README.md`](README.md) — player-facing overview, controls, balance table, and setup
+- [`DESIGN.md`](DESIGN.md) — design decisions and per-version reasoning
+- [`AGENTS.md`](AGENTS.md) — operational runbook and invariants future agents must preserve
+- [`PROVENANCE.md`](PROVENANCE.md) — contributor ledger and commit-trailer rules
+- [`public/audio/README.md`](public/audio/README.md) — generated music provenance
+- [`docs/releases/v2.10.md`](docs/releases/v2.10.md) — v2.10 acceptance and deployment record
