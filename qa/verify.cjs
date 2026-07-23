@@ -785,7 +785,67 @@ async function installAudioSampleRate(context) {
       t.touchMute = { before: mutedBefore, after: mutedAfter };
       if (mutedAfter === mutedBefore) out.errors.push('touch: sound control did not toggle mute');
 
-      // 9. no horizontal overflow, canvas drawing, clean console
+      // 9. A natural death must accept one real tap after the prompt appears.
+      // Retry uses a durable confirmation sequence rather than a frame-length
+      // action flag, so focus/event translation cannot discard the gesture.
+      t.deathRetryBefore = await pg.evaluate(() => {
+        const g = window.__game;
+        g.resetFight();
+        g.state = 'fight';
+        g.player.takeDamage(g.player.maxHp * 10, g.boss.x, g.boss.y, g);
+        return { state: g.state, playerState: g.player.state, attempts: g.attempts,
+          confirmSequence: g.input.confirmSequence };
+      });
+      await pg.waitForFunction(() => window.__game.state === 'dead' && window.__game.stateT > 1.65, null, { timeout: 8000 }).catch(() => {});
+      await pg.screenshot({ path: path.join(ARTIFACT_DIR, 'touch-death.png') });
+      await pg.touchscreen.tap(195, 500);
+      await pg.waitForFunction(() => window.__game.state === 'intro', null, { timeout: 3000 }).catch(() => {});
+      t.deathRetryAfter = await pg.evaluate(() => ({
+        state: window.__game.state, playerState: window.__game.player.state,
+        attempts: window.__game.attempts, confirmSequence: window.__game.input.confirmSequence,
+      }));
+      if (
+        t.deathRetryBefore.state !== 'dead'
+        || t.deathRetryBefore.playerState !== 'dead'
+        || t.deathRetryAfter.state !== 'intro'
+        || t.deathRetryAfter.playerState !== 'move'
+        || t.deathRetryAfter.attempts !== t.deathRetryBefore.attempts + 1
+        || t.deathRetryAfter.confirmSequence <= t.deathRetryBefore.confirmSequence
+      ) out.errors.push('touch: natural death did not rise on one tap: ' + JSON.stringify({
+        before: t.deathRetryBefore, after: t.deathRetryAfter,
+      }));
+
+      // Some embedded/mobile surfaces expose Pointer Events without delivering
+      // a legacy touchstart. Exercise that exact fallback independently.
+      t.pointerRetryBefore = await pg.evaluate(() => {
+        const g = window.__game;
+        g.resetFight();
+        g.state = 'fight';
+        g.player.takeDamage(g.player.maxHp * 10, g.boss.x, g.boss.y, g);
+        return { state: g.state, attempts: g.attempts, confirmSequence: g.input.confirmSequence };
+      });
+      await pg.waitForFunction(() => window.__game.state === 'dead' && window.__game.stateT > 1.65, null, { timeout: 8000 }).catch(() => {});
+      await pg.evaluate(() => {
+        const c = document.querySelector('canvas');
+        c.dispatchEvent(new PointerEvent('pointerdown', {
+          pointerId: 91, pointerType: 'touch', isPrimary: true, button: 0,
+          clientX: 195, clientY: 500, bubbles: true, cancelable: true,
+        }));
+      });
+      await pg.waitForFunction(() => window.__game.state === 'intro', null, { timeout: 3000 }).catch(() => {});
+      t.pointerRetryAfter = await pg.evaluate(() => ({
+        state: window.__game.state, attempts: window.__game.attempts,
+        confirmSequence: window.__game.input.confirmSequence,
+      }));
+      if (
+        t.pointerRetryAfter.state !== 'intro'
+        || t.pointerRetryAfter.attempts !== t.pointerRetryBefore.attempts + 1
+        || t.pointerRetryAfter.confirmSequence <= t.pointerRetryBefore.confirmSequence
+      ) out.errors.push('touch: pointer-only death retry failed: ' + JSON.stringify({
+        before: t.pointerRetryBefore, after: t.pointerRetryAfter,
+      }));
+
+      // 10. no horizontal overflow, canvas drawing, clean console
       t.overflow = await pg.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
       if (t.overflow > 1) out.errors.push('touch: horizontal overflow ' + t.overflow);
       t.ink = await pg.evaluate(() => {

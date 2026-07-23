@@ -20,7 +20,7 @@ The sovereign has an audio language, not one generic warning: swipes whistle, ch
 
 **v2 — extended by Claude (Opus 4.8).** Combat depth, a third phase, a full rendering pass, persistence, and a headless verification gate. Details in [DESIGN.md](DESIGN.md).
 
-**v2.4–v2.9 — audio, responsiveness, and combat polish extended by Codex (GPT-5).** Attack-specific procedural cues, spatial mix protection, the MiniMax-generated score, mobile/accessibility hardening, and the v2.9 combat correctness pass. The generation prompt and file hash are recorded in [`public/audio/README.md`](public/audio/README.md).
+**v2.4–v2.9.1 — audio, responsiveness, and combat polish extended by Codex (GPT-5).** Attack-specific procedural cues, spatial mix protection, the MiniMax-generated score, mobile/accessibility hardening, the v2.9 combat correctness pass, and the v2.9.1 touch-retry fix. The generation prompt and file hash are recorded in [`public/audio/README.md`](public/audio/README.md).
 
 Directed by [@jonathanwxh-cell](https://github.com/jonathanwxh-cell), who asked for "AAA grade" and meant it.
 
@@ -122,7 +122,7 @@ attack responsive while preserving the same spatial mix, ducking, and limiter pa
 If the tab loses focus or a phone interruption hides the page, simulation and audio pause together.
 Returning resumes from the same fight frame rather than letting Malakar attack an absent player.
 
-## Fixed by Codex — v2.9 combat polish
+## Fixed by Codex — v2.9–v2.9.1 combat polish
 
 Three read-only game-developer reviews covered adversarial play, combat systems, and combat UX
 before this pass was implemented. The fixes include:
@@ -142,6 +142,12 @@ before this pass was implemented. The fixes include:
 The regression gate now reproduces the reported failures directly, tests 30/60/120 Hz motion,
 checks first-tap audio under 20 ms, samples the expanded touch overlap, and drives DOM focus,
 desktop, mobile, and real-touch paths. The completed local gate reports zero errors.
+
+v2.9.1 fixes the reported “touch to rise again” failure. Terminal screens now record a durable
+confirmation gesture across keyboard, mouse, Touch Events, Pointer Events, focus handoffs, and
+slow-motion instead of relying only on a short combat-action buffer. QA kills the player through
+the real damage path, captures the visible death prompt, rises with one touchscreen tap, then
+repeats the flow with a pointer-only event used by some embedded mobile browsers.
 
 ## Running it
 
@@ -178,7 +184,8 @@ Nothing here ships on a claim. `npm run qa` drives real Chromium at 1280×800 an
 plus an emulated real-touch phone. It checks canvas output, console health, streamed audio, cold
 first-tap cost, accessibility focus/pause, intro and terminal isolation, expanded touch targeting,
 hit-stop buffering, 30/60/120 Hz combat motion, meteor cadence, heavy impulse, phase cleanup,
-victory/grade/persistence, and genuine perfect-dodge behavior. Green, or it isn't done.
+victory/grade/persistence, touch and pointer-only resurrection, and genuine perfect-dodge behavior.
+Green, or it isn't done.
 
 ## License
 

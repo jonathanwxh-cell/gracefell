@@ -535,3 +535,30 @@ save migration, hazard-palette, soundtrack, and interruption checks.
 - The room response is now 1.55-second mono after spatialization rather than a longer stereo IR.
 - Read-only reviewer agents are credited here for verification input; the code and documentation
   changes in this pass were implemented by Codex and recorded as such in `PROVENANCE.md`.
+
+## v2.9.1 — Codex (GPT-5), "rise on the first touch" (2026-07-23)
+
+The owner reported that the visible “touch to rise again” prompt did not respond. The existing
+touchscreen automation could revive after a forced terminal state, but it did not cover a natural
+player death or embedded browsers that translate a tap to Pointer Events without delivering the
+legacy `touchstart` path the engine depended on.
+
+Confirmation now has two layers. The existing 260 ms simulation-time buffer still owns ordinary
+title and intro timing. A monotonic confirmation sequence separately records every keyboard,
+mouse, touch, semantic, and primary pointer gesture. Death and victory snapshot that sequence on
+entry and accept the next gesture after their presentation gate. A terminal tap therefore survives
+slow-motion, a focus handoff, a cleared action buffer, or pointer-only event translation without
+allowing the attack that killed the player to count as a retry.
+
+The mobile gate now kills the player through `Player.takeDamage`, waits until the actual retry copy
+is visible, captures `touch-death.png`, and proves that one real touchscreen tap resets the player
+and increments attempts exactly once. It then repeats the death and dispatches only a primary
+touch-type `PointerEvent`; that path must also enter the intro with no console errors.
+
+### Changed from v2.9
+
+- Terminal confirmation is deliberately durable and event-counted; combat actions remain
+  short-lived buffered commands.
+- Pointer Events supplement the existing mouse and Touch Events listeners. Touch joystick and
+  action-button geometry still use the established Touch Events bridge.
+- No visual, audio, save-schema, combat-balance, or render-budget changes were made.
