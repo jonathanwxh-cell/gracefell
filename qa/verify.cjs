@@ -1447,6 +1447,39 @@ async function installAudioSampleRate(context) {
 
       // Repeated deaths offer one explicit, non-automatic step toward Grace.
       // The lethal source also needs to produce a useful next-attempt hint.
+      t.deathGraceFreshInput = await pg.evaluate(() => {
+        const g = window.__game;
+        g.state = 'title'; g.setGrace(0); g.attempts = 2;
+        g.resetFight(); g.state = 'fight'; g.player.iframes = 0;
+        g.input.bufferPress('left');
+        g.player.takeDamage(g.player.maxHp * 10, g.boss.x, g.boss.y, g, 'ring');
+        const afterDeath = {
+          state: g.state,
+          grace: g.grace,
+          carriedLeft: g.input.hasBuffered('left'),
+        };
+        g.frame(1 / 60);
+        const afterCarryoverFrame = { state: g.state, grace: g.grace };
+        g.input.bufferPress('left');
+        g.frame(1 / 60);
+        return {
+          afterDeath,
+          afterCarryoverFrame,
+          afterFreshInput: { state: g.state, grace: g.grace },
+        };
+      });
+      if (
+        t.deathGraceFreshInput.afterDeath.state !== 'dead'
+        || t.deathGraceFreshInput.afterDeath.grace !== 0
+        || t.deathGraceFreshInput.afterDeath.carriedLeft
+        || t.deathGraceFreshInput.afterCarryoverFrame.grace !== 0
+        || t.deathGraceFreshInput.afterFreshInput.state !== 'dead'
+        || t.deathGraceFreshInput.afterFreshInput.grace !== -1
+      ) {
+        out.errors.push('touch: Receive Grace did not require fresh post-death input: '
+          + JSON.stringify(t.deathGraceFreshInput));
+      }
+
       t.deathGraceBefore = await pg.evaluate(() => {
         const g = window.__game;
         g.state = 'title'; g.setGrace(0); g.attempts = 2;
