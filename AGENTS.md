@@ -29,10 +29,20 @@ secondary path, and no feature should require a keyboard.
 - `PROVENANCE.md` / `scripts/provenance.sh` — the multi-agent ledger and its regenerator.
 
 ## Deploy loop
-1. Edit `src/**`.
-2. `npm run build` (tsc -b && vite build) — MUST pass; tsc is the syntax gate.
-3. `restart_service gracefell` (isolated call — never chained).
-4. `npm run qa` → build + isolated 127.0.0.1:8492 desktop/mobile/touch playtest. The result and screenshots are written under the platform temp directory's `gracefell-qa` folder.
+1. Change the scoped source or documentation and update `PROVENANCE.md` + `DESIGN.md`.
+2. `npm run lint`, `npm run build`, and `npm run qa` — all MUST pass.
+3. Publish through a reviewed GitHub PR and identify the exact merged SHA.
+4. On the host, fast-forward `/home/alyosha/apps/gracefell` to `origin/main` and run
+   `npm --prefix /home/alyosha/apps/gracefell run build`.
+5. Restart in an isolated command with `systemctl --user restart gracefell.service`. The
+   `restart_service` helper is not available in the ordinary SSH shell.
+6. Verify `systemctl --user is-active gracefell.service`, the remote Git SHA, `/health`, and the
+   public URL. For gameplay changes, rerun `qa/verify.cjs` with `GRACEFELL_URL` set to production.
+
+The default QA result and screenshots live under the platform temp directory's `gracefell-qa`
+folder. Named release runs may set `GRACEFELL_QA_DIR` / `GRACEFELL_QA_RESULT`; repo-local
+`.artifacts/` is ignored. The v2.10 evidence contract is documented in
+[`docs/releases/v2.10.md`](docs/releases/v2.10.md).
 
 ## Don't-undo list
 - `window.__game` debug hook — QA depends on it.

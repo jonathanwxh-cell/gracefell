@@ -31,6 +31,7 @@ Newest last. One row per pass. A "pass" = one continuous working session by one 
 | v2.9 | 2026-07-23 | Codex | GPT-5 / Codex Desktop | @jonathanwxh-cell | Fixed by Codex after three read-only game-developer reviews: deterministic combat and input fixes, clearer light impacts, mobile/semantic UX repairs, phase-safe presentation, low-cost arena storytelling, and expanded local/live regression coverage |
 | v2.9.1 | 2026-07-23 | Codex | GPT-5 / Codex Desktop | @jonathanwxh-cell | Fixed the reported mobile resurrection failure with Pointer Events support, durable terminal-screen confirmation, and real-touch plus pointer-only death/retry regressions |
 | v2.10 | 2026-07-23 | Codex | GPT-5 / Codex Desktop | @jonathanwxh-cell | Fixed by Codex after a three-lane difficulty review: immutable trials, nine-level balance coverage, fair mobile swipe tells, restored phase-three combo and +3/+4 poise play, honest records/layout, and an explicit +5 IRONBOUND HUD |
+| v2.10.1 | 2026-07-23 | Codex | GPT-5 / Codex Desktop | @jonathanwxh-cell | Documentation-completeness pass: durable v2.10 acceptance/deployment evidence, current README/info/package metadata, corrected production runbook, known limits, and explicit separation from future graphics proposals |
 
 ---
 

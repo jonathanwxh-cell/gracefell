@@ -1,7 +1,7 @@
 {
-  "name": "my-app",
+  "name": "gracefell",
   "private": true,
-  "version": "0.0.0",
+  "version": "2.10.1",
   "type": "module",
   "scripts": {
     "dev": "vite",

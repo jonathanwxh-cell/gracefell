@@ -8,6 +8,11 @@ rules are all decided by what works one-handed on a 390px screen.
 
 **Play it: [gracefell.alyoechosys.dev](https://gracefell.alyoechosys.dev)**
 
+Current gameplay release: **v2.10**. Documentation and package metadata are current through
+**v2.10.1**. The exact reviewer findings, curve, merged revision, deployment checks, transient
+audio measurement, and acceptance matrix are preserved in
+[`docs/releases/v2.10.md`](docs/releases/v2.10.md).
+
 Zero art assets, one generated music track. Every stone in the floor, every ember, every wing, and every combat cue is generated at runtime from code — canvas 2D for the visuals and Web Audio for the SFX. A MiniMax Music 3.0 instrumental supplies the score, with the original procedural drone and phase-aware drums kept underneath and available as the offline fallback. The visual game remains one `<canvas>`; a focus-revealed semantic companion exposes controls and safety settings to keyboards and assistive technology without covering the playfield.
 
 The sovereign has an audio language, not one generic warning: swipes whistle, charges rise, volleys crystallise, rings resonate, meteors fall and the spiral winds itself tight. Impacts are layered and positioned across the arena, the stone room supplies a generated reverb tail, and the whole score ducks and limits itself when phase three gets crowded. The shipped MP3 is music only; every combat sound, noise source and room impulse is still synthesized at startup.
@@ -180,6 +185,10 @@ poise, stagger duration, semantic lock, selected record, FORSAKEN label clearanc
 touch timing, death/retry, and the existing combat/audio/performance regressions. It also produces
 dedicated phone screenshots for the +5 title and combat states.
 
+For the complete pre-fix reproduction, reviewer lanes, unchanged-system decisions, exact test
+measurements, GitHub records, production SHA, and known limits, see the
+[`v2.10 acceptance record`](docs/releases/v2.10.md).
+
 ## Running it
 
 ```bash
@@ -197,12 +206,14 @@ Production is a zero-dependency Node static server (`server.mjs`) in front of `d
 src/game/engine.ts   the entire game — Input, Player, Boss, Game + render layer (~2.1k lines)
 src/game/audio.ts    hybrid Web Audio: procedural SFX/fallback + generated score
 public/audio/        MiniMax score and generation provenance
+docs/releases/       durable release acceptance and production evidence
 src/pages/Home.tsx   mounts the canvas + semantic companion controls
 qa/run.cjs           starts an isolated 127.0.0.1:8492 QA server
 qa/verify.cjs        portable headless Playwright gate — the thing that decides "done"
 DESIGN.md            per-version reasoning log
 AGENTS.md            operational runbook / don't-undo list
 PROVENANCE.md        who built what, and the rules for the next agent
+info.md              concise current package/runtime/documentation index
 scripts/provenance.sh  regenerates that ledger from git trailers
 ```
 
