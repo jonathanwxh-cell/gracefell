@@ -92,6 +92,10 @@ export class Input {
   private canvas: HTMLCanvasElement;
   private onFirstGesture: () => void;
   held: Record<string, boolean> = {};
+  // Monotonic rather than frame-bound: terminal overlays can outlive a short
+  // action buffer, a focus handoff, or a browser translating touch to Pointer
+  // Events without also delivering a legacy TouchEvent.
+  confirmSequence = 0;
   pressed: Record<string, number> = {}; // simulation-time TTLs — hit-stop must not eat the queue
   // Long enough to retain a roll pressed on heavy contact through the final
   // committed recovery frames; still short enough to avoid delayed ghost verbs.
@@ -107,6 +111,7 @@ export class Input {
     this.onFirstGesture = onFirstGesture;
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
+    canvas.addEventListener('pointerdown', this.onPointerDown);
     canvas.addEventListener('mousedown', this.onMouseDown);
     window.addEventListener('mouseup', this.onMouseUp);
     canvas.addEventListener('contextmenu', this.onContextMenu);
@@ -118,6 +123,7 @@ export class Input {
   destroy() {
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);
+    this.canvas.removeEventListener('pointerdown', this.onPointerDown);
     this.canvas.removeEventListener('mousedown', this.onMouseDown);
     window.removeEventListener('mouseup', this.onMouseUp);
     this.canvas.removeEventListener('contextmenu', this.onContextMenu);
@@ -129,6 +135,10 @@ export class Input {
   }
   private gestureFired = false;
   private fireGesture() { if (!this.gestureFired) { this.gestureFired = true; this.onFirstGesture(); } }
+  private queueConfirm() {
+    this.confirmSequence++;
+    this.pressed['confirm'] = Input.BUFFER_S;
+  }
 
   private interactiveTarget(target: EventTarget | null) {
     return target instanceof Element
@@ -142,7 +152,10 @@ export class Input {
     const k = KEYMAP[e.code];
     if (k) {
       e.preventDefault();
-      if (!this.held[k]) this.pressed[k] = Input.BUFFER_S;
+      if (!this.held[k]) {
+        if (k === 'confirm') this.queueConfirm();
+        else this.pressed[k] = Input.BUFFER_S;
+      }
       this.held[k] = true;
     }
     this.fireGesture();
@@ -151,13 +164,19 @@ export class Input {
     const k = KEYMAP[e.code];
     if (k) this.held[k] = false;
   };
+  private onPointerDown = (e: PointerEvent) => {
+    if (!e.isPrimary || e.button !== 0) return;
+    if (e.pointerType === 'touch' || e.pointerType === 'pen') this.isTouch = true;
+    this.fireGesture();
+    this.queueConfirm();
+  };
   private onMouseDown = (e: MouseEvent) => {
     this.fireGesture();
     const r = this.canvas.getBoundingClientRect();
     this.taps.push({ x: e.clientX - r.left, y: e.clientY - r.top });
     if (e.button === 0) this.pressed['light'] = Input.BUFFER_S;
     if (e.button === 2) this.pressed['heavy'] = Input.BUFFER_S;
-    this.pressed['confirm'] = Input.BUFFER_S;
+    this.queueConfirm();
   };
   private onMouseUp = () => {};
   private onContextMenu = (event: MouseEvent) => event.preventDefault();
@@ -177,7 +196,7 @@ export class Input {
         this.joyOx = x; this.joyOy = y; this.joyX = 0; this.joyY = 0;
       }
     }
-    this.pressed['confirm'] = Input.BUFFER_S;
+    this.queueConfirm();
     window.__graceTouch?.(e, 'start');
   };
   private onTouchMove = (e: TouchEvent) => {
@@ -206,7 +225,8 @@ export class Input {
   };
 
   bufferPress(action: string) {
-    this.pressed[action] = Input.BUFFER_S;
+    if (action === 'confirm') this.queueConfirm();
+    else this.pressed[action] = Input.BUFFER_S;
     this.btnPressed[action] = true;
   }
 
@@ -1235,6 +1255,7 @@ export class Game {
   paused = false;
   private interruptionPaused = false;
   private uiFocused = false;
+  private terminalConfirmSequence = 0;
   // rendering layers
   floorCanvas: HTMLCanvasElement | null = null;
   scorchCanvas: HTMLCanvasElement | null = null;
@@ -1842,6 +1863,7 @@ export class Game {
     this.projectiles = [];
     this.rings = [];
     this.meteors = [];
+    this.terminalConfirmSequence = this.input.confirmSequence;
     this.state = 'dead'; this.stateT = 0;
     this.persist();
   }
@@ -1856,6 +1878,7 @@ export class Game {
     this.projectiles = [];
     this.rings = [];
     this.meteors = [];
+    this.terminalConfirmSequence = this.input.confirmSequence;
     this.state = 'victory'; this.stateT = 0;
     this.goldFlash = 0.8;
     this.audio.victoryChord();
@@ -2079,13 +2102,15 @@ export class Game {
         if (this.paused) { this.input.endFrame(); return; }
       }
     } else if (this.state === 'dead') {
-      if (this.stateT > 1.4 && this.input.consume('confirm')) {
+      if (this.stateT > 1.4 && this.input.confirmSequence > this.terminalConfirmSequence) {
+        this.input.consume('confirm');
         this.attempts++;
         this.resetFight();
         this.state = 'intro'; this.stateT = 0;
       }
     } else if (this.state === 'victory') {
-      if (this.stateT > 2.2 && this.input.consume('confirm')) {
+      if (this.stateT > 2.2 && this.input.confirmSequence > this.terminalConfirmSequence) {
+        this.input.consume('confirm');
         this.attempts++;
         this.resetFight();
         this.state = 'intro'; this.stateT = 0;
