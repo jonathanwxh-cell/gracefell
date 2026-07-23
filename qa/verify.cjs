@@ -474,38 +474,58 @@ async function installAudioSampleRate(context) {
         if (pd.stam < 35 || pd.dmgNums < 1 || pd.hpDelta !== 0) out.errors.push('perfect dodge failed: ' + JSON.stringify(pd));
         if (pd.haptics < 1) out.errors.push('perfect dodge did not request haptic feedback');
 
-        // ---- v2.1: grace dial, accessibility, palette discipline
+        // ---- v2.10: every trial level is coherent, monotonic and immutable
         const acc = await pg.evaluate(() => {
           const g = window.__game;
-          const out = {};
+          const out = { levels: [] };
+          g.state = 'title';
           // grace clamps
           g.setGrace(-99); out.min = g.grace;
           g.setGrace(99); out.max = g.grace;
-          // aid direction: slower boss, softer hits, wider iframes
-          g.setGrace(-3); const aid = g.mods;
-          g.setGrace(5); const vow = g.mods;
-          g.setGrace(0); const mid = g.mods;
-          out.aidSlower = aid.bossSpeed < mid.bossSpeed && mid.bossSpeed < vow.bossSpeed;
-          out.aidSofter = aid.dmgTaken < mid.dmgTaken && mid.dmgTaken < vow.dmgTaken;
-          out.aidIframe = aid.iframe > mid.iframe;
-          out.flaskSpread = [aid.flasks, mid.flasks, vow.flasks];
-          out.vowNoStagger = vow.noStagger && !mid.noStagger;
-          // the dial actually reaches the boss
-          g.setGrace(-3); g.resetFight();
-          out.bossSpeedAided = g.boss.extraSpeed;
-          out.flasksAided = g.player.flasks;
-          g.setGrace(5); g.resetFight();
-          out.bossSpeedVowed = g.boss.extraSpeed;
-          out.flasksVowed = g.player.flasks;
-          // damage scaling actually applies
-          g.setGrace(-3); g.resetFight(); g.state = 'fight';
-          const hp0 = g.player.hp; g.player.iframes = 0;
+          for (let grace = -3; grace <= 5; grace++) {
+            g.state = 'title';
+            g.setGrace(grace);
+            const preview = { ...g.difficultyForGrace(grace) };
+            g.resetFight();
+            out.levels.push({
+              grace,
+              speed: preview.bossSpeed,
+              damage: preview.dmgTaken,
+              iframe: preview.iframe,
+              flasks: g.player.flasks,
+              maxPoise: g.boss.maxPoise,
+              staggerDuration: preview.staggerDuration,
+              noStagger: preview.noStagger,
+              bossExtraSpeed: g.boss.extraSpeed,
+            });
+          }
+          // A run is authored once at the title. Neither the semantic controls
+          // nor a stale/direct grace write may create a hybrid trial.
+          g.state = 'title'; g.setGrace(5); g.resetFight(); g.state = 'fight';
+          const graceBefore = g.grace;
+          out.setDuringFight = g.setGrace(-3);
+          out.graceAfterBlockedSet = g.grace;
+          g.grace = -3;
+          out.lockedMods = { ...g.mods };
+          out.graceAtStart = g.graceAtStart;
+          const hp = g.player.hp; g.player.iframes = 0;
           g.player.takeDamage(20, g.player.x + 40, g.player.y, g);
-          out.aidedLoss = hp0 - g.player.hp;
-          g.setGrace(5); g.resetFight(); g.state = 'fight';
-          const hp1 = g.player.hp; g.player.iframes = 0;
-          g.player.takeDamage(20, g.player.x + 40, g.player.y, g);
-          out.vowedLoss = hp1 - g.player.hp;
+          out.lockedDamageLoss = hp - g.player.hp;
+          out.semanticTrialLocked = [...document.querySelectorAll('.game-accessibility button')]
+            .filter((button) => /trial/i.test(button.textContent || ''))
+            .every((button) => button.disabled);
+          g.state = 'title'; g.setGrace(3); g.resetFight(); g.state = 'fight';
+          g.boss.state = 'stalk'; g.boss.applyPoise(g.boss.maxPoise, g);
+          out.ironStagger = { state: g.boss.state, duration: g.boss.t, maxPoise: g.boss.maxPoise };
+          g.state = 'title'; g.setGrace(5); g.resetFight(); g.state = 'fight';
+          g.boss.state = 'stalk'; g.boss.applyPoise(g.boss.maxPoise, g);
+          out.forsakenPoise = { state: g.boss.state, poise: g.boss.poise, maxPoise: g.boss.maxPoise };
+          // Records belong to the selected dial setting, not the global PB.
+          g.state = 'title';
+          g.bests = { '5': 120 };
+          g.bestTime = 40;
+          g.setGrace(5); out.bestAtFive = g.trialBest();
+          g.setGrace(0); out.bestAtZero = g.trialBest();
           // toggles
           g.shakeEnabled = false; g.shakeAmp = 0; g.shake(20, 0.5);
           out.shakeOffWorks = g.shakeAmp === 0;
@@ -513,26 +533,47 @@ async function installAudioSampleRate(context) {
           out.shakeOnWorks = g.shakeAmp > 0;
           g.flashReduced = true; out.flashReducedScale = g.flashScale();
           g.flashReduced = false; out.flashFullScale = g.flashScale();
-          // hazard hue is reserved: no ambient particle may use it
-          g.setGrace(0); g.resetFight();
-          out.dangerHue = g.constructor === Object ? null : undefined;
           return out;
         });
+        await pg.waitForTimeout(300);
+        acc.semanticTrialUnlocked = await pg.evaluate(() => [...document.querySelectorAll('.game-accessibility button')]
+          .filter((button) => /trial/i.test(button.textContent || ''))
+          .every((button) => !button.disabled));
         step.accessibility = acc;
         if (acc.min !== -3 || acc.max !== 5) out.errors.push('grace does not clamp to -3..5: ' + JSON.stringify([acc.min, acc.max]));
-        if (!acc.aidSlower) out.errors.push('grace does not scale boss speed monotonically');
-        if (!acc.aidSofter) out.errors.push('grace does not scale damage taken monotonically');
-        if (!acc.aidIframe) out.errors.push('aid does not widen i-frames');
-        if (!acc.vowNoStagger) out.errors.push('vow +5 should disable stagger');
-        if (!(acc.bossSpeedAided < 1 && acc.bossSpeedVowed > 1)) out.errors.push('grace not reaching boss.extraSpeed: ' + JSON.stringify([acc.bossSpeedAided, acc.bossSpeedVowed]));
-        if (!(acc.flasksAided > acc.flasksVowed)) out.errors.push('flask count not responding to grace: ' + JSON.stringify([acc.flasksAided, acc.flasksVowed]));
-        if (!(acc.aidedLoss < acc.vowedLoss)) out.errors.push('damage taken not scaled by grace: ' + JSON.stringify([acc.aidedLoss, acc.vowedLoss]));
+        const expectedFlasks = [4, 4, 3, 3, 3, 2, 2, 2, 1];
+        const expectedPoise = [120, 120, 120, 120, 120, 120, 162, 204, 204];
+        if (acc.levels.length !== 9) out.errors.push('difficulty audit did not cover all nine levels');
+        acc.levels.forEach((level, i) => {
+          if (level.flasks !== expectedFlasks[i]) out.errors.push(`grace ${level.grace}: expected ${expectedFlasks[i]} flasks, got ${level.flasks}`);
+          if (level.maxPoise !== expectedPoise[i]) out.errors.push(`grace ${level.grace}: expected ${expectedPoise[i]} poise, got ${level.maxPoise}`);
+          if (level.noStagger !== (level.grace === 5)) out.errors.push(`grace ${level.grace}: no-stagger should be exclusive to +5`);
+          if (Math.abs(level.speed - level.bossExtraSpeed) > 0.000001) out.errors.push(`grace ${level.grace}: preview speed differs from active boss speed`);
+          if (i > 0 && !(level.speed > acc.levels[i - 1].speed)) out.errors.push(`grace ${level.grace}: boss speed is not strictly increasing`);
+          if (i > 0 && !(level.damage > acc.levels[i - 1].damage)) out.errors.push(`grace ${level.grace}: damage is not strictly increasing`);
+          if (i > 0 && level.flasks > acc.levels[i - 1].flasks) out.errors.push(`grace ${level.grace}: flask count increases`);
+        });
+        if (acc.setDuringFight !== false || acc.graceAfterBlockedSet !== acc.graceAtStart
+          || acc.graceAtStart !== 5 || !acc.lockedMods.noStagger || acc.lockedMods.flasks !== 1
+          || acc.lockedDamageLoss !== 28) {
+          out.errors.push('active trial snapshot/lock failed: ' + JSON.stringify(acc));
+        }
+        if (acc.ironStagger.state !== 'staggered' || Math.abs(acc.ironStagger.duration - 1.45) > 0.000001
+          || acc.ironStagger.maxPoise !== 162) {
+          out.errors.push('+3 IRON poise should be harder but breakable: ' + JSON.stringify(acc.ironStagger));
+        }
+        if (acc.forsakenPoise.state === 'staggered' || acc.forsakenPoise.poise !== acc.forsakenPoise.maxPoise) {
+          out.errors.push('+5 FORSAKEN poise should reset without staggering: ' + JSON.stringify(acc.forsakenPoise));
+        }
+        if (!acc.semanticTrialLocked || !acc.semanticTrialUnlocked) out.errors.push('semantic trial controls do not reflect the fight lock');
+        if (acc.bestAtFive !== 120 || acc.bestAtZero !== 40) out.errors.push('selected-trial record lookup is wrong: ' + JSON.stringify([acc.bestAtFive, acc.bestAtZero]));
         if (!acc.shakeOffWorks || !acc.shakeOnWorks) out.errors.push('screen shake toggle broken');
         if (!(acc.flashReducedScale < acc.flashFullScale)) out.errors.push('flash reduction not applied');
 
         // hazard-hue discipline: ambient particles must never use PAL.danger
         const hue = await pg.evaluate(async () => {
           const g = window.__game;
+          g.state = 'title';
           g.setGrace(0); g.resetFight(); g.state = 'fight';
           g.particles = [];
           g.boss.phase = 3;
@@ -549,6 +590,7 @@ async function installAudioSampleRate(context) {
         // save schema v2 round-trip incl. settings
         const sv2 = await pg.evaluate(() => {
           const g = window.__game;
+          g.state = 'title';
           g.setGrace(2); g.shakeEnabled = false; g.flashReduced = true; g.persist();
           return JSON.parse(localStorage.getItem('gracefell'));
         });
@@ -611,14 +653,31 @@ async function installAudioSampleRate(context) {
       const lay = await pg.evaluate(() => {
         const g = window.__game;
         g.state = 'title';
+        g.setGrace(5);
         const gm = g.menuGeom();
         const rows = g.menuRows();
+        const canvas = document.querySelector('canvas');
+        const ctx = canvas.getContext('2d');
+        const originalFillText = ctx.fillText;
+        let valueLeft = Number.POSITIVE_INFINITY;
+        ctx.fillText = function (text, x, y, maxWidth) {
+          if (String(text) === 'FORSAKEN +5') {
+            const width = this.measureText(String(text)).width;
+            valueLeft = this.textAlign === 'right' ? x - width : x;
+          }
+          return maxWidth === undefined
+            ? originalFillText.call(this, text, x, y)
+            : originalFillText.call(this, text, x, y, maxWidth);
+        };
+        g.render();
+        ctx.fillText = originalFillText;
         return {
           w: g.w, h: g.h,
           plateL: gm.plateL, plateR: gm.plateR,
           chevLx: gm.chevLx, chevRx: gm.chevRx,
           valueRx: gm.valueRx, labelLx: gm.labelLx,
           pipMin: gm.pipX(-3), pipMax: gm.pipX(5),
+          valueLeft,
           decZone: gm.decZone, incZone: gm.incZone,
           lastRowY: rows[rows.length - 1].y,
           firstRowY: rows[0].y,
@@ -631,7 +690,7 @@ async function installAudioSampleRate(context) {
       if (lay.labelLx < lay.plateL + 8) L.push('label outside plate');
       if (lay.valueRx > lay.chevRx - 12) L.push('value text collides with right chevron');
       if (lay.pipMin < lay.plateL + 8 || lay.pipMax > lay.plateR - 8) L.push('grace pips outside plate');
-      if (lay.pipMax > lay.valueRx - 24) L.push('grace pips collide with value text');
+      if (lay.pipMax > lay.valueLeft - 6) L.push('grace pips collide with FORSAKEN +5 text');
       if (lay.plateL < 4 || lay.plateR > lay.w - 4) L.push('menu plate wider than viewport');
       if (lay.lastRowY + 40 > lay.h) L.push('menu overflows bottom of screen');
       if (lay.firstRowY < lay.h * 0.5) L.push('menu overlaps the title block');
@@ -667,6 +726,26 @@ async function installAudioSampleRate(context) {
       t.rows = await pg.evaluate(() => window.__game.menuRows().map((r) => r.id));
       if (!t.rows.includes('haptics')) out.errors.push('touch: haptics row missing from menu');
       await pg.screenshot({ path: path.join(ARTIFACT_DIR, 'touch-title.png') });
+      t.forsakenTitle = await pg.evaluate(() => {
+        const g = window.__game;
+        g.state = 'title'; g.setGrace(5); g.render();
+        const gm = g.menuGeom();
+        const canvas = document.querySelector('canvas');
+        const ctx = canvas.getContext('2d');
+        const originalFillText = ctx.fillText;
+        let labelLeft = Number.POSITIVE_INFINITY;
+        ctx.fillText = function (text, x, y, maxWidth) {
+          if (String(text) === 'FORSAKEN +5') labelLeft = x - this.measureText(String(text)).width;
+          return maxWidth === undefined
+            ? originalFillText.call(this, text, x, y)
+            : originalFillText.call(this, text, x, y, maxWidth);
+        };
+        g.render();
+        ctx.fillText = originalFillText;
+        return { pipMax: gm.pipX(5), labelLeft, gap: labelLeft - gm.pipX(5) };
+      });
+      if (t.forsakenTitle.gap < 6) out.errors.push('touch: FORSAKEN +5 overlaps the grace pips: ' + JSON.stringify(t.forsakenTitle));
+      await pg.screenshot({ path: path.join(ARTIFACT_DIR, 'touch-forsaken-title.png') });
 
       // 3. controls layout: inside screen, clear of the joystick half and the safe area
       t.layout = await pg.evaluate(() => {
@@ -695,7 +774,65 @@ async function installAudioSampleRate(context) {
       t.stateAfterTap = await pg.evaluate(() => window.__game.state);
       if (t.stateAfterTap !== 'fight') out.errors.push('touch: tap did not start the fight (' + t.stateAfterTap + ')');
 
-      // 5. the joystick actually moves the knight
+      // 5. +5 touch swipe timing and combo length must match what is drawn.
+      t.difficultyTelegraphs = await pg.evaluate(() => {
+        const g = window.__game;
+        const probe = (phase) => {
+          g.state = 'title'; g.setGrace(5); g.resetFight(); g.state = 'fight';
+          const b = g.boss;
+          b.phase = phase;
+          b.state = 'stalk';
+          b.x = 0; b.y = -100;
+          g.player.x = 100; g.player.y = -100;
+          for (const key of Object.keys(b.cooldowns)) b.cooldowns[key] = key === 'swipe' ? 0 : 999;
+          b.chooseAttack(g, 100);
+          const fresh = { combo: b.comboLeft, duration: b.t, total: b.windupTotal(),
+            progress: 1 - b.t / b.windupTotal() };
+          b.state = 'strike'; b.t = 0;
+          b.update(0, g);
+          const followup = { combo: b.comboLeft, duration: b.t, total: b.windupTotal(),
+            progress: 1 - b.t / b.windupTotal() };
+          return { fresh, followup };
+        };
+        const phase2 = probe(2);
+        const phase3 = probe(3);
+        const b = g.boss;
+        b.phase = 3;
+        b.state = 'windup';
+        b.attack = 'swipe';
+        const canvas = document.querySelector('canvas');
+        const ctx = canvas.getContext('2d');
+        const originalFillText = ctx.fillText;
+        const labels = [];
+        ctx.fillText = function (text, x, y, maxWidth) {
+          labels.push(String(text));
+          return maxWidth === undefined
+            ? originalFillText.call(this, text, x, y)
+            : originalFillText.call(this, text, x, y, maxWidth);
+        };
+        g.render();
+        ctx.fillText = originalFillText;
+        return { phase2, phase3, ironboundVisible: labels.some((text) => text.includes('IRONBOUND')) };
+      });
+      for (const [phase, probe] of Object.entries({
+        phase2: t.difficultyTelegraphs.phase2,
+        phase3: t.difficultyTelegraphs.phase3,
+      })) {
+        if (probe.fresh.combo !== 3) out.errors.push(`touch: ${phase} swipe combo starts with ${probe.fresh.combo}, expected 3`);
+        if (probe.fresh.duration < 0.299 || probe.followup.duration < 0.239) {
+          out.errors.push(`touch: ${phase} swipe telegraph is below the reaction floor: ` + JSON.stringify(probe));
+        }
+        if (Math.abs(probe.fresh.duration - probe.fresh.total) > 0.000001
+          || Math.abs(probe.followup.duration - probe.followup.total) > 0.000001
+          || Math.abs(probe.fresh.progress) > 0.000001
+          || Math.abs(probe.followup.progress) > 0.000001) {
+          out.errors.push(`touch: ${phase} swipe visual timing differs from combat timing: ` + JSON.stringify(probe));
+        }
+      }
+      if (!t.difficultyTelegraphs.ironboundVisible) out.errors.push('touch: +5 HUD does not disclose IRONBOUND poise');
+      await pg.screenshot({ path: path.join(ARTIFACT_DIR, 'touch-forsaken-ironbound.png') });
+
+      // 6. the joystick actually moves the knight
       const before = await pg.evaluate(() => ({ x: window.__game.player.x, y: window.__game.player.y }));
       await pg.touchscreen.tap(100, 600); // establishes touch capability path
       await pg.evaluate(() => {
@@ -722,7 +859,7 @@ async function installAudioSampleRate(context) {
         c.dispatchEvent(new TouchEvent('touchend', { changedTouches: [t], touches: [], bubbles: true, cancelable: true }));
       });
 
-      // 6. the ATK button actually attacks
+      // 7. the ATK button actually attacks
       const atk = t.layout.btns.find((b) => b.id === 'light');
       await pg.evaluate(() => {
         const g = window.__game;
@@ -763,7 +900,7 @@ async function installAudioSampleRate(context) {
         out.errors.push('touch: expanded overlap did not resolve to one nearest action: ' + JSON.stringify(t.expandedTargeting));
       }
 
-      // 7. touch actions share the keyboard/mouse buffer through hit-stop
+      // 8. touch actions share the keyboard/mouse buffer through hit-stop
       const roll = t.layout.btns.find((b) => b.id === 'roll');
       await pg.evaluate(() => {
         const g = window.__game;
@@ -776,7 +913,7 @@ async function installAudioSampleRate(context) {
       t.bufferedRollState = await pg.evaluate(() => window.__game.player.state);
       if (t.bufferedRollState !== 'roll') out.errors.push('touch: roll was lost during hit-stop (' + t.bufferedRollState + ')');
 
-      // 8. sound is an actual touch target, not a passive status label
+      // 9. sound is an actual touch target, not a passive status label
       const sound = await pg.evaluate(() => window.__game.soundButtonRect());
       const mutedBefore = await pg.evaluate(() => window.__game.audio.muted);
       await pg.touchscreen.tap(sound.x + sound.width / 2, sound.y + sound.height / 2);
@@ -785,7 +922,7 @@ async function installAudioSampleRate(context) {
       t.touchMute = { before: mutedBefore, after: mutedAfter };
       if (mutedAfter === mutedBefore) out.errors.push('touch: sound control did not toggle mute');
 
-      // 9. A natural death must accept one real tap after the prompt appears.
+      // 10. A natural death must accept one real tap after the prompt appears.
       // Retry uses a durable confirmation sequence rather than a frame-length
       // action flag, so focus/event translation cannot discard the gesture.
       t.deathRetryBefore = await pg.evaluate(() => {
@@ -845,7 +982,7 @@ async function installAudioSampleRate(context) {
         before: t.pointerRetryBefore, after: t.pointerRetryAfter,
       }));
 
-      // 10. no horizontal overflow, canvas drawing, clean console
+      // 11. no horizontal overflow, canvas drawing, clean console
       t.overflow = await pg.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
       if (t.overflow > 1) out.errors.push('touch: horizontal overflow ' + t.overflow);
       t.ink = await pg.evaluate(() => {

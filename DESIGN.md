@@ -562,3 +562,65 @@ touch-type `PointerEvent`; that path must also enter the intro with no console e
 - Pointer Events supplement the existing mouse and Touch Events listeners. Touch joystick and
   action-button geometry still use the established Touch Events bridge.
 - No visual, audio, save-schema, combat-balance, or render-budget changes were made.
+
+## v2.10 — Codex (GPT-5), "one trial, one truth" (2026-07-23)
+
+The owner asked whether the nine difficulty settings were scaled correctly. Three independent
+review lanes covered curve math, adversarial combat logic, and player experience. Their claims
+were reproduced on both v2.9.1 local and production before code changed:
+
+- the semantic dial remained active in combat, so a run could start at +5, switch to −3 live
+  damage/i-frame/stagger rules, and still save a +5 record;
+- phase two authored three swipes while phase three silently fell back to two;
+- at +5 phase two the follow-up hit arrived in about 204 ms while the renderer began 38% through
+  a different 331 ms telegraph; phase three fell to about 184 ms;
+- no-stagger began abruptly at +3 while the gold poise bar continued promising it could break;
+- the second flask disappeared at +4, stacking another cliff before the capstone;
+- the title showed the global 0:40 PB while the selected +5 record was 2:00, and the FORSAKEN +5
+  text overlapped its final dial pip by about 10 px.
+
+The same probes also established what should not change. A +5 direct hit tops out at 36/110 HP,
+post-hit invulnerability prevents a burst from landing multiple times, phase transitions clear
+stale hazards, and projectile/ring travel speeds remain readable because they do not inherit the
+boss animation multiplier.
+
+### One immutable trial
+
+`difficultyForGrace()` now authors a complete modifier object. `resetFight()` copies it into
+`trialMods`; every combat lookup reads that snapshot until the next reset. Both canvas and semantic
+trial controls reject changes during intro/fight. A direct stale grace mutation likewise cannot
+change live modifiers. The selected setting, modifiers, HUD, and record key therefore describe the
+same run.
+
+The curve retains the existing linear speed and damage ramps. Flask counts across −3…+5 are now
+`4,4,3,3,3,2,2,2,1`. Poise stays 120 through +2, becomes 162 at +3 and 204 at +4/+5; the stagger
+opening narrows from 1.70 s to 1.45 s and 1.25 s. Only +5 refuses stagger. Its HUD says
+`IRONBOUND`, and the poise sliver becomes a visibly locked segmented rail.
+
+### A telegraph is the timer
+
+Both late phases now start a three-swipe combo. Touch fresh windups have a 300 ms floor; repeated
+swipes have a 240 ms floor. Each chosen windup stores one exact `currentWindup`, and both update
+logic and rendering use it, so every tell starts at 0% and completes when its hit becomes active.
+Desktop timing and fixed projectile/ring travel retain their authored behavior.
+
+The title record uses `bests[selectedGrace]`; the legacy top-level PB is only a grace-0 migration
+fallback. The dial pips move left within their existing plate, with a measured six-pixel minimum
+clearance from the full FORSAKEN +5 label.
+
+### Verification and artifacts
+
+`qa/verify.cjs` now enumerates every grace level and asserts strictly increasing speed/damage,
+published flask/poise counts, +5-only no-stagger, preview-to-active equality, immutable combat
+modifiers, 28 damage from a base-20 +5 hit, +3 breakable poise, +5 reset-without-stagger, semantic
+locking, selected records, exact phase-two/three touch timing, three-swipe counts, and measured
+title-label clearance. The established desktop/mobile/touch, audio, terminal, palette, performance,
+and death/retry coverage remains in the same zero-error gate. `touch-forsaken-title.png` and
+`touch-forsaken-ironbound.png` are mandatory visual-review artifacts.
+
+### Changed from v2.9.1
+
+- Difficulty balance, UI truthfulness, and two swipe behaviors changed; save schema, boss HP,
+  player damage, projectile/ring travel, music, SFX, arena rendering, and render budgets did not.
+- This pass was implemented and documented by Codex after the multi-agent findings were verified
+  independently against local and production v2.9.1.
