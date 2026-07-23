@@ -51,7 +51,7 @@ desktop 1280×800 + mobile 390×844. Asserts: canvas draws (pixel sampling), zer
 - The phase-3 transition resets all boss cooldowns — pin cooldowns *after* `boss.phase === 3` if forcing a specific attack.
 
 ### Architecture notes
-- Engine is a single `src/game/engine.ts` (~2.1k lines): Input / Player / Boss / Game classes + render methods bolted onto `Game.prototype` (declaration-merged interface). `window.__game` is the QA/debug hook.
+- Engine is a single `src/game/engine.ts` (~3.3k lines): Input / Player / Boss / Game classes + render methods bolted onto `Game.prototype` (declaration-merged interface). `window.__game` is the QA/debug hook.
 - Static build served by `server.mjs` (zero-dep http, SPA fallback, immutable cache for /assets, 127.0.0.1 bind).
 
 ## v2.1 — Claude (Opus 4.8), "going public" (2026-07-22)
@@ -649,3 +649,119 @@ named local evidence runs remain available without polluting a future commit.
 - Documentation discoverability, package identity, and operational instructions changed.
 - No v2.10 gameplay claim was broadened: graphics proposals remain future work and are not
   attributed to the difficulty release.
+
+## v2.11-rc1 — Codex (GPT-5), "the silhouette is the animation" (2026-07-23)
+
+This is a local, not-yet-deployed candidate for GitHub issue #10. The first Penitent prototype
+copied the Kimi painting's dark hood, thin gold trim, face ellipse, and line-cross sigil into the
+existing circular body. The real `390x844` capture disproved the premise: at the authored `0.55`
+camera zoom, the body is only about 19 CSS pixels wide, so those internal details became dust and
+combat states still depended on the sword.
+
+The owner requested a design-house redesign and selected the second of three generated directions,
+the Kite-Veil state strip. Three read-only studios worked independently:
+
+- character silhouette: make the parchment hood the outer facing contour, not an accessory;
+- combat UX: give move, roll, light, heavy, flask, stagger, and death different large masses;
+- technical art: keep the player procedural, preserve collision and sword logic, and spend only a
+  few flat Canvas2D fills per frame.
+
+### The seven-state grammar
+
+`Player.drawKiteVeilBody()` rotates one local coordinate system into `facing` (or `rollDir`) and
+uses the same parchment kite, charcoal torso, and soot-violet veil family in every state:
+
+- move is an arrow with one rear fin;
+- roll contracts into a notched spindle, hides the sword, and keeps the established spirit trail;
+- light pinches into a spear beneath the existing silver attack ribbon;
+- heavy opens into a hammerhead during charge, then collapses for the release;
+- flask closes into a seed and replaces costume noise with one large gold diamond;
+- stagger breaks the hood/veil angle and temporarily removes the resting sword;
+- death becomes a flattened leaf with no sword or gold.
+
+The hitbox remains `r=15`. No input timing, damage, stamina, iframe, camera, boss, save, audio, HUD,
+or difficulty behavior changed. The parchment and gold remain decorative/player-owned; the
+reserved danger colors are untouched.
+
+### Design validation
+
+The selected source, seven mobile crops, and their same-image comparison live under
+`.artifacts/design-house-10/` and `.artifacts/kite-veil/` (ignored local evidence). The first
+comparison found that flask and stagger still inherited the resting sword, a moderate fidelity and
+readability miss. Suppressing the sword only for roll/flask/stagger/death produced a passing second
+comparison. `design-qa.md` records the source dimensions, viewport/density normalization,
+full-scene evidence, focused comparison, required fidelity surfaces, iteration history, and
+remaining P3 simplification.
+
+The capture matrix covers all seven states at `390x844 @2x` and `1280x800 @1x`, with zero browser
+or page errors. The synthetic full-scene render submission remains well below one millisecond per
+render in both target contexts; percentage comparisons at that scale are too noisy to be useful,
+so the acceptance criterion is the absolute 16.7 ms frame budget plus the full gameplay gate.
+
+### Changed from v2.10.1
+
+- The default player rendering and state silhouettes changed.
+- Player mechanics, collision, sword attacks, world effects, boss rendering on the normal route,
+  audio, accessibility, persistence, and difficulty did not change.
+- The query-gated Blade-Saint experiment from the earlier issue review remains local-only and is
+  not part of this candidate's production claim.
+
+## v2.11-rc2 — Codex (GPT-5), "the halo keeps the score" (2026-07-23)
+
+The owner asked for Malakar to receive the same production character pass. GitHub issue #14 was
+already a strong canonical brief: replace the radial spiked monster with a Fallen Blade-Saint
+whose broken sword halo is both identity and volley ammunition. Its Kimi concept image was used as
+the visual source; the issue's procedural specification remained authoritative where painterly
+detail could not survive the mobile camera.
+
+The earlier `?concept=kimi` route had proven that a pointed, facing-led body, split cape, and nine
+orbiting blades read more clearly than the old sphere. It was not production-ready: the default
+route remained unchanged, volley depletion was a one-frame conditional, every blade returned
+immediately, and the phase-three sword appeared fully formed.
+
+### The Blade-Saint contract
+
+Malakar now uses the Blade-Saint renderer on the default route:
+
+- a narrow charcoal armor ellipse and pointed helm establish facing inside the unchanged `r=34`
+  collision circle;
+- a split translucent ash cape is present from phase one, with quiet gold/ember edging rather than
+  the reserved hazard hue;
+- nine sword fragments orbit as the broken halo;
+- phase two lights only their tips with `PAL.amber`;
+- phase-three transition draws a mirrored shadow coatsword over `0.4 s`, while attack logic remains
+  bound to the original weapon and telegraphs;
+- the former oversized fireball core becomes one smaller failing amber saint-light.
+
+The halo is now honest state rather than decoration. A phase-one volley spends five fragments,
+phase two spends seven, and phase three spends nine. `haloSpent` persists after the attack and
+reforges one fragment every `0.8 s`. The established cooldowns and projectile counts are not
+changed. During poise stagger, orbit speed falls to `0.22` and each blade receives an independent
+radius wobble, so the broken halo itself communicates the opening.
+
+### Validation
+
+The same-image comparison in
+`.artifacts/boss-blade-saint/source-vs-mobile-states.png` places the `640x640` Kimi source beside
+seven deterministic `390x844 @2x` implementation states: phase one, volley ready, seven fragments
+spent, partial reforge, stagger, partial shadow-sword draw, and complete dual swords. Matching
+full-scene and `1280x800` evidence is stored in the same ignored artifact directory.
+
+The first full-scene comparison found that the study's central ellipse slightly exceeded the
+collision radius. Tightening it to `0.96r × 0.68r` and shortening the helm point restores body-to-
+hitbox honesty without shrinking the cape, halo, or weapons. The capture harness reports no page
+or console errors. Synthetic phase-three rendering remains below `0.4 ms` per submission in both
+target contexts, far below the `16.7 ms` frame budget.
+
+`qa/verify.cjs` now proves phase-two volley consumes seven visible blades while spawning seven
+projectiles, exactly one blade returns across the `0.8 s` boundary, the second sword reaches 50%
+at `0.2 s` and 100% at `0.4 s`, and the boss hit radius stays 34.
+
+### Changed from v2.11-rc1
+
+- The default boss rendering changes from the radial crown monster to the Fallen Blade-Saint.
+- The query-only concept gate is removed because the accepted design is now the default.
+- Three visual-state fields were added for halo depletion/reforge and shadow-sword draw.
+- Boss health, collision, poise, damage, movement, attack selection, attack timing, projectile and
+  ring behavior, audio, difficulty, saves, player rendering, HUD, and arena rendering are
+  unchanged.

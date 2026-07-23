@@ -8,12 +8,20 @@ rules are all decided by what works one-handed on a 390px screen.
 
 **Play it: [gracefell.alyoechosys.dev](https://gracefell.alyoechosys.dev)**
 
-Current gameplay release: **v2.10**. Documentation and package metadata are current through
-**v2.10.1**. The exact reviewer findings, curve, merged revision, deployment checks, transient
-audio measurement, and acceptance matrix are preserved in
-[`docs/releases/v2.10.md`](docs/releases/v2.10.md).
+Current gameplay release: **v2.11**. The Kite-Veil Penitent and Fallen Blade-Saint make combat
+state, facing, volley ammunition, stagger, and phase escalation readable from silhouette without
+adding runtime art assets. The design sources, implementation decisions, mobile/desktop evidence,
+and release acceptance are preserved in
+[`docs/releases/v2.11.md`](docs/releases/v2.11.md). The prior difficulty-integrity record remains
+available in [`docs/releases/v2.10.md`](docs/releases/v2.10.md).
 
-Zero art assets, one generated music track. Every stone in the floor, every ember, every wing, and every combat cue is generated at runtime from code — canvas 2D for the visuals and Web Audio for the SFX. A MiniMax Music 3.0 instrumental supplies the score, with the original procedural drone and phase-aware drums kept underneath and available as the offline fallback. The visual game remains one `<canvas>`; a focus-revealed semantic companion exposes controls and safety settings to keyboards and assistive technology without covering the playfield.
+Zero runtime art assets, one generated music track. Every character silhouette, sword, halo blade,
+stone in the floor, ember, cape, and combat cue is generated at runtime from code — canvas 2D for
+the visuals and Web Audio for the SFX. Documentation screenshots do not enter the production
+bundle. A MiniMax Music 3.0 instrumental supplies the score, with the original procedural drone
+and phase-aware drums kept underneath and available as the offline fallback. The visual game
+remains one `<canvas>`; a focus-revealed semantic companion exposes controls and safety settings to
+keyboards and assistive technology without covering the playfield.
 
 The sovereign has an audio language, not one generic warning: swipes whistle, charges rise, volleys crystallise, rings resonate, meteors fall and the spiral winds itself tight. Impacts are layered and positioned across the arena, the stone room supplies a generated reverb tail, and the whole score ducks and limits itself when phase three gets crowded. The shipped MP3 is music only; every combat sound, noise source and room impulse is still synthesized at startup.
 
@@ -25,7 +33,13 @@ The sovereign has an audio language, not one generic warning: swipes whistle, ch
 
 **v2 — extended by Claude (Opus 4.8).** Combat depth, a third phase, a full rendering pass, persistence, and a headless verification gate. Details in [DESIGN.md](DESIGN.md).
 
-**v2.4–v2.10 — audio, responsiveness, and combat polish extended by Codex (GPT-5).** Attack-specific procedural cues, spatial mix protection, the MiniMax-generated score, mobile/accessibility hardening, trustworthy combat and retry behavior, and the verified nine-level difficulty pass. The generation prompt and file hash are recorded in [`public/audio/README.md`](public/audio/README.md).
+**v2.4–v2.11 — audio, responsiveness, combat integrity, and character readability extended by
+Codex (GPT-5).** Attack-specific procedural cues, spatial mix protection, the MiniMax-generated
+score, mobile/accessibility hardening, trustworthy combat and retry behavior, the verified
+nine-level difficulty pass, and the production Kite-Veil/Blade-Saint silhouettes. The v2.11 player
+direction was selected from three independent design-house proposals; Kimi's issue #14 concept is
+the source for Malakar's Blade-Saint identity. The music generation prompt and file hash are
+recorded in [`public/audio/README.md`](public/audio/README.md).
 
 Directed by [@jonathanwxh-cell](https://github.com/jonathanwxh-cell), who asked for "AAA grade" and meant it.
 
@@ -56,9 +70,12 @@ slashes, K or right-click is heavy, F drinks, M mutes.
 
 Malakar has three phases and does not scale to your skill.
 
-1. **Ashen Sovereign** — swipes, slams, charges, volleys. Learn the tells.
-2. **The Burning Sovereign** (55% HP) — wings unfurl, everything speeds up, meteors and expanding rings enter the rotation.
-3. **Grace-Forsaken** (22% HP) — cooldowns reset, ring attacks come in pairs, meteors come nine at a time, and a two-armed rotating spiral fills the arena with fire.
+1. **Fallen Blade-Saint** — nine broken halo blades expose his volley ammunition while swipes,
+   slams, charges, and volleys teach the core tells.
+2. **The Burning Sovereign** (55% HP) — halo tips ignite, everything speeds up, and meteors plus
+   expanding rings enter the rotation.
+3. **Grace-Forsaken** (22% HP) — he draws a second sword, cooldowns reset, ring attacks come in
+   pairs, meteors come nine at a time, and a two-armed rotating spiral fills the arena with fire.
 
 Break his poise to stagger him; staggered hits do 1.4×. Land a roll *into* an incoming attack for a perfect dodge — slow-motion, stamina back, and poise damage. Defense is how you win.
 
@@ -189,6 +206,29 @@ For the complete pre-fix reproduction, reviewer lanes, unchanged-system decision
 measurements, GitHub records, production SHA, and known limits, see the
 [`v2.10 acceptance record`](docs/releases/v2.10.md).
 
+## Designed and fixed by Codex — v2.11 character readability
+
+The Penitent and Malakar now communicate state through outer shape instead of phone-scale costume
+detail. The player uses seven Kite-Veil silhouettes: arrow/fin movement, compact roll spindle,
+light spear, heavy hammerhead, flask seed, broken stagger, and flattened death leaf. The resting
+sword disappears when it would blur the roll, flask, stagger, or death read.
+
+Malakar is now the Fallen Blade-Saint from Kimi's issue #14 concept. His nine-blade halo is a real
+volley counter: phase one spends five fragments, phase two spends seven, phase three spends nine,
+and one blade reforges every 0.8 seconds. Phase-two tips ignite amber, stagger slows and breaks the
+orbit, and phase three visibly draws a second shadow sword over 0.4 seconds. Boss collision,
+health, damage, movement, cooldowns, and attack timing are unchanged.
+
+Both designs remain procedural Canvas 2D, so the production bundle gains no sprite sheet, texture,
+model, or per-frame render surface. Their source-to-implementation comparisons are committed below:
+
+- [Kite-Veil seven-state comparison](docs/releases/assets/v2.11/kite-veil-states.png)
+- [Fallen Blade-Saint mobile-state comparison](docs/releases/assets/v2.11/blade-saint-states.png)
+
+The complete design-house process, acceptance criteria, automated assertions, performance
+measurements, attribution, deployment evidence, and post-launch user playtests are recorded in the
+[`v2.11 release record`](docs/releases/v2.11.md).
+
 ## Running it
 
 ```bash
@@ -203,7 +243,7 @@ Production is a zero-dependency Node static server (`server.mjs`) in front of `d
 ## Structure
 
 ```
-src/game/engine.ts   the entire game — Input, Player, Boss, Game + render layer (~2.1k lines)
+src/game/engine.ts   the entire game — Input, Player, Boss, Game + render layer (~3.3k lines)
 src/game/audio.ts    hybrid Web Audio: procedural SFX/fallback + generated score
 public/audio/        MiniMax score and generation provenance
 docs/releases/       durable release acceptance and production evidence

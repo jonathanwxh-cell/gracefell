@@ -587,6 +587,61 @@ async function installAudioSampleRate(context) {
         step.hazardHue = hue;
         if (hue.ambientUsingDanger > 0) out.errors.push('ambient particles are using the reserved hazard hue (' + hue.ambientUsingDanger + ')');
 
+        // Blade-Saint production contract: the halo is a diegetic volley
+        // counter, reforges at the authored cadence, and the phase-three
+        // shadow sword draws without changing the boss hit circle.
+        const bladeSaint = await pg.evaluate(() => {
+          const g = window.__game;
+          g.state = 'title';
+          g.setGrace(0);
+          g.resetFight();
+          g.state = 'fight';
+          const b = g.boss;
+          b.phase = 2;
+          b.state = 'strike';
+          b.attack = 'volley';
+          b.t = 0;
+          b.haloSpent = 0;
+          b.haloReforgeT = 0;
+          const projectilesBefore = g.projectiles.length;
+          b.update(0.016, g);
+          const spentAfterVolley = b.haloSpent;
+          const projectilesDelta = g.projectiles.length - projectilesBefore;
+          b.state = 'recover';
+          b.t = 99;
+          b.vx = 0;
+          b.vy = 0;
+          b.update(0.79, g);
+          const spentBeforeReforge = b.haloSpent;
+          b.update(0.02, g);
+          const spentAfterReforge = b.haloSpent;
+          b.phase = 3;
+          b.secondSwordDraw = 0;
+          b.update(0.2, g);
+          const swordAt200ms = b.secondSwordDraw;
+          b.update(0.2, g);
+          return {
+            spentAfterVolley,
+            projectilesDelta,
+            spentBeforeReforge,
+            spentAfterReforge,
+            swordAt200ms,
+            swordAt400ms: b.secondSwordDraw,
+            hitRadius: b.r,
+          };
+        });
+        step.bladeSaint = bladeSaint;
+        if (bladeSaint.spentAfterVolley !== 7 || bladeSaint.projectilesDelta !== 7) {
+          out.errors.push('Blade-Saint phase-two volley did not consume seven halo blades: ' + JSON.stringify(bladeSaint));
+        }
+        if (bladeSaint.spentBeforeReforge !== 7 || bladeSaint.spentAfterReforge !== 6) {
+          out.errors.push('Blade-Saint halo did not reforge one blade at 0.8 s: ' + JSON.stringify(bladeSaint));
+        }
+        if (Math.abs(bladeSaint.swordAt200ms - 0.5) > 0.000001 || bladeSaint.swordAt400ms !== 1) {
+          out.errors.push('Blade-Saint shadow sword did not complete its 0.4 s draw: ' + JSON.stringify(bladeSaint));
+        }
+        if (bladeSaint.hitRadius !== 34) out.errors.push('Blade-Saint visual pass changed the boss hit radius');
+
         // save schema v2 round-trip incl. settings
         const sv2 = await pg.evaluate(() => {
           const g = window.__game;
