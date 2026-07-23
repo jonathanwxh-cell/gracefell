@@ -87,6 +87,7 @@ folder. Named release runs may set `GRACEFELL_QA_DIR` / `GRACEFELL_QA_RESULT`; r
 ## Headless QA facts (hard-won)
 - Playwright is a repo dev dependency. `npm run qa` starts an isolated fixed-port server and uses Playwright's installed Chromium; `PLAYWRIGHT_CHROMIUM_PATH` remains available for unusual hosts.
 - Constructing a second `Game` (e.g. to test save migration) **overwrites the `window.__game` hook**, and `destroy()` does not restore it — every later assertion then silently reads a dead instance. Save and restore it around the construction.
+- Semantic path controls have a post-launch regression: pointer **More Oath** and keyboard **More Grace** must change exactly one step, keep `state === 'title'`, and leave the canvas `confirmSequence` untouched before semantic Start begins the selected run. Coordinate-based browser automation can otherwise misreport a click through the hidden/revealed companion as a canvas action.
 - Screenshots are not always reviewable by an agent. When they aren't, make correctness numeric instead of eyeballing: that's why `menuGeom()` exists and why the layout assertions caught a chevron drawing 5px outside its plate at 390px.
 - Headless RAF timing varies → gate on `waitForFunction(game.stateT/state)`, never wall-clock sleeps, for sim-time thresholds.
 - Boss ignores damage while `state === 'spawn'` (intro). Wait for `game.state === 'fight'` first.
