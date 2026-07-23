@@ -396,6 +396,42 @@ async function installAudioSampleRate(context) {
             for (let i = 0; i < 13; i++) g.frame(1 / 60);
             result.hitstopBuffer = { bufferedAfterStop, state: g.player.state, stamina: g.player.stam };
 
+            // Three rapid ATK presses must remain three distinct light attacks.
+            // The generic one-slot TTL used to collapse the second and third
+            // presses into one follow-up, while the finisher also reused HVY
+            // swing/contact cues.
+            g.resetFight(); g.state = 'fight'; g.input.reset();
+            g.player.x = 0; g.player.y = 0; g.player.facing = 0; g.player.stam = 100;
+            g.boss.x = 70; g.boss.y = 0; g.boss.hp = 9999; g.boss.maxHp = 9999;
+            g.boss.state = 'recover'; g.boss.t = 99; g.boss.vx = 0; g.boss.vy = 0;
+            const comboSteps = [];
+            const comboCues = [];
+            const originalPlayerStrike = g.playerStrike.bind(g);
+            const originalSwing = g.audio.swing.bind(g.audio);
+            const originalSwingHeavy = g.audio.swingHeavy.bind(g.audio);
+            const originalHit = g.audio.hit.bind(g.audio);
+            g.playerStrike = (heavy) => {
+              comboSteps.push({ heavy, step: g.player.comboStep });
+              originalPlayerStrike(heavy);
+            };
+            g.audio.swing = (step) => comboCues.push(`swing-${step}`);
+            g.audio.swingHeavy = () => comboCues.push('swing-heavy');
+            g.audio.hit = (heavy, _spatial, variant) => comboCues.push(`hit-${heavy ? 'heavy' : 'light'}-${variant}`);
+            for (let frame = 0; frame < 120; frame++) {
+              if (frame === 0 || frame === 3 || frame === 6) g.input.bufferPress('light');
+              g.frame(1 / 60);
+            }
+            result.rapidLightCombo = {
+              steps: comboSteps,
+              cues: comboCues,
+              queuedAtEnd: g.player.queuedLightAttacks,
+              state: g.player.state,
+            };
+            g.playerStrike = originalPlayerStrike;
+            g.audio.swing = originalSwing;
+            g.audio.swingHeavy = originalSwingHeavy;
+            g.audio.hit = originalHit;
+
             // Heavy remains committed, but a roll pressed on the contact frame
             // must execute as soon as its roughly 200 ms recovery completes.
             g.resetFight(); g.state = 'fight'; g.input.reset();
@@ -494,6 +530,16 @@ async function installAudioSampleRate(context) {
           || tr.projectiles || tr.rings || tr.meteors) out.errors.push('terminal trade arbitration failed: ' + JSON.stringify(tr));
         if (!combatRegression.hitstopBuffer.bufferedAfterStop || combatRegression.hitstopBuffer.state !== 'light') {
           out.errors.push('natural combo input expired during hit-stop: ' + JSON.stringify(combatRegression.hitstopBuffer));
+        }
+        const rapidSteps = combatRegression.rapidLightCombo.steps;
+        if (rapidSteps.length !== 3
+          || rapidSteps.some((hit, index) => hit.heavy || hit.step !== index)
+          || combatRegression.rapidLightCombo.queuedAtEnd !== 0
+          || combatRegression.rapidLightCombo.cues.some((cue) => cue.includes('heavy'))
+          || !combatRegression.rapidLightCombo.cues.includes('swing-2')
+          || !combatRegression.rapidLightCombo.cues.includes('hit-light-2')) {
+          out.errors.push('rapid ATK did not produce a distinct three-hit light combo: '
+            + JSON.stringify(combatRegression.rapidLightCombo));
         }
         if (!combatRegression.heavyRollBuffer.bufferedAfterStop || combatRegression.heavyRollBuffer.state !== 'roll'
           || combatRegression.heavyRollBuffer.stamina > 81) {
@@ -1026,6 +1072,46 @@ async function installAudioSampleRate(context) {
       await pg.waitForFunction(() => window.__game.player.state === 'light', null, { timeout: 1000 }).catch(() => {});
       t.atkState = await pg.evaluate(() => window.__game.player.state);
       if (t.atkState !== 'light') out.errors.push('touch: ATK button did not enter the light-attack state (' + t.atkState + ')');
+
+      // A phone player naturally taps ATK faster than one full attack cycle.
+      // Preserve all three presses rather than collapsing them into two hits.
+      await pg.evaluate(() => {
+        const g = window.__game;
+        g.resetFight();
+        g.state = 'fight';
+        g.input.reset();
+        g.player.x = 0; g.player.y = 0; g.player.facing = 0; g.player.stam = 100;
+        g.boss.x = 70; g.boss.y = 0; g.boss.hp = 9999; g.boss.maxHp = 9999;
+        g.boss.state = 'recover'; g.boss.t = 99; g.boss.vx = 0; g.boss.vy = 0;
+        window.__touchComboSteps = [];
+        window.__touchComboOriginalStrike = g.playerStrike.bind(g);
+        g.playerStrike = (heavy) => {
+          window.__touchComboSteps.push({ heavy, step: g.player.comboStep });
+          window.__touchComboOriginalStrike(heavy);
+        };
+      });
+      for (let press = 0; press < 3; press++) {
+        if (press > 0) await pg.waitForTimeout(50);
+        await pg.touchscreen.tap(atk.x, atk.y);
+      }
+      await pg.waitForFunction(() => window.__touchComboSteps.length >= 3, null, { timeout: 2500 }).catch(() => {});
+      t.rapidAtkCombo = await pg.evaluate(() => {
+        const g = window.__game;
+        const result = {
+          steps: window.__touchComboSteps,
+          queuedAtEnd: g.player.queuedLightAttacks,
+        };
+        g.playerStrike = window.__touchComboOriginalStrike;
+        delete window.__touchComboOriginalStrike;
+        delete window.__touchComboSteps;
+        return result;
+      });
+      if (t.rapidAtkCombo.steps.length !== 3
+        || t.rapidAtkCombo.steps.some((hit, index) => hit.heavy || hit.step !== index)
+        || t.rapidAtkCombo.queuedAtEnd !== 0) {
+        out.errors.push('touch: rapid ATK did not complete the three-hit light combo: '
+          + JSON.stringify(t.rapidAtkCombo));
+      }
 
       // Expanded fingertip regions can overlap even though the circles do not.
       // A point on the visible ATK edge must resolve to exactly one nearest

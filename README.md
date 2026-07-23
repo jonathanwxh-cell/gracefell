@@ -8,11 +8,12 @@ rules are all decided by what works one-handed on a 390px screen.
 
 **Play it: [gracefell.alyoechosys.dev](https://gracefell.alyoechosys.dev)**
 
-Current gameplay release: **v2.11.1**. Boss defeat now saves the complete victory scorecard
-(grade, trial, time, attempt, damage, and wounds) immediately, holds the result screen against
-queued taps, and replaces the fast retry flash with a slow shallow pulse. The fix and acceptance
-record are preserved in [`docs/releases/v2.11.1.md`](docs/releases/v2.11.1.md). The v2.11
-character design record remains available in [`docs/releases/v2.11.md`](docs/releases/v2.11.md).
+Current gameplay release: **v2.11.2**. Three rapid ATK presses now remain three distinct light
+attacks on phone and desktop, while roll keeps transition priority. The third slash has its own
+silver finisher feedback instead of borrowing the heavy attack's sound identity. The fix and
+acceptance record are preserved in [`docs/releases/v2.11.2.md`](docs/releases/v2.11.2.md).
+The v2.11 character design record remains available in
+[`docs/releases/v2.11.md`](docs/releases/v2.11.md).
 
 Zero runtime art assets, one generated music track. Every character silhouette, sword, halo blade,
 stone in the floor, ember, cape, and combat cue is generated at runtime from code — canvas 2D for
@@ -32,7 +33,7 @@ The sovereign has an audio language, not one generic warning: swipes whistle, ch
 
 **v2 — extended by Claude (Opus 4.8).** Combat depth, a third phase, a full rendering pass, persistence, and a headless verification gate. Details in [DESIGN.md](DESIGN.md).
 
-**v2.4–v2.11.1 — audio, responsiveness, combat integrity, character readability, and victory persistence extended by
+**v2.4–v2.11.2 — audio, responsiveness, combat integrity, character readability, and victory persistence extended by
 Codex (GPT-5).** Attack-specific procedural cues, spatial mix protection, the MiniMax-generated
 score, mobile/accessibility hardening, trustworthy combat and retry behavior, the verified
 nine-level difficulty pass, and the production Kite-Veil/Blade-Saint silhouettes. The v2.11 player
@@ -246,6 +247,18 @@ The victory screen says **SCORE SAVED**, stays in control for at least 4.5 simul
 discards celebratory double-clicks made during the reveal. Once the replay prompt appears it
 requires a fresh input and breathes slowly instead of flashing rapidly. The title remembers the
 last saved grade.
+
+## Fixed by Codex — v2.11.2 rapid light combo
+
+Rapid ATK taps now use a two-entry light-only follow-up queue, so three real presses produce the
+authored three-hit string instead of collapsing into two attacks. The queue cannot invent extra
+hits, clears on damage, roll, heavy, insufficient stamina, or combo expiry, and never outranks a
+roll that is ready at the transition.
+
+The third hit remains the stronger light finisher, but now calls the light swing and impact family
+with a silver damage number. HVY keeps its separate heavy cue and gold impact identity. Desktop
+and true-touch regression paths both perform three 50 ms-spaced ATK presses and require steps
+`0, 1, 2`, no heavy flag or heavy cue, and an empty queue afterward.
 
 ## Running it
 

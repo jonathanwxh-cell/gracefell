@@ -68,6 +68,7 @@ interface DamageNum { x: number; y: number; vy: number; life: number; maxLife: n
 interface Projectile { x: number; y: number; vx: number; vy: number; r: number; dmg: number; life: number; hostile: boolean; hue: string; }
 interface RingWave { x: number; y: number; r: number; speed: number; thickness: number; dmg: number; maxR: number; hostile: boolean; hitDone: boolean; }
 interface Meteor { x: number; y: number; fuse: number; maxFuse: number; r: number; dmg: number; }
+type PlayerImpact = 'light' | 'finisher' | 'heavy';
 
 // ------------------------------------------------------------------ input
 const KEYMAP: Record<string, string> = {
@@ -293,6 +294,7 @@ export class Player {
   rollDir = 0; attackHit = false; lungeVx = 0; lungeVy = 0;
   impulseVx = 0; impulseVy = 0;
   comboStep = 0; comboWindow = 0; perfectCd = 0;
+  queuedLightAttacks = 0;
   trail: { x: number; y: number; a: number; life: number }[] = [];
   swordTip: { x: number; y: number }[] = [];
   capePhase = 0;
@@ -308,7 +310,10 @@ export class Player {
     this.healPulse = Math.max(0, this.healPulse - dt);
     this.stamDelay = Math.max(0, this.stamDelay - dt);
     this.comboWindow = Math.max(0, this.comboWindow - dt);
-    if (this.comboWindow <= 0 && this.state === 'move') this.comboStep = 0;
+    if (this.comboWindow <= 0 && this.state === 'move') {
+      this.comboStep = 0;
+      this.queuedLightAttacks = 0;
+    }
     this.perfectCd = Math.max(0, this.perfectCd - dt);
     if (this.stamDelay <= 0 && this.state !== 'heavy') this.stam = clamp(this.stam + 36 * dt, 0, this.maxStam);
     this.t -= dt;
@@ -318,11 +323,20 @@ export class Player {
 
     if (this.state === 'dead') { this.updateTrail(dt); return; }
 
+    // A single TTL flag is sufficient for defensive actions, but it collapses
+    // rapid repeated ATK taps into one command. Preserve up to the two
+    // follow-ups needed to complete the authored three-hit light string.
+    if (this.state === 'light' && input.consume('light')) {
+      this.queuedLightAttacks = Math.min(2, this.queuedLightAttacks + 1);
+    }
+
     // state transitions
     if (this.state === 'move' || this.state === 'flask') {
+      const queuedLight = this.queuedLightAttacks > 0;
+      if (this.state === 'move' && queuedLight && this.stam < 12) this.queuedLightAttacks = 0;
       if (this.stam >= 20 && this.state !== 'flask' && input.consume('roll')) {
         this.state = 'roll'; this.t = 0.42;
-        this.comboStep = 0; this.comboWindow = 0;
+        this.comboStep = 0; this.comboWindow = 0; this.queuedLightAttacks = 0;
         const m = Math.hypot(ax.x, ax.y);
         this.rollDir = m > 0.1 ? Math.atan2(ax.y, ax.x) : this.facing;
         this.stam -= 20; this.stamDelay = 0.55;
@@ -330,7 +344,8 @@ export class Player {
         this.iframes = Math.max(this.iframes, this.rollIframes);
         game.audio.dodge(game.audioSpatial(this.x, this.y));
         game.burst(this.x, this.y, 8, '#8f8776', 120, 0.35, 3);
-      } else if (this.stam >= 12 && this.state !== 'flask' && input.consume('light')) {
+      } else if (this.stam >= 12 && this.state !== 'flask' && (queuedLight || input.consume('light'))) {
+        if (queuedLight) this.queuedLightAttacks--;
         const step = this.comboWindow > 0 ? this.comboStep : 0;
         this.comboStep = step;
         this.state = 'light'; this.t = step === 2 ? 0.44 : 0.32; this.attackHit = false;
@@ -341,9 +356,10 @@ export class Player {
         const lunge = 340 + step * 55;
         this.lungeVx = Math.cos(this.facing) * lunge; this.lungeVy = Math.sin(this.facing) * lunge;
         const spatial = game.audioSpatial(this.x, this.y);
-        if (step === 2) game.audio.swingHeavy(spatial); else game.audio.swing(step, spatial);
+        game.audio.swing(step, spatial);
       } else if (this.stam >= 26 && this.state !== 'flask' && input.consume('heavy')) {
         this.state = 'heavy'; this.t = 0.62; this.attackHit = false;
+        this.queuedLightAttacks = 0;
         this.stam -= 26; this.stamDelay = 0.7;
         const b = game.boss;
         if (b && b.hp > 0) this.facing = angTo(this.x, this.y, b.x, b.y);
@@ -466,7 +482,7 @@ export class Player {
       }
       return false;
     }
-    this.comboStep = 0; this.comboWindow = 0;
+    this.comboStep = 0; this.comboWindow = 0; this.queuedLightAttacks = 0;
     this.rollIframes = 0;
     dmg = Math.max(1, Math.round(dmg * game.mods.dmgTaken));
     this.hp -= dmg;
@@ -1030,7 +1046,7 @@ export class Boss {
     this.vx *= 0.2; this.vy *= 0.2;
   }
 
-  takeDamage(dmg: number, game: Game, fromX: number, fromY: number) {
+  takeDamage(dmg: number, game: Game, fromX: number, fromY: number, impact?: PlayerImpact) {
     if (game.state !== 'fight') return;
     if (this.state === 'dying' || this.state === 'spawn') return;
     const staggered = this.state === 'staggered';
@@ -1042,10 +1058,12 @@ export class Boss {
     game.hitstop = Math.max(game.hitstop, dmg > 20 ? 0.09 : 0.05);
     if (dmg > 20) game.zoomPunch = Math.max(game.zoomPunch, 0.045);
     game.shake(dmg > 20 ? 7 : 4, 0.2);
-    game.audio.hit(dmg > 20, game.audioSpatial(this.x, this.y), game.player.comboStep);
+    const heavyImpact = impact === 'heavy' || (impact === undefined && dmg > 20);
+    game.audio.hit(heavyImpact, game.audioSpatial(this.x, this.y), game.player.comboStep);
     const a = angTo(fromX, fromY, this.x, this.y);
     game.sparks(this.x - Math.cos(a) * this.r * 0.5, this.y - Math.sin(a) * this.r * 0.5, dmg > 20 ? 16 : 9);
-    game.addDamageNum(this.x + rand(-16, 16), this.y - this.r - 8, Math.round(final).toString(), dmg > 20 ? PAL.goldBright : PAL.parchment, dmg > 20 ? 26 : 19);
+    const damageColor = impact === 'finisher' ? PAL.spirit : dmg > 20 ? PAL.goldBright : PAL.parchment;
+    game.addDamageNum(this.x + rand(-16, 16), this.y - this.r - 8, Math.round(final).toString(), damageColor, dmg > 20 ? 26 : 19);
     if (this.hp <= 0) {
       this.hp = 0;
       game.onBossDeath();
@@ -2058,6 +2076,7 @@ export class Game {
     const p = this.player, b = this.boss;
     const step = p.comboStep;
     const finisher = !heavy && step === 2;
+    const impact: PlayerImpact = heavy ? 'heavy' : finisher ? 'finisher' : 'light';
     const range = heavy ? 95 : finisher ? 88 : 78;
     const arc = heavy ? 1.25 : finisher ? 1.3 : 1.05;
     const dmg = heavy ? 30 : finisher ? 24 : step === 1 ? 14 : 12;
@@ -2065,7 +2084,7 @@ export class Game {
     if (d < range + b.r) {
       const a = angTo(p.x, p.y, b.x, b.y);
       if (Math.abs(angDiff(p.facing, a)) < arc) {
-        b.takeDamage((heavy || finisher) ? dmg : dmg + Math.floor(rand(-2, 3)), this, p.x, p.y);
+        b.takeDamage((heavy || finisher) ? dmg : dmg + Math.floor(rand(-2, 3)), this, p.x, p.y, impact);
         if ((heavy || finisher) && b.state !== 'staggered') {
           const force = finisher ? 90 : 60;
           b.impulseVx += Math.cos(a) * force;
