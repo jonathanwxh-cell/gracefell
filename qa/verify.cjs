@@ -95,12 +95,48 @@ async function installAudioSampleRate(context) {
         await pg.keyboard.press('Enter');
         await pg.waitForTimeout(80);
         const semanticAfter = await pg.evaluate(() => ({ state: window.__game.state, muted: window.__game.audio.muted,
-          light: window.__game.input.hasBuffered('light'), roll: window.__game.input.hasBuffered('roll') }));
+          light: window.__game.input.hasBuffered('light'), roll: window.__game.input.hasBuffered('roll'),
+          confirmSequence: window.__game.input.confirmSequence }));
         step.semanticKeyboard = { before: semanticBefore, after: semanticAfter };
         if (semanticAfter.state !== 'title' || semanticAfter.muted === semanticBefore.muted || semanticAfter.light || semanticAfter.roll) {
           out.errors.push('desktop: semantic Sound control leaked into game input: ' + JSON.stringify(step.semanticKeyboard));
         }
         await pg.keyboard.press('Enter'); // restore sound for the audio checks
+
+        // Post-launch persona review alleged that a pointer activation of the
+        // semantic path controls could start the fight or shift the selected
+        // path again when Start was activated. Exercise pointer and keyboard
+        // ownership directly before accepting the title.
+        const moreOath = pg.getByRole('button', { name: 'More Oath' });
+        await moreOath.focus();
+        await moreOath.click();
+        await pg.waitForFunction(() => window.__game.grace === -1, null, { timeout: 1000 }).catch(() => {});
+        const afterPointerOath = await pg.evaluate(() => ({
+          state: window.__game.state,
+          grace: window.__game.grace,
+          label: document.querySelector('output[aria-label="Current trial"]')?.textContent,
+          confirmSequence: window.__game.input.confirmSequence,
+        }));
+        const moreGrace = pg.getByRole('button', { name: 'More Grace' });
+        await moreGrace.focus();
+        await pg.keyboard.press('Enter');
+        await pg.waitForFunction(() => window.__game.grace === -2, null, { timeout: 1000 }).catch(() => {});
+        const afterKeyboardGrace = await pg.evaluate(() => ({
+          state: window.__game.state,
+          grace: window.__game.grace,
+          label: document.querySelector('output[aria-label="Current trial"]')?.textContent,
+          confirmSequence: window.__game.input.confirmSequence,
+        }));
+        step.semanticPathOwnership = { afterPointerOath, afterKeyboardGrace };
+        if (afterPointerOath.state !== 'title' || afterPointerOath.grace !== -1
+          || afterPointerOath.label !== 'STEADIED -1'
+          || afterKeyboardGrace.state !== 'title' || afterKeyboardGrace.grace !== -2
+          || afterKeyboardGrace.label !== 'JOURNEY -2'
+          || afterPointerOath.confirmSequence !== semanticAfter.confirmSequence
+          || afterKeyboardGrace.confirmSequence !== semanticAfter.confirmSequence) {
+          out.errors.push('desktop: semantic path controls leaked into canvas confirmation: '
+            + JSON.stringify(step.semanticPathOwnership));
+        }
         await pg.locator('canvas').focus();
       }
       // canvas exists and draws
