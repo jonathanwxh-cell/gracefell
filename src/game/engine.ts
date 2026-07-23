@@ -65,10 +65,11 @@ interface Particle {
   shape: 'circle' | 'spark' | 'wisp';
 }
 interface DamageNum { x: number; y: number; vy: number; life: number; maxLife: number; text: string; color: string; size: number; }
-interface Projectile { x: number; y: number; vx: number; vy: number; r: number; dmg: number; life: number; hostile: boolean; hue: string; }
+interface Projectile { x: number; y: number; vx: number; vy: number; r: number; dmg: number; life: number; hostile: boolean; hue: string; source?: BossAttack; }
 interface RingWave { x: number; y: number; r: number; speed: number; thickness: number; dmg: number; maxR: number; hostile: boolean; hitDone: boolean; }
 interface Meteor { x: number; y: number; fuse: number; maxFuse: number; r: number; dmg: number; }
 type PlayerImpact = 'light' | 'finisher' | 'heavy';
+type DamageSource = BossAttack | 'unknown';
 
 // ------------------------------------------------------------------ input
 const KEYMAP: Record<string, string> = {
@@ -368,6 +369,7 @@ export class Player {
       } else if (this.flasks > 0 && this.hp < this.maxHp && this.state === 'move' && input.consume('flask')) {
         this.state = 'flask'; this.t = 1.0;
         this.flasks--;
+        game.flasksUsed++;
         game.audio.flask();
       }
     }
@@ -473,7 +475,7 @@ export class Player {
     return this.facing;
   }
 
-  takeDamage(dmg: number, sx: number, sy: number, game: Game): boolean {
+  takeDamage(dmg: number, sx: number, sy: number, game: Game, source: DamageSource = 'unknown'): boolean {
     if (game.state !== 'fight') return false;
     if (this.iframes > 0 || this.state === 'dead') {
       // perfect dodge: hit lands inside the early roll window
@@ -483,6 +485,8 @@ export class Player {
       return false;
     }
     this.comboStep = 0; this.comboWindow = 0; this.queuedLightAttacks = 0;
+    game.breakPlayerChain();
+    game.lastDamageSource = source;
     this.rollIframes = 0;
     dmg = Math.max(1, Math.round(dmg * game.mods.dmgTaken));
     this.hp -= dmg;
@@ -725,6 +729,10 @@ export class Boss {
   t = 1.6;
   attack: BossAttack = 'swipe';
   comboLeft = 0;
+  chainQueue: BossAttack[] = [];
+  chainStep = 0;
+  chainTotal = 0;
+  lastAttack: BossAttack | null = null;
   chargeDir = 0; chargeTime = 0;
   impulseVx = 0; impulseVy = 0; traceCount = 0;
   poise = 120; maxPoise = 120;
@@ -742,6 +750,8 @@ export class Boss {
   secondSwordDraw = 0;
 
   extraSpeed = 1; // set from Game.mods — the grace dial
+  recoveryMul = 1;
+  chainRank = 0;
   minTelegraph = 0;
   private currentWindup = 0;
   get speedMul() { return (this.phase >= 3 ? 1.42 : this.phase === 2 ? 1.28 : 1) * this.extraSpeed; }
@@ -820,7 +830,7 @@ export class Boss {
           });
           // hit check (body)
           if (dist(this.x, this.y, p.x, p.y) < this.r + p.r + 6) {
-            if (p.takeDamage(22, this.x, this.y, game)) { this.endStrike(0.75); break; }
+            if (p.takeDamage(22, this.x, this.y, game, 'charge')) { this.endStrike(0.75); break; }
           }
           const dc = Math.hypot(this.x, this.y);
           if (this.chargeTime <= 0 || dc > game.arenaR - this.r - 8) {
@@ -833,7 +843,7 @@ export class Boss {
         } else if (this.attack === 'swipe') {
           if (this.t <= 0) {
             // active frame
-            game.bossArcStrike(this.x, this.y, this.facing, 1.45, 108, 16);
+            game.bossArcStrike(this.x, this.y, this.facing, 1.45, 108, 16, 'swipe');
             this.swordAng = this.facing;
             this.comboLeft--;
             if (this.comboLeft > 0 && dToP < 190) {
@@ -843,12 +853,12 @@ export class Boss {
           }
         } else if (this.attack === 'slam') {
           if (this.t <= 0) {
-            game.bossSlam(this.x, this.y, 188, 26);
+            game.bossSlam(this.x, this.y, 188, 26, 'slam');
             this.endStrike(0.9 / this.speedMul);
           }
         } else if (this.attack === 'ring') {
           if (this.t <= 0) {
-            game.bossSlam(this.x, this.y, 150, 16);
+            game.bossSlam(this.x, this.y, 150, 16, 'ring');
             game.audio.ring(game.audioSpatial(this.x, this.y));
             game.rings.push({ x: this.x, y: this.y, r: 60, speed: 265, thickness: 26, dmg: 18, maxR: game.arenaR + 60, hostile: true, hitDone: false });
             if (this.phase >= 3) game.rings.push({ x: this.x, y: this.y, r: 10, speed: 205, thickness: 22, dmg: 14, maxR: game.arenaR + 60, hostile: true, hitDone: false });
@@ -866,6 +876,7 @@ export class Boss {
                 x: this.x + Math.cos(a) * (this.r + 8), y: this.y + Math.sin(a) * (this.r + 8),
                 vx: Math.cos(a) * 400, vy: Math.sin(a) * 400, r: 7, dmg: 11, life: 3, hostile: true,
                 hue: PAL.danger,
+                source: 'volley',
               });
             }
             game.audio.projectile(game.audioSpatial(this.x, this.y));
@@ -882,6 +893,7 @@ export class Boss {
                 x: this.x + Math.cos(a) * (this.r + 10), y: this.y + Math.sin(a) * (this.r + 10),
                 vx: Math.cos(a) * 335, vy: Math.sin(a) * 335, r: 7, dmg: 10, life: 3.2, hostile: true,
                 hue: PAL.danger,
+                source: 'spiral',
               });
             }
             this.spiralAng += 0.44;
@@ -896,7 +908,10 @@ export class Boss {
       case 'recover': {
         const recoverDecay = Math.pow(0.9, dt * 60);
         this.vx *= recoverDecay; this.vy *= recoverDecay;
-        if (this.t <= 0) { this.state = 'stalk'; this.t = rand(0.5, 1.1) / this.speedMul; }
+        if (this.t <= 0) {
+          this.state = 'stalk';
+          this.t = this.chainQueue.length > 0 ? 0.18 : rand(0.5, 1.1) / this.speedMul;
+        }
         break;
       }
       case 'staggered': {
@@ -911,6 +926,7 @@ export class Boss {
     if (this.phase === 1 && this.hp <= this.maxHp * 0.55 && !this.phaseRoarDone) {
       this.phaseRoarDone = true;
       this.phase = 2;
+      this.chainQueue = []; this.chainStep = 0; this.chainTotal = 0;
       this.state = 'windup'; this.attack = 'ring'; this.t = 1.1;
       this.currentWindup = 1.1;
       game.audio.setPhase(2);
@@ -926,6 +942,7 @@ export class Boss {
     } else if (this.phase === 2 && this.hp <= this.maxHp * 0.22 && !this.phase3Done) {
       this.phase3Done = true;
       this.phase = 3;
+      this.chainQueue = []; this.chainStep = 0; this.chainTotal = 0;
       this.secondSwordDraw = 0;
       this.state = 'windup'; this.attack = 'ring'; this.t = 1.2;
       this.currentWindup = 1.2;
@@ -964,22 +981,71 @@ export class Boss {
     game.clampArena(this);
   }
 
+  private attackEligible(attack: BossAttack, dToP: number) {
+    if (this.cooldowns[attack] > 0) return false;
+    if (attack === 'swipe') return dToP < 200;
+    if (attack === 'slam') return dToP < 300;
+    if (attack === 'charge') return dToP > 150;
+    if (attack === 'volley') return dToP > 130;
+    if (attack === 'meteor') return this.phase >= 2;
+    if (attack === 'ring') return this.phase >= 2 && dToP < 320;
+    return this.phase >= 3;
+  }
+
+  private authoredPacket(first: BossAttack): BossAttack[] {
+    if (this.chainRank <= 0) return [];
+    const routes: Partial<Record<BossAttack, BossAttack[]>> = {
+      volley: ['charge', 'swipe'],
+      charge: ['swipe', 'slam'],
+      swipe: ['slam', 'volley'],
+      slam: ['volley', 'charge'],
+    };
+    const route = routes[first] ?? [];
+    return route.slice(0, this.chainRank >= 3 ? 2 : 1);
+  }
+
   private chooseAttack(game: Game, dToP: number) {
-    const opts: { a: BossAttack; w: number }[] = [];
-    if (dToP < 150 && this.cooldowns.swipe <= 0) opts.push({ a: 'swipe', w: 5 });
-    if (dToP < 260 && this.cooldowns.slam <= 0) opts.push({ a: 'slam', w: 3 });
-    if (dToP > 220 && this.cooldowns.charge <= 0) opts.push({ a: 'charge', w: 4 });
-    if (dToP > 170 && this.cooldowns.volley <= 0) opts.push({ a: 'volley', w: 2.5 });
-    if (this.phase >= 2) {
-      if (this.cooldowns.meteor <= 0) opts.push({ a: 'meteor', w: 3.2 });
-      if (dToP < 320 && this.cooldowns.ring <= 0) opts.push({ a: 'ring', w: 2.4 });
+    let pick: BossAttack | undefined;
+    while (this.chainQueue.length > 0 && !pick) {
+      const candidate = this.chainQueue.shift()!;
+      if (this.attackEligible(candidate, dToP)) {
+        pick = candidate;
+        this.chainStep++;
+      }
     }
-    if (this.phase >= 3 && this.cooldowns.spiral <= 0) opts.push({ a: 'spiral', w: 3.6 });
-    if (opts.length === 0) { this.t = 0.25; return; }
-    let total = 0; for (const o of opts) total += o.w;
-    let roll = Math.random() * total;
-    let pick = opts[0].a;
-    for (const o of opts) { roll -= o.w; if (roll <= 0) { pick = o.a; break; } }
+
+    if (!pick) {
+      if (this.chainStep > 0) { this.chainStep = 0; this.chainTotal = 0; }
+      const opts: { a: BossAttack; w: number }[] = [];
+      const add = (a: BossAttack, w: number) => {
+        if (this.attackEligible(a, dToP)) opts.push({ a, w: a === this.lastAttack ? w * 0.2 : w });
+      };
+      add('swipe', 5);
+      add('slam', 3);
+      add('charge', 4);
+      add('volley', 2.5);
+      if (this.phase >= 2) {
+        add('meteor', 3.2);
+        add('ring', 2.4);
+      }
+      if (this.phase >= 3) add('spiral', 3.6);
+      if (opts.length === 0) { this.t = 0.25; return; }
+      let total = 0; for (const o of opts) total += o.w;
+      let roll = Math.random() * total;
+      pick = opts[0].a;
+      for (const o of opts) { roll -= o.w; if (roll <= 0) { pick = o.a; break; } }
+
+      this.chainStep = 1;
+      this.chainTotal = 1;
+      const packet = this.authoredPacket(pick);
+      const chainChance = 0.25 + this.chainRank * 0.15;
+      if (packet.length > 0 && Math.random() < chainChance) {
+        this.chainQueue = packet;
+        this.chainTotal = 1 + packet.length;
+      }
+    }
+
+    this.lastAttack = pick;
     this.attack = pick;
     this.state = 'windup';
     switch (pick) {
@@ -1042,7 +1108,7 @@ export class Boss {
   }
 
   private endStrike(recover: number) {
-    this.state = 'recover'; this.t = recover;
+    this.state = 'recover'; this.t = Math.max(0.28, recover * this.recoveryMul);
     this.vx *= 0.2; this.vy *= 0.2;
   }
 
@@ -1080,9 +1146,11 @@ export class Boss {
 
   private triggerStagger(game: Game) {
     if (game.mods.noStagger) { this.poise = this.maxPoise; return; }
+    this.chainQueue = []; this.chainStep = 0; this.chainTotal = 0;
     this.state = 'staggered'; this.t = game.mods.staggerDuration;
     this.poise = this.maxPoise;
     game.audio.stagger(game.audioSpatial(this.x, this.y));
+    game.onBossStaggered();
     game.goldFlash = 0.35;
     game.banner('STAGGERED', 'stagger');
     game.shake(8, 0.35);
@@ -1412,6 +1480,9 @@ export interface DifficultyMods {
   poiseMul: number;
   staggerDuration: number;
   noStagger: boolean;
+  clearTells: boolean;
+  chainRank: number;
+  recoveryMul: number;
 }
 
 export interface GameUiSnapshot {
@@ -1420,6 +1491,8 @@ export interface GameUiSnapshot {
   muted: boolean;
   grace: number;
   graceLabel: string;
+  graceSummary: string;
+  oathRank: number;
   shakeEnabled: boolean;
   flashReduced: boolean;
   hapticsEnabled: boolean;
@@ -1433,6 +1506,9 @@ export interface VictoryScore {
   attempt: number;
   damageDealt: number;
   woundsTaken: number;
+  perfectDodges?: number;
+  flasksUsed?: number;
+  oathRank?: number;
 }
 
 function isVictoryScore(value: unknown): value is VictoryScore {
@@ -1443,7 +1519,10 @@ function isVictoryScore(value: unknown): value is VictoryScore {
     && typeof score.trial === 'number' && score.trial >= -3 && score.trial <= 5
     && typeof score.attempt === 'number' && score.attempt >= 1
     && typeof score.damageDealt === 'number' && Number.isFinite(score.damageDealt) && score.damageDealt >= 0
-    && typeof score.woundsTaken === 'number' && score.woundsTaken >= 0;
+    && typeof score.woundsTaken === 'number' && score.woundsTaken >= 0
+    && (score.perfectDodges === undefined || (typeof score.perfectDodges === 'number' && score.perfectDodges >= 0))
+    && (score.flasksUsed === undefined || (typeof score.flasksUsed === 'number' && score.flasksUsed >= 0))
+    && (score.oathRank === undefined || (typeof score.oathRank === 'number' && score.oathRank >= 0 && score.oathRank <= 5));
 }
 
 export function reducedMotionPreferred(): boolean {
@@ -1489,6 +1568,11 @@ export class Game {
   dpr = 1; w = 0; h = 0;
   // stats
   attempts = 1; fightTime = 0; damageDealt = 0; hitsTaken = 0;
+  perfectDodges = 0; flasksUsed = 0;
+  playerChainHits = 0; playerChainT = 0; playerChainFinished = false;
+  lastDamageSource: DamageSource = 'unknown';
+  tutorialStage: 'move' | 'roll' | 'poise' | 'stagger' | 'done' = 'move';
+  tutorialT = 0;
   floorStones: { x: number; y: number; r: number; s: number }[] = [];
   ambientT = 0;
   hintT = 0;
@@ -1514,12 +1598,12 @@ export class Game {
   lastScore: VictoryScore | null = null;
   bestScores: Record<string, VictoryScore> = {};
   // accessibility / difficulty — one dial, -3 (aided) .. +5 (vowed)
-  grace = 0;
+  grace = -2;
   shakeEnabled = !reducedMotionPreferred();
   flashReduced = reducedMotionPreferred();
   hapticsEnabled = true;
   safeBottom = 0; safeRight = 0;
-  static SAVE_VERSION = 3;
+  static SAVE_VERSION = 4;
   static VICTORY_INPUT_DELAY = 4.5;
   private previousTouchBridge?: (event: TouchEvent, phase: string) => void;
   private previousGame?: Game;
@@ -1561,7 +1645,11 @@ export class Game {
     }
     // saved progress
     try {
-      const sv = JSON.parse(localStorage.getItem('gracefell') || '{}');
+      const rawSave = localStorage.getItem('gracefell');
+      const sv = JSON.parse(rawSave || '{}');
+      // New saves begin on Journey. A legacy save without a recorded trial
+      // came from the old Measured-only game and must remain at grace 0.
+      if (rawSave && typeof sv.grace !== 'number') this.grace = 0;
       // v1 saves had a single bestTime and no settings; migrate forward.
       if (typeof sv.wins === 'number') this.wins = sv.wins;
       if (typeof sv.attempts === 'number') this.attempts = Math.max(1, sv.attempts);
@@ -1581,6 +1669,7 @@ export class Game {
       if (typeof sv.shakeEnabled === 'boolean') this.shakeEnabled = sv.shakeEnabled;
       if (typeof sv.flashReduced === 'boolean') this.flashReduced = sv.flashReduced;
       if (typeof sv.hapticsEnabled === 'boolean') this.hapticsEnabled = sv.hapticsEnabled;
+      if (sv.tutorialComplete === true) this.tutorialStage = 'done';
     } catch { /* first run / private mode */ }
     this.buildFloor();
     this.startLoop();
@@ -1731,6 +1820,11 @@ export class Game {
       poiseMul: g >= 4 ? 1.7 : g >= 3 ? 1.35 : 1,
       staggerDuration: g >= 4 ? 1.25 : g >= 3 ? 1.45 : 1.7,
       noStagger: g >= 5,
+      clearTells: g <= -2,
+      // Positive trials are Oaths: the established numerical curve remains,
+      // while authored chains and recovery pressure add new decisions.
+      chainRank: g >= 5 ? 3 : g >= 3 ? 2 : g >= 1 ? 1 : 0,
+      recoveryMul: 1 + aid * 0.1 - vow * 0.15,
     };
   }
 
@@ -1745,10 +1839,21 @@ export class Game {
   graceLabel(g = this.grace): string {
     if (g === 0) return 'MEASURED';
     const names: Record<number, string> = {
-      [-3]: 'UNBURDENED', [-2]: 'SHELTERED', [-1]: 'STEADIED',
+      [-3]: 'UNBURDENED', [-2]: 'JOURNEY', [-1]: 'STEADIED',
       1: 'HASTE', 2: 'FAMINE', 3: 'IRON', 4: 'FRAILTY', 5: 'FORSAKEN',
     };
     return `${names[g] ?? ''} ${g > 0 ? '+' : ''}${g}`.trim();
+  }
+
+  graceSummary(g = this.grace): string {
+    const m = this.difficultyForGrace(g);
+    if (g === -3) return 'deep grace · 22% slower · 45% softer · clearest tells';
+    if (g === -2) return 'recommended · 15% slower · 30% softer · 4 flasks';
+    if (g === -1) return 'gentle · 7% slower · 15% softer · wider dodge';
+    if (g === 0) return 'measured · canonical timing · damage · stagger';
+    const chain = m.chainRank === 1 ? '2-beat chains' : m.chainRank === 2 ? 'stronger chains' : '3-beat chains';
+    if (g === 5) return `oath V · ${chain} · 1 flask · ironbound`;
+    return `oath ${['', 'I', 'II', 'III', 'IV'][g]} · ${Math.round((m.bossSpeed - 1) * 100)}% faster · ${chain}`;
   }
 
   trialBest(g = this.grace): number {
@@ -1774,6 +1879,7 @@ export class Game {
         attempts: this.attempts, muted: this.audio.muted,
         grace: this.grace, shakeEnabled: this.shakeEnabled, flashReduced: this.flashReduced,
         hapticsEnabled: this.hapticsEnabled,
+        tutorialComplete: this.tutorialStage === 'done',
       }));
     } catch { /* ignore */ }
   }
@@ -1819,6 +1925,8 @@ export class Game {
       muted: this.audio.muted,
       grace: this.grace,
       graceLabel: this.graceLabel(),
+      graceSummary: this.graceSummary(),
+      oathRank: this.difficultyForGrace().chainRank,
       shakeEnabled: this.shakeEnabled,
       flashReduced: this.flashReduced,
       hapticsEnabled: this.hapticsEnabled,
@@ -2072,6 +2180,50 @@ export class Game {
   }
 
   // ------------------------------------------------------------ combat glue
+  breakPlayerChain() {
+    this.playerChainHits = 0;
+    this.playerChainT = 0;
+    this.playerChainFinished = false;
+  }
+
+  private registerPlayerChain(step: number) {
+    if (step === 0 || this.playerChainT <= 0) this.playerChainHits = 1;
+    else if (step === 1 && this.playerChainHits === 1) this.playerChainHits = 2;
+    else if (step === 2 && this.playerChainHits === 2) this.playerChainHits = 3;
+    else this.playerChainHits = 1;
+    this.playerChainFinished = this.playerChainHits === 3;
+    this.playerChainT = this.playerChainFinished ? 1.45 : 1.05;
+  }
+
+  onBossStaggered() {
+    if (this.tutorialStage !== 'done') {
+      this.tutorialStage = 'stagger';
+      this.tutorialT = 3.2;
+    }
+  }
+
+  tutorialMessage(): string {
+    if (this.tutorialT <= 0 || this.tutorialStage === 'done') return '';
+    if (this.tutorialStage === 'move') return this.input.isTouch ? 'MOVE · drag the left side' : 'MOVE · WASD or arrows';
+    if (this.tutorialStage === 'roll') return 'ROLL THROUGH THE BLADE';
+    if (this.tutorialStage === 'poise') return 'PERFECT · DODGES BREAK POISE';
+    return 'STAGGERED · STRIKE NOW';
+  }
+
+  deathHint(source = this.lastDamageSource): string {
+    const hints: Record<DamageSource, string> = {
+      swipe: 'roll through the blade, not away from its edge',
+      slam: 'leave the sovereign before the ground breaks',
+      charge: 'step aside after the rising charge cry',
+      volley: 'the halo empties before the volley',
+      meteor: 'leave the closing mark before it seals',
+      ring: 'cross the bright edge with ROLL',
+      spiral: 'follow one safe lane; do not chase every opening',
+      unknown: 'watch the tell, answer once, then punish',
+    };
+    return hints[source];
+  }
+
   playerStrike(heavy: boolean) {
     const p = this.player, b = this.boss;
     const step = p.comboStep;
@@ -2081,10 +2233,20 @@ export class Game {
     const arc = heavy ? 1.25 : finisher ? 1.3 : 1.05;
     const dmg = heavy ? 30 : finisher ? 24 : step === 1 ? 14 : 12;
     const d = dist(p.x, p.y, b.x, b.y);
+    let connected = false;
+    if (heavy) this.breakPlayerChain();
     if (d < range + b.r) {
       const a = angTo(p.x, p.y, b.x, b.y);
       if (Math.abs(angDiff(p.facing, a)) < arc) {
+        const punishedStagger = b.state === 'staggered';
         b.takeDamage((heavy || finisher) ? dmg : dmg + Math.floor(rand(-2, 3)), this, p.x, p.y, impact);
+        connected = true;
+        if (!heavy) this.registerPlayerChain(step);
+        if (punishedStagger && this.tutorialStage === 'stagger') {
+          this.tutorialStage = 'done';
+          this.tutorialT = 0;
+          this.persist();
+        }
         if ((heavy || finisher) && b.state !== 'staggered') {
           const force = finisher ? 90 : 60;
           b.impulseVx += Math.cos(a) * force;
@@ -2093,10 +2255,16 @@ export class Game {
         if (finisher) { this.sparks(b.x, b.y, 10); this.shake(5, 0.2); }
       }
     }
+    if (!heavy && !connected) this.breakPlayerChain();
   }
   onPerfectDodge() {
     const p = this.player;
     p.perfectCd = 0.8;
+    this.perfectDodges++;
+    if (this.tutorialStage !== 'done') {
+      this.tutorialStage = 'poise';
+      this.tutorialT = 2.6;
+    }
     p.stam = clamp(p.stam + 30, 0, p.maxStam);
     this.slowT = 0.34; this.timeScale = 0.25;
     this.goldFlash = Math.max(this.goldFlash, 0.28);
@@ -2106,15 +2274,15 @@ export class Game {
     this.sparks(p.x, p.y, 14);
     this.boss.applyPoise(16, this);
   }
-  bossArcStrike(x: number, y: number, facing: number, arc: number, range: number, dmg: number) {
+  bossArcStrike(x: number, y: number, facing: number, arc: number, range: number, dmg: number, source: DamageSource = 'swipe') {
     const p = this.player;
     const d = dist(x, y, p.x, p.y);
     this.sparks(x + Math.cos(facing) * range * 0.7, y + Math.sin(facing) * range * 0.7, 6);
     if (d < range + p.r && Math.abs(angDiff(facing, angTo(x, y, p.x, p.y))) < arc) {
-      p.takeDamage(dmg, x, y, this);
+      p.takeDamage(dmg, x, y, this, source);
     }
   }
-  bossSlam(x: number, y: number, r: number, dmg: number) {
+  bossSlam(x: number, y: number, r: number, dmg: number, source: DamageSource = 'slam') {
     this.audio.slam(this.audioSpatial(x, y));
     this.shake(16, 0.5);
     this.addScorch(x, y, r * 0.55, 'rgba(10,6,3,0.85)', 0.32, 7);
@@ -2124,7 +2292,7 @@ export class Game {
     // shockwave ring visual (non-damaging)
     this.rings.push({ x, y, r: 30, speed: 420, thickness: 18, dmg: 0, maxR: r + 40, hostile: false, hitDone: true });
     const p = this.player;
-    if (dist(x, y, p.x, p.y) < r + p.r * 0.3) p.takeDamage(dmg, x, y, this);
+    if (dist(x, y, p.x, p.y) < r + p.r * 0.3) p.takeDamage(dmg, x, y, this, source);
   }
 
   onPlayerDeath() {
@@ -2169,9 +2337,14 @@ export class Game {
       attempt: this.attempts,
       damageDealt: Math.round(this.damageDealt),
       woundsTaken: this.hitsTaken,
+      perfectDodges: this.perfectDodges,
+      flasksUsed: this.flasksUsed,
+      oathRank: this.trialMods?.chainRank ?? 0,
     };
     this.lastScore = score;
     if (this.newRecord || !this.bestScores[key]) this.bestScores[key] = score;
+    this.tutorialStage = 'done';
+    this.tutorialT = 0;
     this.persist();
   }
 
@@ -2192,6 +2365,8 @@ export class Game {
     const m = this.difficultyForGrace(this.grace);
     this.trialMods = { ...m };
     this.boss.extraSpeed = m.bossSpeed;
+    this.boss.recoveryMul = m.recoveryMul;
+    this.boss.chainRank = m.chainRank;
     this.boss.maxPoise = Math.round(120 * m.poiseMul);
     this.boss.poise = this.boss.maxPoise;
     this.boss.minTelegraph = this.input.isTouch ? 0.3 : 0;
@@ -2201,11 +2376,18 @@ export class Game {
     this.projectiles = []; this.rings = []; this.meteors = [];
     this.particles = []; this.dmgNums = [];
     this.fightTime = 0; this.damageDealt = 0; this.hitsTaken = 0;
+    this.perfectDodges = 0; this.flasksUsed = 0;
+    this.breakPlayerChain();
+    this.lastDamageSource = 'unknown';
     this.hitstop = 0; this.timeScale = 1; this.slowT = 0;
     this.redFlash = 0; this.goldFlash = 0; this.bannerT = 0;
     this.audio.setPhase(1);
     this.bossBarFill = 0;
-    this.hintT = 9;
+    this.hintT = 4;
+    if (this.tutorialStage !== 'done') {
+      this.tutorialStage = 'move';
+      this.tutorialT = 4.5;
+    }
     if (this.scorchCtx && this.scorchCanvas) {
       this.scorchCtx.save();
       this.scorchCtx.setTransform(1, 0, 0, 1, 0, 0);
@@ -2258,7 +2440,7 @@ export class Game {
     const gap = this.input.isTouch ? 44 : Math.max(30, Math.min(38, this.h * 0.045));
     const baseY = this.h * (this.input.isTouch ? 0.72 : 0.70) - (rowCount - 3) * gap * 0.5;
     const rows = [
-      { id: 'grace', y: baseY, label: 'TRIAL', value: this.graceLabel() },
+      { id: 'grace', y: baseY, label: 'PATH', value: this.graceLabel() },
       { id: 'shake', y: baseY + gap, label: 'SCREEN SHAKE', value: this.shakeEnabled ? 'on' : 'off' },
       { id: 'flash', y: baseY + gap * 2, label: 'FLASHES', value: this.flashReduced ? 'reduced' : 'full' },
     ];
@@ -2323,6 +2505,30 @@ export class Game {
     return ate;
   }
 
+  deathGraceRect() {
+    const width = Math.min(300, this.w - 40);
+    return { x: (this.w - width) / 2, y: this.h * 0.66, width, height: 38 };
+  }
+
+  private handleDeathGraceInput(): boolean {
+    if (this.attempts < 2 || this.grace <= -3) return false;
+    const rect = this.deathGraceRect();
+    const tapped = this.input.taps.some((tap) => (
+      tap.x >= rect.x && tap.x <= rect.x + rect.width
+      && tap.y >= rect.y && tap.y <= rect.y + rect.height
+    ));
+    const keyed = this.input.consume('left');
+    if (!tapped && !keyed) return false;
+    this.setGrace(this.grace - 1);
+    // A touch on the offer is also a confirm gesture. Own it here so it
+    // cannot immediately restart behind the newly selected Grace.
+    this.terminalConfirmSequence = this.input.confirmSequence;
+    this.input.consume('confirm');
+    this.audio.ui();
+    this.vibrate(12);
+    return true;
+  }
+
   // ------------------------------------------------------------ touch buttons
   private handleTouch(e: TouchEvent, phase: string) {
     if (!this.input.isTouch) return;
@@ -2368,6 +2574,9 @@ export class Game {
 
     this.time += dt;
     this.stateT += dt;
+    this.playerChainT = Math.max(0, this.playerChainT - dt);
+    if (this.playerChainT <= 0 && this.playerChainHits > 0) this.breakPlayerChain();
+    this.tutorialT = Math.max(0, this.tutorialT - dt);
 
     // global state transitions
     if (this.state === 'title') {
@@ -2389,7 +2598,8 @@ export class Game {
         if (this.paused) { this.input.endFrame(); return; }
       }
     } else if (this.state === 'dead') {
-      if (this.stateT > 1.4 && this.input.confirmSequence > this.terminalConfirmSequence) {
+      const receivedGrace = this.handleDeathGraceInput();
+      if (!receivedGrace && this.stateT > 1.4 && this.input.confirmSequence > this.terminalConfirmSequence) {
         this.input.consume('confirm');
         this.attempts++;
         this.resetFight();
@@ -2417,6 +2627,16 @@ export class Game {
     if (fighting) {
       if (this.state === 'fight') this.fightTime += dt;
       this.player.update(dt, this.input, this);
+      if (
+        this.tutorialStage === 'move'
+        && (
+          (this.input.joyActive && Math.hypot(this.input.joyX, this.input.joyY) > 0.12)
+          || this.input.held.up || this.input.held.down || this.input.held.left || this.input.held.right
+        )
+      ) {
+        this.tutorialStage = 'roll';
+        this.tutorialT = 6;
+      }
       if (this.boss.hp > 0) this.boss.update(dt, this);
       this.audio.updateCombatState(
         this.player.hp / Math.max(1, this.player.maxHp),
@@ -2508,7 +2728,7 @@ export class Game {
         });
       }
       if (pr.hostile && dist(pr.x, pr.y, p.x, p.y) < pr.r + p.r) {
-        if (p.takeDamage(pr.dmg, pr.x - pr.vx * 0.1, pr.y - pr.vy * 0.1, this)) pr.life = 0;
+        if (p.takeDamage(pr.dmg, pr.x - pr.vx * 0.1, pr.y - pr.vy * 0.1, this, pr.source ?? 'volley')) pr.life = 0;
       }
       if (Math.hypot(pr.x, pr.y) > this.arenaR + 40) pr.life = 0;
     }
@@ -2522,7 +2742,7 @@ export class Game {
       if (rg.hostile && !rg.hitDone && rg.dmg > 0) {
         const d = dist(rg.x, rg.y, p.x, p.y);
         if (Math.abs(d - rg.r) < rg.thickness / 2 + p.r * 0.6) {
-          if (p.takeDamage(rg.dmg, rg.x, rg.y, this)) rg.hitDone = true;
+          if (p.takeDamage(rg.dmg, rg.x, rg.y, this, 'ring')) rg.hitDone = true;
           else if (p.iframes > 0) rg.hitDone = true; // dodged through
         }
       }
@@ -2541,7 +2761,7 @@ export class Game {
         this.addScorch(m.x, m.y, m.r * 0.32, 'rgba(120,45,15,0.8)', 0.3);
         this.burst(m.x, m.y, 26, PAL.amber, 300, 0.7, 5);
         this.burst(m.x, m.y, 12, '#6b5a41', 220, 0.6, 6);
-        if (dist(m.x, m.y, p.x, p.y) < m.r + p.r * 0.3) p.takeDamage(m.dmg, m.x, m.y, this);
+        if (dist(m.x, m.y, p.x, p.y) < m.r + p.r * 0.3) p.takeDamage(m.dmg, m.x, m.y, this, 'meteor');
       }
     }
     this.meteors = this.meteors.filter((m) => m.fuse > 0);
@@ -2924,11 +3144,62 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
   }
   ctx.restore();
 
+  // Transient teaching and player-chain feedback stay above the combat
+  // centerline so they never cover Malakar or the touch cluster.
+  const rite = this.tutorialMessage();
+  if (rite) {
+    const y = this.input.isTouch ? 116 : 84;
+    const width = Math.min(this.w - 32, 330);
+    ctx.fillStyle = 'rgba(8,6,4,0.84)';
+    ctx.fillRect((this.w - width) / 2, y - 18, width, 30);
+    ctx.strokeStyle = 'rgba(188,215,255,0.52)';
+    ctx.strokeRect((this.w - width) / 2, y - 18, width, 30);
+    ctx.textAlign = 'center';
+    ctx.font = body(this.input.isTouch ? 12 : 13, 750);
+    ctx.fillStyle = PAL.spirit;
+    ctx.fillText(rite, this.w / 2, y + 2);
+  }
+
+  if (this.playerChainHits > 0 && this.playerChainT > 0) {
+    const y = this.input.isTouch ? 158 : 120;
+    const filled = '\u25c6'.repeat(this.playerChainHits);
+    const empty = '\u25c7'.repeat(Math.max(0, 3 - this.playerChainHits));
+    ctx.globalAlpha = clamp(this.playerChainT / 0.28, 0, 1);
+    ctx.textAlign = 'center';
+    ctx.font = serif(this.playerChainFinished ? 17 : 14, 750);
+    ctx.fillStyle = this.playerChainFinished ? PAL.spirit : PAL.parchment;
+    ctx.shadowColor = this.playerChainFinished ? 'rgba(188,215,255,0.7)' : 'rgba(0,0,0,0.8)';
+    ctx.shadowBlur = this.playerChainFinished ? 14 : 6;
+    ctx.fillText(
+      `${this.playerChainFinished ? 'LIGHT FINISHER' : `CHAIN ${this.playerChainHits}/3`}  ${filled}${empty}`,
+      this.w / 2,
+      y,
+    );
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+  }
+
   // ---- boss bar (bottom center)
   if (this.boss.hp > 0) {
     const bw = clamp(this.w * 0.62, 280, 760);
     const bx = (this.w - bw) / 2;
     const by = this.h - (this.input.isTouch ? 248 : 64);
+    const attackLabels: Record<BossAttack, string> = {
+      swipe: 'BLADE', slam: 'GROUND BREAK', charge: 'CHARGE',
+      volley: 'HALO VOLLEY', meteor: 'METEORS', ring: 'RING', spiral: 'SPIRAL',
+    };
+    if (this.mods.clearTells && this.boss.state === 'windup') {
+      ctx.textAlign = 'center';
+      ctx.font = body(11, 800);
+      ctx.fillStyle = PAL.spirit;
+      ctx.fillText(`READ \u00b7 ${attackLabels[this.boss.attack]}`, this.w / 2, by - 38);
+    }
+    if (this.boss.chainTotal > 1 && this.boss.chainStep > 0 && this.boss.state !== 'staggered') {
+      ctx.textAlign = 'center';
+      ctx.font = body(10, 800);
+      ctx.fillStyle = PAL.ember;
+      ctx.fillText(`OATH CHAIN  ${this.boss.chainStep}/${this.boss.chainTotal}`, this.w / 2, by - 24);
+    }
     ctx.textAlign = 'left';
     ctx.fillStyle = PAL.parchment;
     ctx.shadowColor = 'rgba(0,0,0,0.9)';
@@ -3191,6 +3462,9 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
       : 'WASD move \u00b7 SPACE roll \u00b7 J slash \u00b7 K heavy \u00b7 F flask',
     cx, this.h * (this.input.isTouch ? 0.64 : 0.655),
   );
+  ctx.font = body(11, 650);
+  ctx.fillStyle = this.grace < 0 ? PAL.spirit : this.grace > 0 ? PAL.ember : PAL.goldBright;
+  ctx.fillText(this.graceSummary(), cx, this.h * (this.input.isTouch ? 0.668 : 0.68));
   const selectedBest = this.trialBest();
   if (this.wins > 0 || selectedBest > 0) {
     ctx.font = body(15, 500);
@@ -3204,7 +3478,7 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
   }
   ctx.font = body(13, 400);
   ctx.fillStyle = 'rgba(184,170,138,0.78)';
-  ctx.fillText('headphones advised \u00b7 the sovereign does not forgive', cx, this.h - 26);
+  ctx.fillText('the sovereign does not forgive \u00b7 grace answers', cx, this.h - 26);
 };
 
 (Game.prototype as any).drawIntro = function drawIntro(this: Game, ctx: CanvasRenderingContext2D) {
@@ -3254,12 +3528,31 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
   ctx.font = body(18, 500);
   ctx.fillStyle = PAL.parchmentDim;
   const bossPct = Math.max(0, Math.ceil((this.boss.hp / this.boss.maxHp) * 100));
-  ctx.fillText(`attempt ${this.attempts}  \u00b7  the sovereign stood at ${bossPct}%`, this.w / 2, this.h * 0.44 + size * 0.7);
+  const resultY = this.h * 0.44 + size * 0.7;
+  ctx.fillText(`attempt ${this.attempts}  \u00b7  the sovereign stood at ${bossPct}%`, this.w / 2, resultY);
+  ctx.font = body(this.w < 520 ? 12 : 14, 650);
+  ctx.fillStyle = PAL.spirit;
+  ctx.fillText(this.deathHint(), this.w / 2, resultY + 27);
   if (t > 1.6) {
     ctx.globalAlpha = a * (0.55 + Math.sin(this.time * 3) * 0.4);
     ctx.font = serif(17, 600);
     ctx.fillStyle = PAL.goldBright;
-    ctx.fillText(this.input.isTouch ? 'touch to rise again' : 'click or press Enter to rise again', this.w / 2, this.h * 0.44 + size * 0.7 + 46);
+    ctx.fillText(this.input.isTouch ? 'touch to rise again' : 'click or press Enter to rise again', this.w / 2, resultY + 62);
+  }
+  if (this.attempts >= 2 && this.grace > -3) {
+    const rect = this.deathGraceRect();
+    ctx.globalAlpha = a;
+    ctx.fillStyle = 'rgba(8,6,4,0.82)';
+    ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
+    ctx.strokeStyle = 'rgba(188,215,255,0.58)';
+    ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
+    ctx.font = body(12, 750);
+    ctx.fillStyle = PAL.spirit;
+    ctx.fillText(
+      `${this.input.isTouch ? 'tap' : '\u2190'} RECEIVE GRACE  \u00b7  ${this.graceLabel(this.grace - 1)}`,
+      this.w / 2,
+      rect.y + 24,
+    );
   }
   ctx.globalAlpha = 1;
 };
@@ -3314,10 +3607,12 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
   const bm = Math.floor(bestForTrial / 60), bs2 = Math.floor(bestForTrial % 60);
   const stats = [
     `trial \u2014 ${this.graceLabel(this.graceAtStart)}`,
+    ...(this.graceAtStart > 0 ? [`oath \u2014 ${['', 'I', 'II', 'III', 'IV', 'V'][this.graceAtStart]}`] : []),
     `time \u2014 ${mins}:${secs.toString().padStart(2, '0')}${this.newRecord ? '  \u2726 new record' : `   (best ${bm}:${bs2.toString().padStart(2, '0')})`}`,
     `attempts \u2014 ${this.attempts}`,
     `damage dealt \u2014 ${Math.round(this.damageDealt)}`,
     `wounds taken \u2014 ${this.hitsTaken}`,
+    `execution \u2014 ${this.perfectDodges} perfect \u00b7 ${this.flasksUsed} flask${this.flasksUsed === 1 ? '' : 's'}`,
   ];
   stats.forEach((s, i) => ctx.fillText(s, this.w / 2, this.h * 0.4 + size * 0.9 + 62 + i * 26));
   const footerY = this.h * 0.4 + size * 0.9 + 62 + stats.length * 26 + 4;
