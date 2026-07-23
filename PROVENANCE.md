@@ -37,6 +37,7 @@ Newest last. One row per pass. A "pass" = one continuous working session by one 
 | v2.11 | 2026-07-23 | Codex + live user panel | GPT-5 / Codex Desktop | @jonathanwxh-cell | Published partial procedural interpretations of the selected Kimi-backed #10/#14 concepts, verified production, ran mobile/desktop/accessibility personas, fixed the semantic Start focus trap, and added durable local/CI/public evidence; graphics issue closure was later deferred |
 | v2.11-doc1 | 2026-07-23 | Codex attribution correction | GPT-5 / Codex Desktop | @jonathanwxh-cell | Clarified that Kimi supplied six concept images and briefs while the shipped Canvas 2D work only partially translates #10/#14; reopened graphics issues #10–#15 so final visual acceptance and closure can happen later |
 | v2.11-doc2 | 2026-07-23 | Codex issue closeout | GPT-5 / Codex Desktop | @jonathanwxh-cell | Closed graphics issues at the owner's request with attribution intact: #10/#14 completed as shipped partial interpretations; #11/#12/#13/#15 not planned as unselected alternatives |
+| v2.11.1 | 2026-07-23 | Codex | GPT-5 / Codex Desktop | @jonathanwxh-cell | Persisted complete boss-defeat scorecards in save schema v3, added a visible saved-state confirmation, blocked queued victory skips behind a 4.5-second hold, slowed the replay pulse, and expanded desktop/touch regression and screenshot evidence |
 
 ---
 

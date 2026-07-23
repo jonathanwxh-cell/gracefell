@@ -849,3 +849,39 @@ closure records product disposition, not full raster fidelity.
 - Final graphics issue closure is no longer deferred.
 - #10/#14 are completed; #11/#12/#13/#15 are not planned.
 - No runtime code, asset, gameplay, balance, audio, bundle, or deployment behavior changed.
+
+## v2.11.1 — Codex (GPT-5), "let the victory land" (2026-07-23)
+
+The boss-defeat screen showed a grade and run statistics, but save schema v2 only persisted wins
+and best times. The complete scorecard disappeared on reload. The replay gate also accepted any
+confirmation newer than the boss-death snapshot after a short delay, so a celebratory second tap
+made during the reveal could remain queued and skip the result as soon as the lock expired.
+
+Save schema v3 adds `lastScore` plus `bestScores[trial]`. Each scorecard preserves grade, time,
+trial, attempt, damage dealt, and wounds taken. `onBossDeath()` constructs and persists the
+scorecard synchronously with the win, before the first victory frame. Legacy v1/v2 saves still
+load; they simply begin without a scorecard until the next victory.
+
+Victory now owns input for 4.5 simulation seconds. Confirmations made during that hold are consumed
+and advance the terminal sequence, so they cannot trigger later. The replay prompt appears only
+after the hold and requires a fresh input. Its alpha now moves between `0.64` and `0.88` on an
+approximately 5.5-second cycle instead of nearly disappearing on the previous faster pulse.
+`SCORE SAVED` stays stable beneath the result, and the title remembers the last saved grade.
+
+### Validation
+
+- the scorecard exists in localStorage at `stateT=0`, before the reveal;
+- the last score and per-trial best score reload through a new `Game` instance;
+- a confirmation at `VICTORY_INPUT_DELAY - 0.4` is discarded and the state remains victory after
+  the delay passes;
+- a fresh post-prompt click starts the next intro;
+- desktop and `390x844` true-touch victory screenshots keep the score and replay prompt in bounds;
+- the full gate retains v1 migration, per-trial records, terminal trade, resurrection, and
+  semantic control coverage.
+
+### Changed from v2.11
+
+- Save schema changes from v2 to v3 with backward-compatible scorecard fields.
+- Victory result pacing and replay input ownership change.
+- Combat, scoring/grade rules, difficulty, audio, character rendering, collision, and saves from
+  existing players remain otherwise unchanged.

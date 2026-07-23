@@ -8,12 +8,11 @@ rules are all decided by what works one-handed on a 390px screen.
 
 **Play it: [gracefell.alyoechosys.dev](https://gracefell.alyoechosys.dev)**
 
-Current gameplay release: **v2.11**. The Kite-Veil Penitent and Fallen Blade-Saint make combat
-state, facing, volley ammunition, stagger, and phase escalation readable from silhouette without
-adding runtime art assets. The design sources, implementation decisions, mobile/desktop evidence,
-and release acceptance are preserved in
-[`docs/releases/v2.11.md`](docs/releases/v2.11.md). The prior difficulty-integrity record remains
-available in [`docs/releases/v2.10.md`](docs/releases/v2.10.md).
+Current gameplay release: **v2.11.1**. Boss defeat now saves the complete victory scorecard
+(grade, trial, time, attempt, damage, and wounds) immediately, holds the result screen against
+queued taps, and replaces the fast retry flash with a slow shallow pulse. The fix and acceptance
+record are preserved in [`docs/releases/v2.11.1.md`](docs/releases/v2.11.1.md). The v2.11
+character design record remains available in [`docs/releases/v2.11.md`](docs/releases/v2.11.md).
 
 Zero runtime art assets, one generated music track. Every character silhouette, sword, halo blade,
 stone in the floor, ember, cape, and combat cue is generated at runtime from code — canvas 2D for
@@ -33,7 +32,7 @@ The sovereign has an audio language, not one generic warning: swipes whistle, ch
 
 **v2 — extended by Claude (Opus 4.8).** Combat depth, a third phase, a full rendering pass, persistence, and a headless verification gate. Details in [DESIGN.md](DESIGN.md).
 
-**v2.4–v2.11 — audio, responsiveness, combat integrity, and character readability extended by
+**v2.4–v2.11.1 — audio, responsiveness, combat integrity, character readability, and victory persistence extended by
 Codex (GPT-5).** Attack-specific procedural cues, spatial mix protection, the MiniMax-generated
 score, mobile/accessibility hardening, trustworthy combat and retry behavior, the verified
 nine-level difficulty pass, and the production Kite-Veil/Blade-Saint silhouettes. The v2.11 player
@@ -236,6 +235,17 @@ silently paused behind a disabled button.
 The complete design-house process, acceptance criteria, automated assertions, performance
 measurements, attribution, deployment evidence, and post-launch user playtests are recorded in the
 [`v2.11 release record`](docs/releases/v2.11.md).
+
+## Fixed by Codex — v2.11.1 victory score and pacing
+
+Defeating Malakar now persists a version-three scorecard at the same moment victory is awarded.
+The last result and the best-time scorecard for each trial survive reloads, while the existing
+per-trial best-time and win count remain backward compatible.
+
+The victory screen says **SCORE SAVED**, stays in control for at least 4.5 simulation seconds, and
+discards celebratory double-clicks made during the reveal. Once the replay prompt appears it
+requires a fresh input and breathes slowly instead of flashing rapidly. The title remembers the
+last saved grade.
 
 ## Running it
 

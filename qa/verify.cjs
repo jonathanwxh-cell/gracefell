@@ -257,8 +257,33 @@ async function installAudioSampleRate(context) {
         const alive = await pg.evaluate(() => { const g = (window).__game; return { st: g.state, projs: g.projectiles.length, parts: g.particles.length, scorch: !!g.scorchCanvas }; });
         step.phase3Run = alive;
 
-        // victory
-        await pg.evaluate(() => { const g = (window).__game; g.boss.takeDamage(99999, g, g.player.x, g.player.y); });
+        // Victory score must persist synchronously with boss death, before the
+        // reveal or any follow-up input can replace the terminal state.
+        const victoryImmediate = await pg.evaluate(() => {
+          const g = window.__game;
+          g.boss.takeDamage(99999, g, g.player.x, g.player.y);
+          return {
+            state: g.state,
+            stateT: g.stateT,
+            grade: g.grade,
+            fightTime: g.fightTime,
+            trial: g.graceAtStart,
+            delay: g.constructor.VICTORY_INPUT_DELAY,
+            saved: JSON.parse(localStorage.getItem('gracefell') || 'null'),
+          };
+        });
+        step.victoryImmediate = victoryImmediate;
+        const immediateScore = victoryImmediate.saved?.lastScore;
+        const immediateBest = victoryImmediate.saved?.bestScores?.[String(victoryImmediate.trial)];
+        if (victoryImmediate.state !== 'victory' || victoryImmediate.stateT !== 0
+          || victoryImmediate.saved?.v !== 3
+          || immediateScore?.grade !== victoryImmediate.grade
+          || Math.abs((immediateScore?.time ?? -1) - victoryImmediate.fightTime) > 0.000001
+          || immediateScore?.trial !== victoryImmediate.trial
+          || immediateBest?.grade !== victoryImmediate.grade
+          || victoryImmediate.delay < 4.5) {
+          out.errors.push('victory score was not saved immediately: ' + JSON.stringify(victoryImmediate));
+        }
         await pg.waitForTimeout(2800);
         const vict = await pg.evaluate(() => { const g = (window).__game; return { st: g.state, grade: g.grade, best: g.bestTime, wins: g.wins }; });
         step.victory = vict;
@@ -268,10 +293,34 @@ async function installAudioSampleRate(context) {
         // localStorage round-trip
         const saved = await pg.evaluate(() => JSON.parse(localStorage.getItem('gracefell') || 'null'));
         step.saved = saved;
-        if (!saved || typeof saved.bestTime !== 'number' || saved.wins < 1) out.errors.push('save data did not round-trip: ' + JSON.stringify(saved));
+        if (!saved || typeof saved.bestTime !== 'number' || saved.wins < 1 || !saved.lastScore || !saved.bestScores) {
+          out.errors.push('save data did not round-trip: ' + JSON.stringify(saved));
+        }
 
         // restart flow — headless RAF runs slow, so wait on sim stateT, not wall clock
-        await pg.waitForFunction(() => (window).__game.stateT > 2.4, null, { timeout: 20000 }).catch(() => {});
+        // An early confirmation is discarded rather than queued. The result
+        // remains visible through the hold and only a fresh post-prompt input
+        // can restart the fight.
+        await pg.evaluate(() => {
+          const g = window.__game;
+          g.slowT = 0;
+          g.timeScale = 1;
+          g.stateT = g.constructor.VICTORY_INPUT_DELAY - 0.4;
+          g.confirm();
+        });
+        await pg.waitForFunction(() => {
+          const g = window.__game;
+          return g.stateT > g.constructor.VICTORY_INPUT_DELAY + 0.1;
+        }, null, { timeout: 5000 }).catch(() => {});
+        const victoryHold = await pg.evaluate(() => {
+          const g = window.__game;
+          return { state: g.state, stateT: g.stateT, delay: g.constructor.VICTORY_INPUT_DELAY };
+        });
+        step.victoryHold = victoryHold;
+        if (victoryHold.state !== 'victory' || victoryHold.stateT <= victoryHold.delay) {
+          out.errors.push('early victory input skipped the score hold: ' + JSON.stringify(victoryHold));
+        }
+        await pg.screenshot({ path: path.join(ARTIFACT_DIR, `${vp.name}-victory.png`) });
         await pg.mouse.click(vp.w / 2, vp.h / 2);
         await pg.waitForFunction(() => ['intro', 'fight'].includes((window).__game.state), null, { timeout: 5000 }).catch(() => {});
         const st2 = await pg.evaluate(() => (window).__game.state);
@@ -495,6 +544,13 @@ async function installAudioSampleRate(context) {
         if (pd.haptics < 1) out.errors.push('perfect dodge did not request haptic feedback');
 
         // ---- v2.10: every trial level is coherent, monotonic and immutable
+        // Let React observe the fight state before reading semantic disabled
+        // controls; an immediate game-state mutation plus DOM read is a race.
+        await pg.evaluate(() => { window.__game.state = 'fight'; });
+        await pg.waitForTimeout(300);
+        const semanticTrialLocked = await pg.evaluate(() => [...document.querySelectorAll('.game-accessibility button')]
+          .filter((button) => /trial/i.test(button.textContent || ''))
+          .every((button) => button.disabled));
         const acc = await pg.evaluate(() => {
           const g = window.__game;
           const out = { levels: [] };
@@ -555,6 +611,7 @@ async function installAudioSampleRate(context) {
           g.flashReduced = false; out.flashFullScale = g.flashScale();
           return out;
         });
+        acc.semanticTrialLocked = semanticTrialLocked;
         await pg.waitForTimeout(300);
         acc.semanticTrialUnlocked = await pg.evaluate(() => [...document.querySelectorAll('.game-accessibility button')]
           .filter((button) => /trial/i.test(button.textContent || ''))
@@ -662,16 +719,36 @@ async function installAudioSampleRate(context) {
         }
         if (bladeSaint.hitRadius !== 34) out.errors.push('Blade-Saint visual pass changed the boss hit radius');
 
-        // save schema v2 round-trip incl. settings
-        const sv2 = await pg.evaluate(() => {
+        // save schema v3 round-trip incl. settings and scorecards
+        const sv3 = await pg.evaluate(() => {
           const g = window.__game;
           g.state = 'title';
           g.setGrace(2); g.shakeEnabled = false; g.flashReduced = true; g.persist();
           return JSON.parse(localStorage.getItem('gracefell'));
         });
-        step.saveV2 = sv2;
-        if (sv2.v !== 2 || sv2.grace !== 2 || sv2.shakeEnabled !== false || sv2.flashReduced !== true || !sv2.bests) {
-          out.errors.push('save v2 did not round-trip settings: ' + JSON.stringify(sv2));
+        step.saveV3 = sv3;
+        if (sv3.v !== 3 || sv3.grace !== 2 || sv3.shakeEnabled !== false || sv3.flashReduced !== true
+          || !sv3.bests || !sv3.lastScore || !sv3.bestScores) {
+          out.errors.push('save v3 did not round-trip settings and scores: ' + JSON.stringify(sv3));
+        }
+        const scoreReload = await pg.evaluate(() => {
+          const live = window.__game;
+          const G = live.constructor;
+          const c = document.createElement('canvas');
+          const g2 = new G(c);
+          const r = {
+            lastScore: g2.lastScore,
+            bestScore: g2.lastScore ? g2.bestScores[String(g2.lastScore.trial)] : null,
+          };
+          g2.destroy();
+          window.__game = live;
+          return r;
+        });
+        step.scoreReload = scoreReload;
+        if (!scoreReload.lastScore || !scoreReload.bestScore
+          || scoreReload.lastScore.grade !== sv3.lastScore.grade
+          || scoreReload.bestScore.grade !== sv3.lastScore.grade) {
+          out.errors.push('saved victory score did not reload: ' + JSON.stringify(scoreReload));
         }
 
         // v1 save migrates forward
@@ -1056,6 +1133,41 @@ async function installAudioSampleRate(context) {
       ) out.errors.push('touch: pointer-only death retry failed: ' + JSON.stringify({
         before: t.pointerRetryBefore, after: t.pointerRetryAfter,
       }));
+
+      // Mobile victory scorecard must fit the real touch viewport and carry
+      // the same immediately persisted result as desktop.
+      t.victoryScore = await pg.evaluate(() => {
+        const g = window.__game;
+        g.resetFight();
+        g.state = 'fight';
+        g.fightTime = 83.2;
+        g.damageDealt = 1147;
+        g.hitsTaken = 2;
+        g.boss.hp = 0;
+        g.onBossDeath();
+        g.slowT = 0;
+        g.timeScale = 1;
+        g.stateT = g.constructor.VICTORY_INPUT_DELAY + 0.2;
+        g.goldFlash = 0;
+        g.render();
+        return {
+          state: g.state,
+          lastScore: g.lastScore,
+          saved: JSON.parse(localStorage.getItem('gracefell') || 'null')?.lastScore,
+        };
+      });
+      if (t.victoryScore.state !== 'victory'
+        || t.victoryScore.lastScore?.grade !== t.victoryScore.saved?.grade
+        || t.victoryScore.lastScore?.time !== 83.2) {
+        out.errors.push('touch: victory scorecard was not saved: ' + JSON.stringify(t.victoryScore));
+      }
+      await pg.screenshot({ path: path.join(ARTIFACT_DIR, 'touch-victory.png') });
+      await pg.evaluate(() => {
+        const g = window.__game;
+        g.resetFight();
+        g.state = 'fight';
+        g.render();
+      });
 
       // 11. no horizontal overflow, canvas drawing, clean console
       t.overflow = await pg.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
