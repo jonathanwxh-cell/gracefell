@@ -93,8 +93,16 @@ async function installAudioSampleRate(context) {
       step.overflowPx = overflow;
       if (overflow > 1) out.errors.push(vp.name + ': horizontal overflow ' + overflow + 'px');
 
-      // start fight — click through title, then wait for intro to auto-advance
-      await pg.mouse.click(vp.w / 2, vp.h / 2);
+      // Desktop starts through the semantic button so focus cannot remain on
+      // the disabled title control and pause the fight. Touch/non-touch mobile
+      // retain their direct canvas start paths.
+      if (vp.name === 'desktop') {
+        const startButton = pg.getByRole('button', { name: 'Start fight' });
+        await startButton.focus();
+        await pg.keyboard.press('Enter');
+      } else {
+        await pg.mouse.click(vp.w / 2, vp.h / 2);
+      }
       await pg.waitForFunction(() => window.__game && window.__game.state === 'intro', null, { timeout: 2500 }).catch(() => {});
       const introClean = await pg.evaluate(() => {
         const g = window.__game;
@@ -110,6 +118,18 @@ async function installAudioSampleRate(context) {
       const st1 = await pg.evaluate(() => (window).__game && (window).__game.state);
       step.stateAfterStart = st1;
       if (st1 !== 'fight') out.errors.push(vp.name + ': did not reach fight state (' + st1 + ')');
+      if (vp.name === 'desktop') {
+        const semanticStart = await pg.evaluate(() => ({
+          paused: window.__game.paused,
+          uiFocused: window.__game.uiFocused,
+          activeIsCanvas: document.activeElement === document.querySelector('canvas'),
+          rafRunning: window.__game.raf !== 0,
+        }));
+        step.semanticStart = semanticStart;
+        if (semanticStart.paused || semanticStart.uiFocused || !semanticStart.activeIsCanvas || !semanticStart.rafRunning) {
+          out.errors.push('desktop: semantic Start fight did not return control to the canvas: ' + JSON.stringify(semanticStart));
+        }
+      }
 
       if (vp.name === 'desktop') {
         // Revealing/focusing settings during combat pauses the simulation;

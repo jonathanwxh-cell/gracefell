@@ -47,6 +47,17 @@ export default function Home() {
     setUi(game.uiSnapshot());
   };
 
+  const confirmFromUi = () => {
+    act((game) => {
+      game.confirm();
+      // A confirm hands control back to the canvas. Without this, the title
+      // button becomes disabled while retaining focus and can pause the fight
+      // permanently for keyboard and assistive-technology players.
+      game.setUiFocused(false);
+    });
+    canvasRef.current?.focus({ preventScroll: true });
+  };
+
   const confirmLabel = ui.state === 'dead' ? 'Retry fight'
     : ui.state === 'victory' ? 'Fight again'
     : ui.state === 'intro' ? 'Skip introduction'
@@ -84,7 +95,7 @@ export default function Home() {
           <button
             type="button"
             disabled={ui.state === 'fight'}
-            onClick={() => act((game) => game.confirm())}
+            onClick={confirmFromUi}
           >
             {confirmLabel}
           </button>

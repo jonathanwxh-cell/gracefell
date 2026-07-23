@@ -225,6 +225,10 @@ model, or per-frame render surface. Their source-to-implementation comparisons a
 - [Kite-Veil seven-state comparison](docs/releases/assets/v2.11/kite-veil-states.png)
 - [Fallen Blade-Saint mobile-state comparison](docs/releases/assets/v2.11/blade-saint-states.png)
 
+The post-launch accessibility playtest also fixed the semantic **Start fight** path: keyboard and
+assistive-technology activation now hands focus back to the canvas instead of leaving combat
+silently paused behind a disabled button.
+
 The complete design-house process, acceptance criteria, automated assertions, performance
 measurements, attribution, deployment evidence, and post-launch user playtests are recorded in the
 [`v2.11 release record`](docs/releases/v2.11.md).

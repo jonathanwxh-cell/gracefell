@@ -34,6 +34,7 @@ Newest last. One row per pass. A "pass" = one continuous working session by one 
 | v2.10.1 | 2026-07-23 | Codex | GPT-5 / Codex Desktop | @jonathanwxh-cell | Documentation-completeness pass: durable v2.10 acceptance/deployment evidence, current README/info/package metadata, corrected production runbook, known limits, and explicit separation from future graphics proposals |
 | v2.11-rc1 | 2026-07-23 | Codex + design-house agents | GPT-5 / Codex Desktop | @jonathanwxh-cell | Local candidate for issue #10: three-studio redesign, user-selected Kite-Veil direction, seven procedural player silhouettes, mobile/desktop comparison evidence, and design QA; not deployed |
 | v2.11-rc2 | 2026-07-23 | Codex + Kimi concept | GPT-5 / Codex Desktop | @jonathanwxh-cell | Local candidate for issue #14: production Fallen Blade-Saint boss, persistent nine-blade volley halo, stagger wobble, phase-three shadow-sword draw, mobile/desktop comparison evidence, and regression coverage; not deployed |
+| v2.11 | 2026-07-23 | Codex + live user panel | GPT-5 / Codex Desktop | @jonathanwxh-cell | Published the two character directions, closed the six graphics issues, verified the exact production deployment, ran mobile/desktop/accessibility personas, fixed the semantic Start focus trap, and added durable local/CI/public acceptance evidence |
 
 ---
 

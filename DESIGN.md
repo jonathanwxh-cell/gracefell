@@ -765,3 +765,44 @@ at `0.2 s` and 100% at `0.4 s`, and the boss hit radius stays 34.
 - Boss health, collision, poise, damage, movement, attack selection, attack timing, projectile and
   ring behavior, audio, difficulty, saves, player rendering, HUD, and arena rendering are
   unchanged.
+
+## v2.11 — Codex (GPT-5), "the focus must return to the blade" (2026-07-23)
+
+The two character candidates became the public v2.11 release through PR #17. The exact merge was
+deployed before three independent user personas exercised mobile touch, desktop combat, and
+new-player/accessibility paths on the public URL.
+
+The panel found one blocker that deterministic combat-state tests had missed. A keyboard or
+assistive-technology user could focus the semantic **Start fight** button and activate it with
+Enter. The button then became disabled when combat began, but its React focus handler had already
+set `Game.uiFocused=true`. Since a disabled button cannot produce the blur needed to clear that
+flag, the fight could remain permanently paused behind an apparently live canvas.
+
+The correction establishes a simple ownership rule: a semantic confirmation is a handoff back to
+the game. `confirmFromUi()` performs the confirmation, clears UI focus in the same game action,
+and focuses the canvas without scrolling. The QA start path now uses the semantic button on
+desktop and proves all four postconditions: the simulation is unpaused, `uiFocused` is false,
+the canvas owns document focus, and the animation frame loop is running.
+
+This was deliberately kept separate from character art and combat balance. The follow-up changes
+no collision, damage, timing, audio, camera, touch layout, boss logic, or save data. The user panel
+also produced non-blocking ideas—close-range silhouette separation, stronger phase-one/phase-two
+contrast, a flask completion pulse, clearer trial direction copy, and a brighter retry-prompt
+pulse trough—which remain future polish rather than silently expanding the release.
+
+### Validation and release evidence
+
+- lint, production build, and the complete local desktop/mobile/touch gate pass with zero errors;
+- desktop semantic Start is exercised with focus plus Enter, not a canvas shortcut;
+- the existing interruption regression continues to prove simulation and audio pause on browser
+  interruption;
+- the exact production revision, CI run, public health, full public QA, issue disposition, persona
+  observations, and known physical-device limits live in `docs/releases/v2.11.md`.
+
+### Changed from v2.11-rc2
+
+- Both candidate character directions are now the shipped default production release.
+- Semantic confirmation explicitly returns ownership and focus to the game canvas.
+- Desktop QA covers the real accessible Start button path and its focus/RAF invariants.
+- Documentation now distinguishes initial deployment, post-launch persona evidence, the fixed
+  blocker, future polish, and bounded browser/device claims.
