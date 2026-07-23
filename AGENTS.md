@@ -64,6 +64,10 @@ folder. Named release runs may set `GRACEFELL_QA_DIR` / `GRACEFELL_QA_RESULT`; r
 - `menuGeom()` is the single source of truth for title-menu layout — renderer, hit-test and QA layout assertions all read it. If you move a menu element, move it there or the test stops protecting you.
 - `shake()` early-returns when `shakeEnabled` is false, and `flashScale()` gates full-screen flashes. Don't bypass them with direct `shakeAmp` writes — they're photosensitivity controls, not polish.
 - Perfect dodge window scales with grace: `t > 0.42 - 0.24 * mods.perfectWindow`; `perfectCd` prevents multi-trigger from one swing.
+- Rapid light input uses `Player.queuedLightAttacks`, a capped two-entry follow-up queue. It exists
+  because the generic TTL flag cannot distinguish repeated taps during one attack. Keep it
+  light-only, clear it on roll/heavy/damage/combo expiry, and preserve roll priority at the next
+  transition. The step-2 light finisher must use the light SFX family; HVY alone owns heavy cues.
 - `GameAudio` owns synthesis, soundtrack loading, player-relative distance/pan, arena reverb, adaptive music, ducking, limiting, voice pressure, scheduling and teardown. Gameplay code should name the event and pass `audioSpatial(x, y)`; it should not build Web Audio nodes itself.
 - `public/audio/gracefell-sovereigns-fall.mp3` is the sparse MiniMax score. It streams through `MediaElementAudioSourceNode -> soundtrackPresenceDip -> soundtrackFilter -> soundtrackMusic -> music -> master` so action ducking, mute and the limiter still apply. The procedural drone/drums start immediately, crossfade under the MP3, and remain the network/playback fallback. Do not return to decoding the full track into an `AudioBuffer` on mobile.
 - Noise and arena-IR sample data are generated once in the first zero-delay preparation task, then copied into their Web Audio buffers when the first gesture unlocks the context. The prepared arena buffer attaches one task after the gesture so its allocation does not block input. Do not return to allocating/filling an `AudioBuffer` for every projectile or impact — phase-three storms make that a mobile GC problem.

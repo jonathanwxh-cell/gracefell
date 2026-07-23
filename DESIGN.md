@@ -885,3 +885,41 @@ approximately 5.5-second cycle instead of nearly disappearing on the previous fa
 - Victory result pacing and replay input ownership change.
 - Combat, scoring/grade rules, difficulty, audio, character rendering, collision, and saves from
   existing players remain otherwise unchanged.
+
+## v2.11.2 — Codex (GPT-5), "three taps must mean three cuts" (2026-07-23)
+
+The authored light string had three damage steps, but the input system represented each action as
+one expiring boolean. Repeated ATK presses made before the current swing ended kept refilling the
+same slot. A phone or desktop player tapping three times at 50–100 ms spacing therefore produced
+only two strikes; waiting roughly one attack cycle between presses produced all three. The combo
+logic was intact—the input representation was losing multiplicity.
+
+`Player.queuedLightAttacks` now records at most the two follow-ups a three-hit string can consume.
+It accepts only discrete light presses while a light attack is active. Roll still wins when both
+are ready at a transition, and the queue clears on roll, heavy, damage, insufficient stamina, or
+combo expiry. This deliberately avoids a generic action queue: defensive timing, flask use, and
+heavy commitment retain their existing one-slot buffer behavior.
+
+The finisher had a second identity problem. Although it was a light-combo step, its 24 damage
+crossed the boss's old `dmg > 20` audio threshold and the player explicitly called
+`swingHeavy()`. It sounded like HVY. Player strikes now pass an explicit light/finisher/heavy
+impact identity. Step three uses the varied light swing/contact family and a silver damage number;
+HVY alone owns the heavy swing/contact cue and gold impact color. Damage, range, arc, lunge,
+stamina, hit-stop, camera punch, knockback, poise, and combo timing are unchanged.
+
+### Validation
+
+- deterministic desktop simulation sends three presses 50 ms apart and requires damage steps
+  `0, 1, 2`, all marked non-heavy;
+- a 390×844 true-touch browser taps the visible ATK circle three times 50 ms apart and requires the
+  same sequence;
+- cue capture requires `swing-2` and `hit-light-2`, rejects every heavy cue, and proves the queue
+  returns to zero;
+- lint, production build, and the complete desktop/mobile/touch gate pass with zero errors.
+
+### Changed from v2.11.1
+
+- Rapid repeated light presses retain their count instead of collapsing into one buffered flag.
+- The third light hit is sonically and visually distinct from HVY.
+- No balance value, boss behavior, difficulty, collision, save schema, UI layout, music asset, or
+  rendering asset changes.
