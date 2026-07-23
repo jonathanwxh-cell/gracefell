@@ -645,6 +645,22 @@ export class Player {
       ctx.beginPath(); ctx.arc(tr.x, tr.y, this.r * 0.9, 0, TAU); ctx.fill();
       ctx.restore();
     }
+    // A small cool rim keeps the player legible when both silhouettes overlap.
+    // It uses one simple path only at close range, so the common render path and
+    // the low-cost procedural art contract stay unchanged.
+    const closeToBoss = game.boss.hp > 0
+      && dist(x, y, game.boss.x, game.boss.y) < this.r + game.boss.r + 26;
+    if (closeToBoss && this.state !== 'dead') {
+      ctx.save();
+      ctx.globalAlpha = 0.78;
+      ctx.strokeStyle = PAL.spirit;
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.arc(x, y, this.r + 5, -0.82, 0.82);
+      ctx.arc(x, y, this.r + 5, Math.PI - 0.82, Math.PI + 0.82);
+      ctx.stroke();
+      ctx.restore();
+    }
     // shadow
     ctx.fillStyle = 'rgba(0,0,0,0.45)';
     ctx.beginPath(); ctx.ellipse(x, y + this.r * 0.85, this.r * 1.05, this.r * 0.42, 0, 0, TAU); ctx.fill();
@@ -1807,10 +1823,15 @@ export class Game {
   difficultyForGrace(grace = this.grace): DifficultyMods {
     const g = clamp(Math.round(grace), -3, 5);
     const aid = clamp(-g, 0, 3) / 3;
-    const vow = clamp(g, 0, 5) / 5;
+    // Oath I/II already introduce chained decisions. Ease their raw speed,
+    // damage, and recovery compression so the first vows teach that contract
+    // before Oath III resumes the established expert curve.
+    const oathSpeed = [1, 1.04, 1.10, 1.18, 1.24, 1.30];
+    const oathDamage = [1, 1.05, 1.13, 1.24, 1.32, 1.40];
+    const oathRecovery = [1, 0.99, 0.96, 0.91, 0.88, 0.85];
     return {
-      bossSpeed: 1 - aid * 0.22 + vow * 0.30,
-      dmgTaken: 1 - aid * 0.45 + vow * 0.40,
+      bossSpeed: g > 0 ? oathSpeed[g] : 1 - aid * 0.22,
+      dmgTaken: g > 0 ? oathDamage[g] : 1 - aid * 0.45,
       iframe: 1 + aid * 0.55,
       perfectWindow: 1 + aid * 0.6,
       // FAMINE removes one flask at +2. The final flask and all stagger
@@ -1824,7 +1845,7 @@ export class Game {
       // Positive trials are Oaths: the established numerical curve remains,
       // while authored chains and recovery pressure add new decisions.
       chainRank: g >= 5 ? 3 : g >= 3 ? 2 : g >= 1 ? 1 : 0,
-      recoveryMul: 1 + aid * 0.1 - vow * 0.15,
+      recoveryMul: g > 0 ? oathRecovery[g] : 1 + aid * 0.1,
     };
   }
 
@@ -2304,6 +2325,9 @@ export class Game {
     this.projectiles = [];
     this.rings = [];
     this.meteors = [];
+    // Death changes the owner of directional input. Discard the final combat
+    // press so Receive Grace always requires a fresh post-death choice.
+    this.input.consume('left');
     this.terminalConfirmSequence = this.input.confirmSequence;
     this.state = 'dead'; this.stateT = 0;
     this.persist();
@@ -3188,17 +3212,28 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
       swipe: 'BLADE', slam: 'GROUND BREAK', charge: 'CHARGE',
       volley: 'HALO VOLLEY', meteor: 'METEORS', ring: 'RING', spiral: 'SPIRAL',
     };
+    let combatCue = '';
+    let combatCueColor = PAL.spirit;
     if (this.mods.clearTells && this.boss.state === 'windup') {
-      ctx.textAlign = 'center';
-      ctx.font = body(11, 800);
-      ctx.fillStyle = PAL.spirit;
-      ctx.fillText(`READ \u00b7 ${attackLabels[this.boss.attack]}`, this.w / 2, by - 38);
+      combatCue = `READ \u00b7 ${attackLabels[this.boss.attack]}`;
+    } else if (this.boss.chainTotal > 1 && this.boss.chainStep > 0 && this.boss.state !== 'staggered') {
+      combatCue = `OATH CHAIN  ${this.boss.chainStep}/${this.boss.chainTotal}`;
+      combatCueColor = PAL.ember;
     }
-    if (this.boss.chainTotal > 1 && this.boss.chainStep > 0 && this.boss.state !== 'staggered') {
+    if (combatCue) {
       ctx.textAlign = 'center';
-      ctx.font = body(10, 800);
-      ctx.fillStyle = PAL.ember;
-      ctx.fillText(`OATH CHAIN  ${this.boss.chainStep}/${this.boss.chainTotal}`, this.w / 2, by - 24);
+      ctx.font = body(this.input.isTouch ? 13 : 12, 800);
+      const cueW = Math.min(bw, ctx.measureText(combatCue).width + 34);
+      const cueX = (this.w - cueW) / 2;
+      const cueY = by - 53;
+      ctx.fillStyle = 'rgba(8,6,4,0.88)';
+      ctx.fillRect(cueX, cueY, cueW, 25);
+      ctx.strokeStyle = combatCueColor;
+      ctx.globalAlpha = 0.72;
+      ctx.strokeRect(cueX, cueY, cueW, 25);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = combatCueColor;
+      ctx.fillText(combatCue, this.w / 2, cueY + 17);
     }
     ctx.textAlign = 'left';
     ctx.fillStyle = PAL.parchment;
@@ -3454,7 +3489,7 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
     );
   }
 
-  ctx.font = body(15, 500);
+  ctx.font = body(this.input.isTouch && this.w < 520 ? 14 : 15, 500);
   ctx.fillStyle = 'rgba(184,170,138,0.92)';
   ctx.fillText(
     this.input.isTouch
@@ -3467,14 +3502,20 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
   ctx.fillText(this.graceSummary(), cx, this.h * (this.input.isTouch ? 0.668 : 0.68));
   const selectedBest = this.trialBest();
   if (this.wins > 0 || selectedBest > 0) {
-    ctx.font = body(15, 500);
+    const compactStats = this.input.isTouch && this.w < 520;
+    ctx.font = body(compactStats ? 12 : 15, 500);
     ctx.fillStyle = 'rgba(201,169,89,0.75)';
     const bm = Math.floor(selectedBest / 60), bs2 = Math.floor(selectedBest % 60);
     const parts: string[] = [];
     if (this.wins > 0) parts.push(`${this.wins} victor${this.wins === 1 ? 'y' : 'ies'}`);
     if (selectedBest > 0) parts.push(`best ${bm}:${bs2.toString().padStart(2, '0')}`);
     if (this.lastScore) parts.push(`last grade ${this.lastScore.grade}`);
-    ctx.fillText(parts.join('   \u00b7   '), cx, this.h * 0.60 + 26);
+    ctx.fillText(
+      parts.join(compactStats ? '  \u00b7  ' : '   \u00b7   '),
+      cx,
+      compactStats ? this.h * 0.575 : this.h * 0.60 + 26,
+      compactStats ? this.w - 36 : undefined,
+    );
   }
   ctx.font = body(13, 400);
   ctx.fillStyle = 'rgba(184,170,138,0.78)';
@@ -3675,6 +3716,11 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
     ctx.fillStyle = active ? '#0d0b08' : PAL.parchment;
     ctx.font = serif(b.r > 40 ? 15 : 12, 700);
     ctx.fillText(b.label, bx, by + 4);
+    if (b.id === 'light' && this.player.queuedLightAttacks > 0) {
+      ctx.fillStyle = active ? '#0d0b08' : PAL.spirit;
+      ctx.font = serif(8, 800);
+      ctx.fillText('\u25c6'.repeat(this.player.queuedLightAttacks), bx, by - b.r * 0.43);
+    }
     ctx.globalAlpha = 1;
   }
   // flask count near button

@@ -1061,3 +1061,83 @@ human cohorts remain the correct source for later tuning.
 - Boss health, phases, individual attack mechanics, player damage/timing, music, action SFX,
   procedural character art, collision, touch layout, input buffering, and established mobile
   tell floors remain otherwise unchanged.
+
+## v2.12.1 — Codex (GPT-5), "consent, then clarity" (2026-07-24)
+
+Three live-player lanes reviewed every path after v2.12: a 390×844 touch player covered Grace,
+a keyboard/accessibility newcomer covered the middle, and a desktop souls veteran covered the
+Oaths. The complete production gate separately exercised all nine configurations, authored
+packets, phase transitions, victory persistence, and terminal states.
+
+Most alleged defects did not survive cross-checking. Exact pointer tests disproved a reported
+double-stepping path selector; shared same-origin browser storage explained one wrong-path reload;
+and a debug-assisted renderer shrink never reproduced in natural play. One defect did survive
+three independent reproductions: a left movement press buffered immediately before a lethal hit
+could be consumed by the newly opened Receive Grace screen. The game silently lowered the trial
+without a fresh terminal choice.
+
+### Terminal consent
+
+`onPlayerDeath()` now discards the buffered left press at the state boundary. Held movement is not
+turned into a menu command; the player must release and press left again, or tap the visible offer.
+The regression reproduces the exact race, advances one frame, proves the path remains Measured,
+then submits a fresh left press and proves Grace is still accepted while the death state remains
+in control. Confirm-sequence ownership and one-touch resurrection retain their v2.12 behavior.
+
+### Smoothing the first Oaths
+
+Human play showed that Measured is an intentional canonical step, but Oath I compounded a new
+two-beat packet with speed, damage, and recovery compression too abruptly. Oath I/II now teach
+their authored chains with slightly less raw pressure:
+
+| Oath | Speed | Damage taken | Recovery |
+|---|---:|---:|---:|
+| I | 1.04x (was 1.06x) | 1.05x (was 1.08x) | 0.99x (was 0.97x) |
+| II | 1.10x (was 1.12x) | 1.13x (was 1.16x) | 0.96x (was 0.94x) |
+
+Oath III–V, every Grace path, Measured, flasks, poise, stagger, boss health, attack composition,
+damage windows, and mobile telegraph floors are unchanged. The curve remains strictly monotonic;
+the first two vows simply emphasize pattern learning before the established expert curve resumes.
+
+### Readability without scene weight
+
+- Named beginner tells and Oath packet progress now use one mutually exclusive backed chip above
+  the boss bar. The larger type and border survive motion without occupying the combat center.
+- When the player and Malakar overlap, two small spirit arcs lift the player silhouette from the
+  boss mass. The path is drawn only at close range and adds no asset or particle system.
+- The ATK circle shows up to two tiny diamonds for accepted queued follow-ups. Connected-hit
+  progress remains the separate combat-truth counter above the arena.
+- On a 390px record-heavy title, run statistics move above the start prompt, use a compact size,
+  and receive a maximum width. Settings, trial summary, and touch instruction no longer compete.
+
+### Rejected alternatives
+
+- Measured was not weakened; it remains the canonical authored timing and damage.
+- Oath III–V were not softened; expert players retain the accepted capstone curve.
+- No extra particles, texture, sprite, post-processing pass, or always-on HUD panel was added.
+- The audio budget was not relaxed to hide machine-load variance. One exact candidate run passed
+  all budgets; later runs that failed contained only cold-init timing overruns and no gameplay,
+  state, layout, console, or audio-graph error.
+
+### Local validation
+
+The exact `index-BkkaBUTU.js` candidate passed lint, TypeScript/Vite production build, and the
+complete desktop/mobile/true-touch suite with zero errors. The accepted run recorded 20.8 ms
+desktop audio initialization, 14.2 ms mobile, and 13.4 ms on an immediate fresh-phone gesture.
+The input regression recorded `grace 0 → 0` across the carried-input frame and `0 → -1` only after
+the fresh press.
+
+Screenshots were inspected for Journey and Oath cue chips, the light finisher, close-contact
+silhouette separation, title layout, terminal Grace, and a synthetic phone title containing 12
+victories, a best time, and a last grade. The full deployment and public replay evidence is kept
+in `docs/releases/v2.12.1.md`.
+
+### Changed from v2.12
+
+- Receive Grace requires a fresh post-death directional input.
+- Oath I/II raw numerical pressure is eased while their chain rules remain intact.
+- Beginner tells and Oath counters gain a backed, larger combat chip.
+- Close-range player separation and queued touch-follow-up feedback are added.
+- Record-heavy narrow titles gain dedicated spacing.
+- Save schema, music, SFX, boss phases/patterns, advanced Oaths, beginner paths, touch geometry,
+  collision, scoring, and runtime asset footprint remain unchanged.

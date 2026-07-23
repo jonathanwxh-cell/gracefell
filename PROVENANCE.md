@@ -40,6 +40,7 @@ Newest last. One row per pass. A "pass" = one continuous working session by one 
 | v2.11.1 | 2026-07-23 | Codex | GPT-5 / Codex Desktop | @jonathanwxh-cell | Persisted complete boss-defeat scorecards in save schema v3, added a visible saved-state confirmation, blocked queued victory skips behind a 4.5-second hold, slowed the replay pulse, and expanded desktop/touch regression and screenshot evidence |
 | v2.11.2 | 2026-07-23 | Codex | GPT-5 / Codex Desktop | @jonathanwxh-cell | Fixed rapid light taps collapsing into two attacks, preserved three distinct combo inputs with roll priority, separated the step-three finisher from HVY audio/visual identity, and added desktop plus true-touch regressions |
 | v2.12 | 2026-07-23 | Codex | GPT-5 / Codex Desktop | @jonathanwxh-cell | Added the disclosed first-run Journey, contextual combat rite, lethal-source hints, voluntary repeated-death Grace, authored expert Oath packets, visible player combo progress, v4 execution scores, and complete local/CI/production acceptance |
+| v2.12.1 | 2026-07-24 | Codex | GPT-5 / Codex Desktop | @jonathanwxh-cell | Fixed pre-death movement accepting Grace without consent, eased Oath I/II raw pressure, strengthened boss-cue and close-contact readability, surfaced queued touch attacks, and decluttered record-heavy phone titles |
 
 ---
 
