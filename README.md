@@ -20,7 +20,7 @@ The sovereign has an audio language, not one generic warning: swipes whistle, ch
 
 **v2 — extended by Claude (Opus 4.8).** Combat depth, a third phase, a full rendering pass, persistence, and a headless verification gate. Details in [DESIGN.md](DESIGN.md).
 
-**v2.4–v2.9.1 — audio, responsiveness, and combat polish extended by Codex (GPT-5).** Attack-specific procedural cues, spatial mix protection, the MiniMax-generated score, mobile/accessibility hardening, the v2.9 combat correctness pass, and the v2.9.1 touch-retry fix. The generation prompt and file hash are recorded in [`public/audio/README.md`](public/audio/README.md).
+**v2.4–v2.10 — audio, responsiveness, and combat polish extended by Codex (GPT-5).** Attack-specific procedural cues, spatial mix protection, the MiniMax-generated score, mobile/accessibility hardening, trustworthy combat and retry behavior, and the verified nine-level difficulty pass. The generation prompt and file hash are recorded in [`public/audio/README.md`](public/audio/README.md).
 
 Directed by [@jonathanwxh-cell](https://github.com/jonathanwxh-cell), who asked for "AAA grade" and meant it.
 
@@ -63,9 +63,23 @@ Victory is graded S through C on time and wounds taken. Your best time and win c
 
 There's no easy mode. There's one dial on the title screen, running **−3 to +5**.
 
-Turn it down and the sovereign slows, your dodge window widens, his hits land softer, you carry
-an extra flask. Turn it up and he speeds up, your flasks disappear, and past +3 he stops
-staggering at all.
+Turn it down and the sovereign slows, your dodge window widens, his hits land softer, and at −2/−3
+you carry an extra flask. Turn it up and he speeds up and hits harder. FAMINE +2 removes one flask;
+IRON +3 and FRAILTY +4 make his poise harder to break and shorten the stagger opening without
+removing it. Only the explicit FORSAKEN +5 capstone leaves one flask and makes him **IRONBOUND**:
+the HUD says so and its locked poise bar no longer promises a stagger that cannot happen.
+
+| Trial | Boss speed | Damage taken | Flasks | Boss poise |
+|---:|---:|---:|---:|---:|
+| −3 | 0.78× | 0.55× | 4 | 120 |
+| −2 | 0.85× | 0.70× | 4 | 120 |
+| −1 | 0.93× | 0.85× | 3 | 120 |
+| 0 | 1.00× | 1.00× | 3 | 120 |
+| +1 | 1.06× | 1.08× | 3 | 120 |
+| +2 | 1.12× | 1.16× | 2 | 120 |
+| +3 | 1.18× | 1.24× | 2 | 162 |
+| +4 | 1.24× | 1.32× | 2 | 204 |
+| +5 | 1.30× | 1.40× | 1 | 204, IRONBOUND |
 
 The rule the design holds to: **aid lengthens the read, it doesn't change the fight.** The pattern
 you learn at −3 is the same pattern you execute at +5 — nothing is removed, nothing is simplified,
@@ -148,6 +162,23 @@ confirmation gesture across keyboard, mouse, Touch Events, Pointer Events, focus
 slow-motion instead of relying only on a short combat-action buffer. QA kills the player through
 the real damage path, captures the visible death prompt, rises with one touchscreen tap, then
 repeats the flow with a pointer-only event used by some embedded mobile browsers.
+
+## Fixed by Codex — v2.10 difficulty integrity
+
+Three independent game-review lanes examined the curve mathematically, adversarially, and as
+players before implementation. The verified build now freezes the selected trial and all of its
+modifiers when a run starts; title and semantic controls cannot turn a recorded +5 attempt into a
+hybrid easier fight. The title shows the best time for the selected trial rather than a global best.
+
+Phase two and three both deliver the authored three-swipe combo. On touch devices, a fresh boss
+windup is never shorter than 300 ms and a combo follow-up is never shorter than 240 ms; the
+telegraph renderer reads the exact same stored duration as the hit logic. Projectile and expanding
+ring travel speeds remain fixed because the review found them readable already.
+
+The gate enumerates all nine settings and asserts the published table, active snapshot, damage,
+poise, stagger duration, semantic lock, selected record, FORSAKEN label clearance, IRONBOUND HUD,
+touch timing, death/retry, and the existing combat/audio/performance regressions. It also produces
+dedicated phone screenshots for the +5 title and combat states.
 
 ## Running it
 

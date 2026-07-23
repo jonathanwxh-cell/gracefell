@@ -51,6 +51,7 @@ export default function Home() {
     : ui.state === 'victory' ? 'Fight again'
     : ui.state === 'intro' ? 'Skip introduction'
     : 'Start fight';
+  const trialLocked = ui.state === 'intro' || ui.state === 'fight';
 
   return (
     <main className="game-shell">
@@ -90,11 +91,11 @@ export default function Home() {
           <button type="button" onClick={() => act((game) => game.toggleMuted())}>
             Sound {ui.muted ? 'off' : 'on'}
           </button>
-          <button type="button" onClick={() => act((game) => game.setGrace(game.grace - 1))}>
+          <button type="button" disabled={trialLocked} onClick={() => act((game) => game.setGrace(game.grace - 1))}>
             Easier trial
           </button>
           <output aria-label="Current trial">{ui.graceLabel}</output>
-          <button type="button" onClick={() => act((game) => game.setGrace(game.grace + 1))}>
+          <button type="button" disabled={trialLocked} onClick={() => act((game) => game.setGrace(game.grace + 1))}>
             Harder trial
           </button>
           <button type="button" onClick={() => act((game) => game.toggleShake())}>

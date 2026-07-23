@@ -619,6 +619,8 @@ export class Boss {
   foleyT = 0; chargeFoleyT = 0;
 
   extraSpeed = 1; // set from Game.mods — the grace dial
+  minTelegraph = 0;
+  private currentWindup = 0;
   get speedMul() { return (this.phase >= 3 ? 1.42 : this.phase === 2 ? 1.28 : 1) * this.extraSpeed; }
 
   update(dt: number, game: Game) {
@@ -704,7 +706,7 @@ export class Boss {
             this.swordAng = this.facing;
             this.comboLeft--;
             if (this.comboLeft > 0 && dToP < 190) {
-              this.state = 'windup'; this.t = 0.34 / this.speedMul;
+              this.state = 'windup'; this.setWindup(0.34, true);
               game.audio.telegraph('swipe', game.audioSpatial(this.x, this.y));
             } else this.endStrike(0.55 / this.speedMul);
           }
@@ -777,6 +779,7 @@ export class Boss {
       this.phaseRoarDone = true;
       this.phase = 2;
       this.state = 'windup'; this.attack = 'ring'; this.t = 1.1;
+      this.currentWindup = 1.1;
       game.audio.setPhase(2);
       game.audio.roar(true, game.audioSpatial(this.x, this.y));
       game.shake(20, 0.9);
@@ -791,6 +794,7 @@ export class Boss {
       this.phase3Done = true;
       this.phase = 3;
       this.state = 'windup'; this.attack = 'ring'; this.t = 1.2;
+      this.currentWindup = 1.2;
       this.poise = this.maxPoise;
       for (const k of Object.keys(this.cooldowns) as BossAttack[]) this.cooldowns[k] = 0;
       game.audio.setPhase(3);
@@ -844,26 +848,25 @@ export class Boss {
     for (const o of opts) { roll -= o.w; if (roll <= 0) { pick = o.a; break; } }
     this.attack = pick;
     this.state = 'windup';
-    const mul = this.speedMul;
     switch (pick) {
       case 'swipe':
-        this.t = 0.55 / mul; this.comboLeft = this.phase === 2 ? 3 : 2;
+        this.setWindup(0.55); this.comboLeft = this.phase >= 2 ? 3 : 2;
         this.cooldowns.swipe = 2.2; game.audio.telegraph('swipe', game.audioSpatial(this.x, this.y)); break;
       case 'slam':
-        this.t = 0.95 / mul; this.cooldowns.slam = 5; game.audio.telegraph('slam', game.audioSpatial(this.x, this.y)); break;
+        this.setWindup(0.95); this.cooldowns.slam = 5; game.audio.telegraph('slam', game.audioSpatial(this.x, this.y)); break;
       case 'charge':
-        this.t = 0.8 / mul; this.chargeDir = angTo(this.x, this.y, game.player.x, game.player.y);
+        this.setWindup(0.8); this.chargeDir = angTo(this.x, this.y, game.player.x, game.player.y);
         this.cooldowns.charge = 6; game.audio.telegraph('charge', game.audioSpatial(this.x, this.y)); break;
       case 'volley':
-        this.t = 0.6 / mul; this.cooldowns.volley = 4.5; game.audio.telegraph('volley', game.audioSpatial(this.x, this.y)); break;
+        this.setWindup(0.6); this.cooldowns.volley = 4.5; game.audio.telegraph('volley', game.audioSpatial(this.x, this.y)); break;
       case 'spiral':
-        this.t = 0.75 / mul; this.cooldowns.spiral = 8;
+        this.setWindup(0.75); this.cooldowns.spiral = 8;
         this.spiralLeft = 16; this.spiralTick = 0;
         this.spiralAng = angTo(this.x, this.y, game.player.x, game.player.y) + 0.5;
         game.audio.telegraph('spiral', game.audioSpatial(this.x, this.y));
         break;
       case 'meteor': {
-        this.t = 0.7 / mul; this.cooldowns.meteor = this.phase >= 3 ? 7.5 : 9;
+        this.setWindup(0.7); this.cooldowns.meteor = this.phase >= 3 ? 7.5 : 9;
         this.meteorQueue = [];
         const p = game.player;
         const mCount = this.phase >= 3 ? 9 : 6;
@@ -877,8 +880,18 @@ export class Boss {
         break;
       }
       case 'ring':
-        this.t = 0.9 / mul; this.cooldowns.ring = 7; game.audio.telegraph('ring', game.audioSpatial(this.x, this.y)); break;
+        this.setWindup(0.9); this.cooldowns.ring = 7; game.audio.telegraph('ring', game.audioSpatial(this.x, this.y)); break;
     }
+  }
+
+  private scaledWindup(base: number, followup = false): number {
+    const floor = followup ? this.minTelegraph * 0.8 : this.minTelegraph;
+    return Math.max(base / this.speedMul, floor);
+  }
+
+  private setWindup(base: number, followup = false) {
+    this.currentWindup = this.scaledWindup(base, followup);
+    this.t = this.currentWindup;
   }
 
   private beginStrike(game: Game) {
@@ -931,7 +944,7 @@ export class Boss {
 
   private triggerStagger(game: Game) {
     if (game.mods.noStagger) { this.poise = this.maxPoise; return; }
-    this.state = 'staggered'; this.t = 1.7;
+    this.state = 'staggered'; this.t = game.mods.staggerDuration;
     this.poise = this.maxPoise;
     game.audio.stagger(game.audioSpatial(this.x, this.y));
     game.goldFlash = 0.35;
@@ -1089,15 +1102,15 @@ export class Boss {
   }
 
   private windupTotal(): number {
-    const mul = this.speedMul;
+    if (this.currentWindup > 0) return this.currentWindup;
     switch (this.attack) {
-      case 'swipe': return (this.comboLeft > 1 ? 0.55 : 0.34) / mul;
-      case 'slam': return 0.95 / mul;
-      case 'charge': return 0.8 / mul;
-      case 'volley': return 0.6 / mul;
-      case 'ring': return 0.9 / mul;
-      case 'meteor': return 0.7 / mul;
-      case 'spiral': return 0.75 / mul;
+      case 'swipe': return this.scaledWindup(this.comboLeft > 1 ? 0.55 : 0.34, this.comboLeft <= 1);
+      case 'slam': return this.scaledWindup(0.95);
+      case 'charge': return this.scaledWindup(0.8);
+      case 'volley': return this.scaledWindup(0.6);
+      case 'ring': return this.scaledWindup(0.9);
+      case 'meteor': return this.scaledWindup(0.7);
+      case 'spiral': return this.scaledWindup(0.75);
     }
   }
 
@@ -1192,6 +1205,17 @@ export class Boss {
 // ------------------------------------------------------------------ game
 type GameState = 'title' | 'intro' | 'fight' | 'dead' | 'victory';
 
+export interface DifficultyMods {
+  bossSpeed: number;
+  dmgTaken: number;
+  iframe: number;
+  perfectWindow: number;
+  flasks: number;
+  poiseMul: number;
+  staggerDuration: number;
+  noStagger: boolean;
+}
+
 export interface GameUiSnapshot {
   state: GameState;
   status: string;
@@ -1265,6 +1289,7 @@ export class Game {
   zoomPunch = 0;
   hbT = 0;
   graceAtStart = 0;
+  private trialMods: DifficultyMods | null = null;
   // persistence
   bestTime = 0; wins = 0; newRecord = false; grade = '';
   bests: Record<string, number> = {};
@@ -1463,8 +1488,8 @@ export class Game {
   // grace lengthens the read (slower boss, longer telegraphs, wider i-frames,
   // softer hits) rather than making the fight a different fight — the pattern
   // you learn at -3 is the same pattern you execute at +5.
-  get mods() {
-    const g = this.grace;
+  difficultyForGrace(grace = this.grace): DifficultyMods {
+    const g = clamp(Math.round(grace), -3, 5);
     const aid = clamp(-g, 0, 3) / 3;
     const vow = clamp(g, 0, 5) / 5;
     return {
@@ -1472,9 +1497,22 @@ export class Game {
       dmgTaken: 1 - aid * 0.45 + vow * 0.40,
       iframe: 1 + aid * 0.55,
       perfectWindow: 1 + aid * 0.6,
-      flasks: 3 + (g <= -2 ? 1 : 0) - (g >= 4 ? 2 : g >= 2 ? 1 : 0),
-      noStagger: g >= 3,
+      // FAMINE removes one flask at +2. The final flask and all stagger
+      // access are reserved for the explicit FORSAKEN +5 capstone instead of
+      // stacking two large discontinuities at +3/+4.
+      flasks: 3 + (g <= -2 ? 1 : 0) - (g >= 5 ? 2 : g >= 2 ? 1 : 0),
+      poiseMul: g >= 4 ? 1.7 : g >= 3 ? 1.35 : 1,
+      staggerDuration: g >= 4 ? 1.25 : g >= 3 ? 1.45 : 1.7,
+      noStagger: g >= 5,
     };
+  }
+
+  get mods(): DifficultyMods {
+    // Once a trial begins, one immutable snapshot owns every combat lever.
+    // This prevents a semantic control, console call, or stale React state
+    // from producing a hybrid run under the original record key.
+    if (this.state !== 'title' && this.trialMods) return this.trialMods;
+    return this.difficultyForGrace(this.grace);
   }
 
   graceLabel(g = this.grace): string {
@@ -1486,9 +1524,15 @@ export class Game {
     return `${names[g] ?? ''} ${g > 0 ? '+' : ''}${g}`.trim();
   }
 
-  setGrace(g: number) {
+  trialBest(g = this.grace): number {
+    return this.bests[String(g)] ?? (g === 0 ? this.bestTime : 0);
+  }
+
+  setGrace(g: number): boolean {
+    if (this.state === 'intro' || this.state === 'fight') return false;
     this.grace = clamp(Math.round(g), -3, 5);
     this.persist();
+    return true;
   }
 
   // shake and flashes are photosensitivity levers as much as feel levers
@@ -1906,8 +1950,12 @@ export class Game {
     this.input.clearCombatActions();
     this.player = new Player();
     this.boss = new Boss();
-    const m = this.mods;
+    const m = this.difficultyForGrace(this.grace);
+    this.trialMods = { ...m };
     this.boss.extraSpeed = m.bossSpeed;
+    this.boss.maxPoise = Math.round(120 * m.poiseMul);
+    this.boss.poise = this.boss.maxPoise;
+    this.boss.minTelegraph = this.input.isTouch ? 0.3 : 0;
     this.player.flasks = m.flasks;
     this.player.maxFlasks = m.flasks;
     this.graceAtStart = this.grace;
@@ -1998,7 +2046,7 @@ export class Game {
       chevRx: cx + halfW - pad,
       valueRx: cx + halfW - pad * 2.2,
       labelLx: cx - halfW + pad * 0.8,
-      pipX: (g: number) => cx + (g - 1) * pipStep,
+      pipX: (g: number) => cx - 18 + (g - 1) * pipStep,
       decZone: cx - halfW * 0.42,
       incZone: cx + halfW * 0.42,
     };
@@ -2646,8 +2694,12 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
       : this.boss.phase === 2
         ? compact ? 'MALAKAR, BURNING SOVEREIGN' : 'MALAKAR, THE BURNING SOVEREIGN'
         : 'MALAKAR, ASHEN SOVEREIGN';
-    const pips = this.boss.phase >= 3 ? '◆ ◆ ◆' : this.boss.phase === 2 ? '◆ ◆ ◇' : '◆ ◇ ◇';
-    const nameMax = bw - (compact ? 78 : 92);
+    const phasePips = this.boss.phase >= 3 ? '◆ ◆ ◆' : this.boss.phase === 2 ? '◆ ◆ ◇' : '◆ ◇ ◇';
+    const poiseLocked = this.mods.noStagger;
+    const pips = poiseLocked ? `IRONBOUND  ${phasePips}` : phasePips;
+    const pipsFont = poiseLocked ? body(10, 700) : serif(12, 700);
+    ctx.font = pipsFont;
+    const nameMax = bw - ctx.measureText(pips).width - (compact ? 18 : 24);
     let nameSize = compact ? 13 : 15;
     ctx.font = serif(nameSize, 600);
     while (nameSize > 10 && ctx.measureText(name).width > nameMax) {
@@ -2673,11 +2725,18 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
     // poise — thin gold sliver under the health bar
     ctx.fillStyle = 'rgba(20,14,8,0.8)';
     ctx.fillRect(bx, by + 15, bw, 3);
-    ctx.fillStyle = this.boss.state === 'staggered' ? PAL.goldBright : 'rgba(201,169,89,0.75)';
-    ctx.fillRect(bx, by + 15, clamp(this.boss.poise / this.boss.maxPoise, 0, 1) * bw, 3);
+    if (poiseLocked) {
+      ctx.fillStyle = 'rgba(148,137,116,0.64)';
+      ctx.fillRect(bx, by + 15, bw, 3);
+      ctx.fillStyle = 'rgba(8,6,4,0.6)';
+      for (let x = bx + 5; x < bx + bw; x += 12) ctx.fillRect(x, by + 15, 5, 3);
+    } else {
+      ctx.fillStyle = this.boss.state === 'staggered' ? PAL.goldBright : 'rgba(201,169,89,0.75)';
+      ctx.fillRect(bx, by + 15, clamp(this.boss.poise / this.boss.maxPoise, 0, 1) * bw, 3);
+    }
     // phase pips
     ctx.textAlign = 'right';
-    ctx.font = serif(12, 700);
+    ctx.font = pipsFont;
     ctx.fillStyle = 'rgba(201,169,89,0.8)';
     ctx.fillText(pips, bx + bw, by - 10);
   }
@@ -2887,13 +2946,14 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
       : 'WASD move \u00b7 SPACE roll \u00b7 J slash \u00b7 K heavy \u00b7 F flask',
     cx, this.h * (this.input.isTouch ? 0.64 : 0.655),
   );
-  if (this.wins > 0 || this.bestTime > 0) {
+  const selectedBest = this.trialBest();
+  if (this.wins > 0 || selectedBest > 0) {
     ctx.font = body(15, 500);
     ctx.fillStyle = 'rgba(201,169,89,0.75)';
-    const bm = Math.floor(this.bestTime / 60), bs2 = Math.floor(this.bestTime % 60);
+    const bm = Math.floor(selectedBest / 60), bs2 = Math.floor(selectedBest % 60);
     const parts: string[] = [];
     if (this.wins > 0) parts.push(`${this.wins} victor${this.wins === 1 ? 'y' : 'ies'}`);
-    if (this.bestTime > 0) parts.push(`best ${bm}:${bs2.toString().padStart(2, '0')}`);
+    if (selectedBest > 0) parts.push(`best ${bm}:${bs2.toString().padStart(2, '0')}`);
     ctx.fillText(parts.join('   \u00b7   '), cx, this.h * 0.60 + 26);
   }
   ctx.font = body(13, 400);
@@ -3004,7 +3064,7 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
   ctx.font = body(19, 500);
   ctx.fillStyle = PAL.parchment;
   const mins = Math.floor(this.fightTime / 60), secs = Math.floor(this.fightTime % 60);
-  const bestForTrial = this.bests[String(this.graceAtStart)] ?? this.bestTime;
+  const bestForTrial = this.trialBest(this.graceAtStart);
   const bm = Math.floor(bestForTrial / 60), bs2 = Math.floor(bestForTrial % 60);
   const stats = [
     `trial \u2014 ${this.graceLabel(this.graceAtStart)}`,
