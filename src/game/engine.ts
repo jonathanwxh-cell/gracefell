@@ -491,6 +491,130 @@ export class Player {
     return true;
   }
 
+  private drawKiteVeilBody(ctx: CanvasRenderingContext2D, rolling: boolean) {
+    const state = this.state;
+    const heavyCharge = state === 'heavy' && this.t > 0.28;
+    const flutter = Math.sin(this.capePhase) * (rolling ? 0.7 : state === 'heavy' ? 1.1 : 1.8);
+
+    ctx.save();
+    ctx.rotate(rolling ? this.rollDir : this.facing);
+    if (state === 'dead') ctx.scale(1, 0.42);
+
+    // The veil is the state cue. Every pose uses one broad filled mass so its
+    // outer contour, rather than cloth detail, survives the 0.55 mobile camera.
+    ctx.fillStyle = '#3a3340';
+    ctx.beginPath();
+    if (rolling) {
+      // Compact notched spindle.
+      ctx.moveTo(11, 0);
+      ctx.lineTo(4, -7);
+      ctx.lineTo(-9, -7 + flutter);
+      ctx.lineTo(-13, 0);
+      ctx.lineTo(-9, 7 + flutter * 0.25);
+      ctx.lineTo(4, 7);
+    } else if (state === 'flask') {
+      // Closed lantern/seed.
+      ctx.moveTo(6, -8);
+      ctx.quadraticCurveTo(-9, -15 + flutter, -16, 0);
+      ctx.quadraticCurveTo(-9, 15 + flutter * 0.2, 6, 8);
+    } else if (state === 'stagger') {
+      // Broken-L silhouette: deliberately exaggerated for the 0.32 s state.
+      ctx.moveTo(6, -5);
+      ctx.lineTo(-3, -15);
+      ctx.lineTo(-13, -16 + flutter);
+      ctx.lineTo(-17, -7);
+      ctx.lineTo(-8, 4);
+      ctx.lineTo(4, 9);
+    } else if (state === 'dead') {
+      // Flattened fallen leaf.
+      ctx.moveTo(7, -10);
+      ctx.lineTo(-2, -15);
+      ctx.lineTo(-17, -11);
+      ctx.lineTo(-19, 0);
+      ctx.lineTo(-14, 10);
+      ctx.lineTo(-1, 13);
+      ctx.lineTo(7, 7);
+    } else if (heavyCharge) {
+      // Broad hammerhead during charge.
+      ctx.moveTo(6, -7);
+      ctx.lineTo(-2, -15);
+      ctx.lineTo(-11, -16 + flutter);
+      ctx.lineTo(-17, -9);
+      ctx.lineTo(-13, 0);
+      ctx.lineTo(-15, 10);
+      ctx.lineTo(-6, 15 + flutter * 0.2);
+      ctx.lineTo(4, 8);
+    } else if (state === 'light' || state === 'heavy') {
+      // Narrow spear profile during attack/release.
+      ctx.moveTo(6, -5);
+      ctx.lineTo(-4, -8);
+      ctx.lineTo(-16, -6 + flutter);
+      ctx.lineTo(-18, -2);
+      ctx.lineTo(-10, 4);
+      ctx.lineTo(-1, 5);
+      ctx.lineTo(6, 3);
+    } else {
+      // Neutral arrow-and-fin profile.
+      ctx.moveTo(6, -8);
+      ctx.lineTo(-4, -13);
+      ctx.lineTo(-15, -10 + flutter);
+      ctx.lineTo(-18, -4);
+      ctx.lineTo(-13, 4);
+      ctx.lineTo(-2, 7);
+      ctx.lineTo(6, 4);
+    }
+    ctx.closePath();
+    ctx.fill();
+
+    // Quiet charcoal torso: the cowl and veil, not internal armor detail, own
+    // identification at play scale.
+    ctx.fillStyle = '#454951';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, rolling ? 11 : 13, rolling ? 7 : 10.5, 0, 0, TAU);
+    ctx.fill();
+
+    const apex = rolling ? 12 : state === 'flask' ? 14 : heavyCharge ? 18 : 17;
+    const hoodHalf = rolling ? 7 : state === 'light' || (state === 'heavy' && !heavyCharge) ? 7 : state === 'flask' ? 8 : 10;
+    const rear = rolling ? -6 : -4;
+    ctx.save();
+    if (state === 'stagger') ctx.rotate(0.48);
+
+    // Bright kite hood: the outer contour is the facing indicator.
+    ctx.fillStyle = PAL.parchmentDim;
+    ctx.beginPath();
+    ctx.moveTo(apex, 0);
+    ctx.lineTo(2, -hoodHalf);
+    ctx.lineTo(rear, -hoodHalf * 0.55);
+    ctx.lineTo(rear, hoodHalf * 0.55);
+    ctx.lineTo(2, hoodHalf);
+    ctx.closePath();
+    ctx.fill();
+
+    // One bold negative wedge remains a useful cluster after reduction.
+    ctx.fillStyle = PAL.bg;
+    ctx.beginPath();
+    ctx.moveTo(apex - 3, 0);
+    ctx.lineTo(4, -4.5);
+    ctx.lineTo(4, 4.5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+    // The seal is a flask-only verb, not permanent costume noise.
+    if (state === 'flask' || this.healPulse > 0) {
+      const seal = state === 'flask' ? 4.5 + Math.sin((1 - this.t) * Math.PI) * 1.5 : 4;
+      ctx.fillStyle = PAL.goldBright;
+      ctx.beginPath();
+      ctx.moveTo(-2, -seal);
+      ctx.lineTo(-2 + seal, 0);
+      ctx.lineTo(-2, seal);
+      ctx.lineTo(-2 - seal, 0);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
   draw(ctx: CanvasRenderingContext2D, game: Game) {
     const { x, y } = this;
     // roll afterimages
@@ -514,29 +638,8 @@ export class Player {
     if (rolling) ctx.rotate(rollSpin * 0.9);
 
     if (!blink) {
-      // cape
-      const flutter = Math.sin(this.capePhase) * 2.2;
-      ctx.fillStyle = '#2c2531';
-      ctx.beginPath();
-      ctx.moveTo(0, -4);
-      ctx.quadraticCurveTo(-this.r - 6 + flutter, 6, -this.r * 0.4 + flutter, this.r + 8);
-      ctx.quadraticCurveTo(0, this.r + 4, this.r * 0.4 + flutter, this.r + 7);
-      ctx.quadraticCurveTo(this.r + 5 + flutter, 4, 0, -4);
-      ctx.fill();
-      // body — ashen steel with gold trim
-      const g = ctx.createRadialGradient(-4, -5, 2, 0, 0, this.r + 2);
-      g.addColorStop(0, '#cfd3da');
-      g.addColorStop(0.55, '#7e8592');
-      g.addColorStop(1, '#3a3f4a');
-      ctx.fillStyle = g;
-      ctx.beginPath(); ctx.arc(0, 0, this.r, 0, TAU); ctx.fill();
-      ctx.strokeStyle = PAL.gold;
-      ctx.lineWidth = 1.6;
-      ctx.beginPath(); ctx.arc(0, 0, this.r - 1, 0, TAU); ctx.stroke();
-      // helm plume
-      ctx.fillStyle = PAL.emberDeep;
-      ctx.beginPath(); ctx.arc(-3, -this.r + 2, 4, 0, TAU); ctx.fill();
-      // glow when healing
+      this.drawKiteVeilBody(ctx, rolling);
+      // The seal hands the completed flask animation to the existing heal ring.
       if (this.healPulse > 0) {
         ctx.globalAlpha = this.healPulse;
         ctx.strokeStyle = PAL.goldBright;
@@ -548,7 +651,8 @@ export class Player {
     ctx.restore();
 
     // sword
-    if (!blink && this.state !== 'dead') {
+    const swordVisible = this.state !== 'dead' && this.state !== 'flask' && this.state !== 'stagger' && !rolling;
+    if (!blink && swordVisible) {
       const sw = this.swordAngle();
       const inAtk = this.state === 'light' || this.state === 'heavy';
       const len = inAtk ? (this.state === 'heavy' ? 88 : 74) : 34;
@@ -617,6 +721,9 @@ export class Boss {
   phase3Done = false;
   spiralLeft = 0; spiralAng = 0; spiralTick = 0;
   foleyT = 0; chargeFoleyT = 0;
+  haloSpent = 0;
+  haloReforgeT = 0;
+  secondSwordDraw = 0;
 
   extraSpeed = 1; // set from Game.mods — the grace dial
   minTelegraph = 0;
@@ -631,6 +738,14 @@ export class Boss {
     this.embers += dt;
     this.foleyT -= dt;
     this.chargeFoleyT -= dt;
+    if (this.haloSpent > 0) {
+      this.haloReforgeT -= dt;
+      while (this.haloReforgeT <= 0 && this.haloSpent > 0) {
+        this.haloSpent--;
+        this.haloReforgeT += 0.8;
+      }
+    }
+    if (this.phase >= 3) this.secondSwordDraw = Math.min(1, this.secondSwordDraw + dt / 0.4);
     for (const k of Object.keys(this.cooldowns) as BossAttack[]) this.cooldowns[k] = Math.max(0, this.cooldowns[k] - dt);
     const dToP = dist(this.x, this.y, p.x, p.y);
     const aToP = angTo(this.x, this.y, p.x, p.y);
@@ -726,6 +841,8 @@ export class Boss {
         } else if (this.attack === 'volley') {
           if (this.t <= 0) {
             const n = this.phase >= 3 ? 9 : this.phase === 2 ? 7 : 5;
+            this.haloSpent = Math.min(9, this.haloSpent + n);
+            this.haloReforgeT = 0.8;
             for (let i = 0; i < n; i++) {
               const spread = (i / (n - 1) - 0.5) * 0.85;
               const a = aToP + spread;
@@ -793,6 +910,7 @@ export class Boss {
     } else if (this.phase === 2 && this.hp <= this.maxHp * 0.22 && !this.phase3Done) {
       this.phase3Done = true;
       this.phase = 3;
+      this.secondSwordDraw = 0;
       this.state = 'windup'; this.attack = 'ring'; this.t = 1.2;
       this.currentWindup = 1.2;
       this.poise = this.maxPoise;
@@ -952,6 +1070,52 @@ export class Boss {
     game.shake(8, 0.35);
   }
 
+  private drawCoatsword(ctx: CanvasRenderingContext2D, angle: number, length: number, windupGlow: number, reveal = 1) {
+    if (reveal <= 0) return;
+    const start = this.r * 0.44;
+    const shown = length * reveal;
+    ctx.save();
+    ctx.rotate(angle);
+    const blade = ctx.createLinearGradient(start, 0, start + shown, 0);
+    blade.addColorStop(0, '#302c2f');
+    blade.addColorStop(0.55, '#5a5350');
+    blade.addColorStop(1, this.phase >= 2 ? '#8a5430' : '#746b62');
+    ctx.fillStyle = blade;
+    ctx.beginPath();
+    ctx.moveTo(start, -4.5);
+    ctx.lineTo(start + Math.max(0, shown - 11), -3.1);
+    ctx.lineTo(start + shown, 0);
+    ctx.lineTo(start + Math.max(0, shown - 11), 3.1);
+    ctx.lineTo(start, 4.5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = this.phase >= 3 ? 'rgba(240,205,126,0.62)' : 'rgba(130,119,108,0.7)';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+
+    // Swept guard keeps the weapon readable as a sword, not a projectile.
+    ctx.strokeStyle = '#171518';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(start - 4, -10);
+    ctx.quadraticCurveTo(start + 3, 0, start - 4, 10);
+    ctx.stroke();
+    ctx.fillStyle = PAL.gold;
+    ctx.beginPath(); ctx.arc(start - 5, 0, 3.2, 0, TAU); ctx.fill();
+
+    if (windupGlow > 0) {
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = windupGlow;
+      ctx.strokeStyle = this.phase >= 2 ? PAL.amber : '#c68a59';
+      ctx.lineWidth = 7;
+      ctx.beginPath();
+      ctx.moveTo(start + 3, 0);
+      ctx.lineTo(start + shown, 0);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   draw(ctx: CanvasRenderingContext2D, game: Game) {
     const { x, y } = this;
     const windupP = this.state === 'windup' ? 1 - this.t / this.windupTotal() : 0;
@@ -976,66 +1140,73 @@ export class Boss {
     }
 
     // tattered wings (phase 2+) — behind the body
-    if (this.phase >= 2) {
-      const flap = Math.sin(game.time * (this.phase >= 3 ? 3.4 : 2.2)) * 0.16;
-      for (const side of [-1, 1]) {
-        ctx.save();
-        ctx.rotate(this.facing + Math.PI + side * (0.75 + flap));
-        ctx.fillStyle = this.phase >= 3 ? 'rgba(48,24,14,0.92)' : 'rgba(30,20,16,0.9)';
-        ctx.beginPath();
-        ctx.moveTo(this.r * 0.4, 0);
-        const wl = this.r * (this.phase >= 3 ? 2.6 : 2.1);
-        ctx.quadraticCurveTo(wl * 0.5, -this.r * 0.9, wl, -this.r * 0.35);
-        // ragged trailing edge
-        ctx.lineTo(wl * 0.82, this.r * 0.05);
-        ctx.lineTo(wl * 0.66, -this.r * 0.18);
-        ctx.lineTo(wl * 0.5, this.r * 0.16);
-        ctx.lineTo(wl * 0.32, -this.r * 0.05);
-        ctx.closePath();
-        ctx.fill();
-        ctx.strokeStyle = this.phase >= 3 ? 'rgba(255,122,41,0.5)' : 'rgba(195,61,30,0.4)';
-        ctx.lineWidth = 1.4;
-        ctx.stroke();
-        ctx.restore();
-      }
+    const capeFlap = Math.sin(game.time * (this.phase >= 3 ? 3.2 : 2.1)) * 0.13;
+    for (const side of [-1, 1]) {
+      ctx.save();
+      ctx.rotate(this.facing + Math.PI + side * (0.62 + capeFlap));
+      ctx.fillStyle = this.phase >= 3 ? 'rgba(43,32,29,0.9)' : 'rgba(29,28,31,0.86)';
+      ctx.beginPath();
+      ctx.moveTo(this.r * 0.28, 0);
+      const capeLen = this.r * (this.phase >= 3 ? 2.25 : 1.88);
+      ctx.quadraticCurveTo(capeLen * 0.46, -this.r * 0.72, capeLen, -this.r * 0.24);
+      ctx.lineTo(capeLen * 0.84, this.r * 0.05);
+      ctx.lineTo(capeLen * 0.69, -this.r * 0.13);
+      ctx.lineTo(capeLen * 0.53, this.r * 0.15);
+      ctx.lineTo(capeLen * 0.34, -this.r * 0.03);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = this.phase >= 2 ? 'rgba(204,120,53,0.48)' : 'rgba(112,105,100,0.38)';
+      ctx.lineWidth = 1.25;
+      ctx.stroke();
+      ctx.restore();
     }
 
     // body — ashen armor
     const flash = this.hurtFlash > 0;
-    const g = ctx.createRadialGradient(-10, -12, 6, 0, 0, this.r + 4);
-    if (flash) { g.addColorStop(0, '#fff'); g.addColorStop(1, '#caa'); }
-    else {
-      g.addColorStop(0, this.phase === 2 ? '#5a3a2e' : '#4a4442');
-      g.addColorStop(0.6, '#241f1e');
-      g.addColorStop(1, '#100d0c');
-    }
-    ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(0, 0, this.r, 0, TAU); ctx.fill();
-
-    // armor plates
-    ctx.strokeStyle = flash ? '#fff' : '#574f4a';
-    ctx.lineWidth = 2.5;
-    for (let i = 0; i < 3; i++) {
-      ctx.beginPath(); ctx.arc(0, 0, this.r - 8 - i * 8, 0.4 + i * 0.8, 2.4 + i * 0.8); ctx.stroke();
-    }
-    // crown spikes
-    ctx.fillStyle = flash ? '#fff' : '#3a332f';
-    for (let i = 0; i < 6; i++) {
-      const a = (i / 6) * TAU + 0.3;
+    {
+      // Issue #14: a facing-led body reads as a fallen sword saint more
+      // clearly than the old radial crown. The collision circle is unchanged.
       ctx.save();
-      ctx.rotate(a);
+      ctx.rotate(this.facing);
+      const g = ctx.createRadialGradient(11, -9, 4, 0, 0, this.r + 5);
+      if (flash) { g.addColorStop(0, '#fff'); g.addColorStop(1, '#caa'); }
+      else {
+        g.addColorStop(0, this.phase >= 2 ? '#655047' : '#555052');
+        g.addColorStop(0.58, '#292526');
+        g.addColorStop(1, '#100e0f');
+      }
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.ellipse(0, 0, this.r * 0.96, this.r * 0.68, 0, 0, TAU); ctx.fill();
+      ctx.strokeStyle = flash ? '#fff' : '#675e59';
+      ctx.lineWidth = 2.3;
+      for (let i = 0; i < 3; i++) {
+        const px = 13 - i * 12;
+        ctx.beginPath();
+        ctx.moveTo(px, -this.r * 0.66);
+        ctx.lineTo(px + 7, 0);
+        ctx.lineTo(px, this.r * 0.66);
+        ctx.stroke();
+      }
+      ctx.fillStyle = flash ? '#fff' : '#393335';
       ctx.beginPath();
-      ctx.moveTo(this.r - 4, -5); ctx.lineTo(this.r + 9, 0); ctx.lineTo(this.r - 4, 5);
-      ctx.closePath(); ctx.fill();
+      ctx.moveTo(this.r + 4, 0);
+      ctx.lineTo(this.r * 0.56, -10);
+      ctx.lineTo(this.r * 0.42, 0);
+      ctx.lineTo(this.r * 0.56, 10);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = this.phase >= 3 ? PAL.goldBright : 'rgba(201,169,89,0.65)';
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
       ctx.restore();
     }
-    // burning core
-    const coreR = this.phase >= 3 ? 13 + Math.sin(game.time * 12) * 3 : this.phase === 2 ? 10 + Math.sin(game.time * 9) * 2.5 : 7 + Math.sin(game.time * 4) * 1.5;
+    // One failing saint-light, deliberately smaller than the old fireball core.
+    const coreR = this.phase >= 3 ? 9 + Math.sin(game.time * 12) * 1.8 : this.phase === 2 ? 7 + Math.sin(game.time * 9) * 1.4 : 5 + Math.sin(game.time * 4) * 0.8;
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     const cg = ctx.createRadialGradient(0, 0, 0, 0, 0, coreR * 2.2);
     cg.addColorStop(0, this.phase >= 3 ? '#fff3d6' : '#ffd9a0');
-    cg.addColorStop(0.4, this.phase >= 2 ? PAL.amber : '#b05030');
+    cg.addColorStop(0.4, this.phase >= 2 ? PAL.amber : '#a46b35');
     cg.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = cg;
     ctx.beginPath(); ctx.arc(0, 0, coreR * 2.2, 0, TAU); ctx.fill();
@@ -1043,21 +1214,36 @@ export class Boss {
 
     // orbiting crown shards
     {
-      const n = 5;
-      const orbSpd = this.phase >= 3 ? 2.6 : this.phase === 2 ? 1.6 : 0.8;
-      for (let i = 0; i < n; i++) {
+      const n = 9;
+      const visible = n - this.haloSpent;
+      const baseSpd = this.phase >= 3 ? 2.6 : this.phase === 2 ? 1.6 : 0.8;
+      const orbSpd = this.state === 'staggered' ? 0.22 : baseSpd;
+      const volleyGather = this.attack === 'volley' && this.state === 'windup' ? windupP * 7 : 0;
+      for (let i = 0; i < visible; i++) {
         const a = game.time * orbSpd + (i / n) * TAU;
-        const orx = Math.cos(a) * (this.r + 17), ory = Math.sin(a) * (this.r + 17) * 0.92;
+        const wobble = this.state === 'staggered' ? Math.sin(game.time * 5 + i * 1.7) * 5.5 : 0;
+        const orbitR = this.r + 25 - volleyGather + wobble;
+        const orx = Math.cos(a) * orbitR, ory = Math.sin(a) * orbitR * 0.92;
         ctx.save();
         ctx.translate(orx, ory);
         ctx.rotate(a + Math.PI / 2);
         ctx.fillStyle = flash ? '#fff' : this.phase >= 3 ? '#5a3018' : '#2b2622';
         ctx.beginPath();
-        ctx.moveTo(0, -7); ctx.lineTo(4.5, 4); ctx.lineTo(-4.5, 4); ctx.closePath();
+        ctx.moveTo(0, -11); ctx.lineTo(3.8, 3.5); ctx.lineTo(0, 9); ctx.lineTo(-3.8, 3.5);
+        ctx.closePath();
         ctx.fill();
-        ctx.strokeStyle = this.phase >= 3 ? PAL.goldBright : 'rgba(201,169,89,0.55)';
-        ctx.lineWidth = 1;
+        ctx.strokeStyle = this.phase >= 3 || (this.attack === 'volley' && this.state === 'windup') ? PAL.goldBright : 'rgba(201,169,89,0.62)';
+        ctx.lineWidth = 1.35;
         ctx.stroke();
+        if (this.phase >= 2) {
+          ctx.fillStyle = this.phase >= 3 ? PAL.goldBright : PAL.amber;
+          ctx.beginPath();
+          ctx.moveTo(0, -11);
+          ctx.lineTo(2.1, -4.5);
+          ctx.lineTo(-2.1, -4.5);
+          ctx.closePath();
+          ctx.fill();
+        }
         ctx.restore();
       }
     }
@@ -1070,30 +1256,24 @@ export class Boss {
         : this.state === 'recover'
           ? this.facing + 1.55
           : this.facing + 0.55;
-    ctx.save();
-    ctx.rotate(swA);
-    const sLen = 86;
-    const sGrad = ctx.createLinearGradient(0, 0, sLen, 0);
-    sGrad.addColorStop(0, '#2c2828');
-    sGrad.addColorStop(0.5, '#4c453f');
-    sGrad.addColorStop(1, this.phase >= 2 ? '#7a4526' : '#5c534a');
-    ctx.fillStyle = sGrad;
-    ctx.fillRect(this.r * 0.5, -5, sLen, 10);
-    ctx.fillStyle = '#1a1715';
-    ctx.fillRect(this.r * 0.5 - 4, -9, 8, 18);
-    if (this.state === 'windup') {
-      ctx.globalAlpha = 0.4 + windupP * 0.5;
-      ctx.fillStyle = this.phase >= 2 ? PAL.amber : '#c34a2e';
-      ctx.fillRect(this.r * 0.5, -7, sLen, 14);
-    }
-    ctx.restore();
+    const swordGlow = this.state === 'windup' ? 0.18 + windupP * 0.38 : 0;
+    this.drawCoatsword(ctx, swA, 88, swordGlow);
 
-    // staggered kneel indication
+    // Phase three draws a second coatsword from the split cape over 0.4 s. It
+    // remains visual-only, so combat timing and hit geometry stay untouched.
+    if (this.phase >= 3) {
+      const secondA = this.facing - (swA - this.facing);
+      const reveal = 1 - Math.pow(1 - this.secondSwordDraw, 3);
+      this.drawCoatsword(ctx, secondA, 82, swordGlow * 0.82, reveal);
+    }
+
+    // The halo wobble is the primary stagger tell; this low-contrast broken
+    // orbit only supports it without borrowing the reserved hazard colour.
     if (this.state === 'staggered') {
       ctx.strokeStyle = PAL.goldBright;
-      ctx.globalAlpha = 0.6 + Math.sin(game.time * 10) * 0.3;
-      ctx.lineWidth = 2.5;
-      ctx.setLineDash([8, 6]);
+      ctx.globalAlpha = 0.24 + Math.sin(game.time * 10) * 0.08;
+      ctx.lineWidth = 1.6;
+      ctx.setLineDash([5, 9]);
       ctx.beginPath(); ctx.arc(0, 0, this.r + 12, 0, TAU); ctx.stroke();
       ctx.setLineDash([]);
       ctx.globalAlpha = 1;

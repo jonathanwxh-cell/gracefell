@@ -1,8 +1,8 @@
 # GRACEFELL project facts
 
-- Current package: `gracefell@2.10.1`
-- Gameplay release: `v2.10`
-- Documentation follow-through: `v2.10.1`
+- Current package: `gracefell@2.11.0`
+- Gameplay release: `v2.11`
+- Character release: Kite-Veil Penitent + Fallen Blade-Saint
 - Production: <https://gracefell.alyoechosys.dev>
 - Repository: <https://github.com/jonathanwxh-cell/gracefell>
 
@@ -29,8 +29,8 @@ npm run qa
 
 `npm run qa` is the acceptance gate. It builds the app, starts an isolated server on
 `127.0.0.1:8492`, and drives desktop, mobile, and real-touch Chromium paths. See
-[`docs/releases/v2.10.md`](docs/releases/v2.10.md) for the shipped difficulty pass and its
-local, GitHub Actions, and production evidence.
+[`docs/releases/v2.11.md`](docs/releases/v2.11.md) for the current character-readability release
+and [`docs/releases/v2.10.md`](docs/releases/v2.10.md) for the difficulty-integrity record.
 
 ## Authoritative documentation
 
@@ -39,4 +39,6 @@ local, GitHub Actions, and production evidence.
 - [`AGENTS.md`](AGENTS.md) — operational runbook and invariants future agents must preserve
 - [`PROVENANCE.md`](PROVENANCE.md) — contributor ledger and commit-trailer rules
 - [`public/audio/README.md`](public/audio/README.md) — generated music provenance
+- [`design-qa.md`](design-qa.md) — source-normalized mobile/desktop character comparisons
+- [`docs/releases/v2.11.md`](docs/releases/v2.11.md) — v2.11 design, QA, deployment, and playtest record
 - [`docs/releases/v2.10.md`](docs/releases/v2.10.md) — v2.10 acceptance and deployment record
