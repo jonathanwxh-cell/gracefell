@@ -8,10 +8,12 @@ rules are all decided by what works one-handed on a 390px screen.
 
 **Play it: [gracefell.alyoechosys.dev](https://gracefell.alyoechosys.dev)**
 
-Current gameplay release: **v2.11.2**. Three rapid ATK presses now remain three distinct light
-attacks on phone and desktop, while roll keeps transition priority. The third slash has its own
-silver finisher feedback instead of borrowing the heavy attack's sound identity. The fix and
-acceptance record are preserved in [`docs/releases/v2.11.2.md`](docs/releases/v2.11.2.md).
+Current gameplay release: **v2.12**. New players begin on a disclosed, forgiving Journey; experts
+can answer with authored Oath attack chains. The fight now teaches its perfect-dodge, poise, and
+stagger loop in play, gives attack-specific death advice, offers voluntary Grace after repeated
+deaths, and shows connected light-combo progress through the finisher. The complete research,
+balance, save-migration, test, deployment, and production record is preserved in
+[`docs/releases/v2.12.md`](docs/releases/v2.12.md).
 The v2.11 character design record remains available in
 [`docs/releases/v2.11.md`](docs/releases/v2.11.md).
 
@@ -33,10 +35,10 @@ The sovereign has an audio language, not one generic warning: swipes whistle, ch
 
 **v2 — extended by Claude (Opus 4.8).** Combat depth, a third phase, a full rendering pass, persistence, and a headless verification gate. Details in [DESIGN.md](DESIGN.md).
 
-**v2.4–v2.11.2 — audio, responsiveness, combat integrity, character readability, and victory persistence extended by
+**v2.4–v2.12 — audio, responsiveness, combat integrity, character readability, progression, and victory persistence extended by
 Codex (GPT-5).** Attack-specific procedural cues, spatial mix protection, the MiniMax-generated
 score, mobile/accessibility hardening, trustworthy combat and retry behavior, the verified
-nine-level difficulty pass, and the production Kite-Veil/Blade-Saint silhouettes. The v2.11 player
+Grace-to-Oaths mastery path, and the production Kite-Veil/Blade-Saint silhouettes. The v2.11 player
 direction was selected from three independent design-house proposals. Kimi / OKComputer supplied
 the six original issue concept images and briefs (#10–#15); the shipped player and boss are
 Codex-authored procedural interpretations that only partially translate the selected #10 and #14
@@ -57,10 +59,10 @@ who did which pass, and the rules any future agent follows before touching the c
 | | |
 |---|---|
 | drag anywhere on the **left half** | a floating stick appears under your thumb; steer with it |
-| **ATK** | slash — tap again in rhythm to chain a 3-hit combo |
+| **ATK** | slash — connect three light hits to fill the visible chain and land its finisher |
 | **ROLL** | invincible — roll *into* a swing for a perfect dodge |
 | **HVY** | heavy, slow, big poise damage |
-| **FLASK** | heal (you get three) |
+| **FLASK** | heal (Journey starts with four; the selected path is shown before the fight) |
 
 The buttons scale with your screen and sit clear of the home indicator. Haptics fire on hits and
 perfect dodges, and can be switched off on the title screen.
@@ -70,7 +72,9 @@ slashes, K or right-click is heavy, F drinks, M mutes.
 
 ## The fight
 
-Malakar has three phases and does not scale to your skill.
+Malakar has three phases. Every path keeps the same core move vocabulary; Grace changes how much
+room the player receives, while expert Oaths can compose direct attacks into disclosed follow-up
+packets.
 
 1. **Fallen Blade-Saint** — nine broken halo blades expose his volley ammunition while swipes,
    slams, charges, and volleys teach the core tells.
@@ -83,35 +87,48 @@ Break his poise to stagger him; staggered hits do 1.4×. Land a roll *into* an i
 
 Victory is graded S through C on time and wounds taken. Your best time and win count persist locally. A no-hit run is an S.
 
-## The grace dial
+## Grace, Measured, and Oaths
 
-There's no easy mode. There's one dial on the title screen, running **−3 to +5**.
+The title **Path** runs from **−3 to +5** and tells you what its current choice changes.
 
-Turn it down and the sovereign slows, your dodge window widens, his hits land softer, and at −2/−3
-you carry an extra flask. Turn it up and he speeds up and hits harder. FAMINE +2 removes one flask;
-IRON +3 and FRAILTY +4 make his poise harder to break and shorten the stagger opening without
-removing it. Only the explicit FORSAKEN +5 capstone leaves one flask and makes him **IRONBOUND**:
-the HUD says so and its locked poise bar no longer promises a stagger that cannot happen.
+A player with no save begins on **JOURNEY −2 — recommended**: Malakar is about 15% slower, wounds
+land 30% softer, dodge windows are wider, four flasks are available, and windups name the incoming
+attack above the boss bar. The sovereign, health pool, phases, move set, and victory requirements
+are unchanged. Existing saves keep their chosen path; an old save that never stored a path remains
+on **MEASURED 0**.
 
-| Trial | Boss speed | Damage taken | Flasks | Boss poise |
-|---:|---:|---:|---:|---:|
-| −3 | 0.78× | 0.55× | 4 | 120 |
-| −2 | 0.85× | 0.70× | 4 | 120 |
-| −1 | 0.93× | 0.85× | 3 | 120 |
-| 0 | 1.00× | 1.00× | 3 | 120 |
-| +1 | 1.06× | 1.08× | 3 | 120 |
-| +2 | 1.12× | 1.16× | 2 | 120 |
-| +3 | 1.18× | 1.24× | 2 | 162 |
-| +4 | 1.24× | 1.32× | 2 | 204 |
-| +5 | 1.30× | 1.40× | 1 | 204, IRONBOUND |
+Positive paths are **Oaths**. They retain the established speed, damage, flask, poise, and stagger
+curve, then add authored follow-up packets and shorter recovery. The HUD says
+`OATH CHAIN step/total` while one is active. Area-denial moves are never chained; the packet routes
+use only swipe, slam, charge, and volley, and every step still obeys its normal range, cooldown,
+phase, and touch-telegraph floor.
 
-The rule the design holds to: **aid lengthens the read, it doesn't change the fight.** The pattern
-you learn at −3 is the same pattern you execute at +5 — nothing is removed, nothing is simplified,
-you're just given more time to see it coming.
+| Path | Boss speed | Damage taken | Flasks | Boss poise | Added read or pressure |
+|---:|---:|---:|---:|---:|---|
+| −3 | 0.78× | 0.55× | 4 | 120 | named tells, longest recovery |
+| −2 JOURNEY | 0.85× | 0.70× | 4 | 120 | recommended, named tells |
+| −1 | 0.93× | 0.85× | 3 | 120 | wider dodge |
+| 0 MEASURED | 1.00× | 1.00× | 3 | 120 | canonical timing |
+| +1 OATH I | 1.06× | 1.08× | 3 | 120 | two-beat packets |
+| +2 OATH II | 1.12× | 1.16× | 2 | 120 | two-beat packets |
+| +3 OATH III | 1.18× | 1.24× | 2 | 162 | more frequent packets, 1.45 s stagger |
+| +4 OATH IV | 1.24× | 1.32× | 2 | 204 | more frequent packets, 1.25 s stagger |
+| +5 OATH V | 1.30× | 1.40× | 1 | 204, IRONBOUND | three-beat packets, no stagger |
 
-And the record carries the setting. Best times are stored per grace level and the victory seal
-stamps the trial you ran, so "S at +2" and "S at −1" stay different things. Beating him is
-supposed to mean something; it just shouldn't require the same reflexes from everybody.
+The rule the design holds to: **make the fight easier to finish without making it easier to
+master.** Grace is visible and voluntary. Oaths change recognition and recovery decisions without
+shrinking touch targets, hiding tells, removing the input buffer, or shortening established mobile
+reaction floors.
+
+The first contextual rite teaches movement, rolling through the blade, perfect-dodge poise damage,
+and striking a real stagger. It disappears permanently once completed. If the player dies, the
+screen names one response to the attack that landed the final wound. From attempt two, an explicit
+**Receive Grace** control can lower the path by one step; it never changes difficulty silently and
+does not consume the subsequent **rise again** tap.
+
+The record carries the setting. Best times and scorecards stay separate by path; v2.12 scorecards
+also retain perfect dodges, flask use, and Oath rank. “S at Oath II” and “S on Journey” remain
+different achievements.
 
 Also on the title screen: **screen shake** and **flash reduction** toggles. The low-health vignette
 pulses at about 5Hz by default, which is a photosensitivity concern — reduced mode makes it a
@@ -260,6 +277,24 @@ with a silver damage number. HVY keeps its separate heavy cue and gold impact id
 and true-touch regression paths both perform three 50 ms-spaced ATK presses and require steps
 `0, 1, 2`, no heavy flag or heavy cue, and an empty queue afterward.
 
+## Designed and fixed by Codex — v2.12 Journey and Oaths
+
+A research-led difficulty pass now separates first-completion support from expert rematch
+pressure. New players start on the transparent Journey candidate while old saves retain their
+choice. One contextual rite teaches the actual defensive loop; lethal-source hints and the
+voluntary repeated-death Grace offer turn failure into a specific next action without silently
+changing the rules.
+
+Expert Oaths preserve the established curve and add capped, learnable boss packets with visible
+step counts and recovery pressure. Ring, meteor, and spiral never join those packets. Connected
+player light hits now show the full chain and finisher, and victory scorecards retain perfect
+dodges, flask use, and Oath rank in save schema v4.
+
+The complete local suite, GitHub Actions run, exact-SHA host deployment, public health checks, and
+full production replay all passed. See the
+[`v2.12 release record`](docs/releases/v2.12.md) for the rationale, rejected alternatives, authored
+routes, migration rules, measurements, evidence names, and known human-testing limits.
+
 ## Running it
 
 ```bash
@@ -298,7 +333,9 @@ plus an emulated real-touch phone. It checks canvas output, console health, stre
 first-tap cost, accessibility focus/pause, intro and terminal isolation, expanded touch targeting,
 hit-stop buffering, 30/60/120 Hz combat motion, meteor cadence, heavy impulse, phase cleanup,
 victory/grade/persistence, touch and pointer-only resurrection, and genuine perfect-dodge behavior.
-Green, or it isn't done.
+It also enumerates the Journey/Oath curve, forces a complete expert boss packet, performs the
+contextual rite, verifies lethal-source advice and Receive Grace ownership, and requires visible
+1/3 → 2/3 → finisher feedback from a real three-tap touch chain. Green, or it isn't done.
 
 ## License
 
