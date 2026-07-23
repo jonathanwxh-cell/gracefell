@@ -63,7 +63,16 @@ export default function Home() {
         onPointerDown={(event) => event.currentTarget.focus({ preventScroll: true })}
       />
 
-      <section className="game-accessibility" aria-label="Gracefell controls and accessibility settings">
+      <section
+        className="game-accessibility"
+        aria-label="Gracefell controls and accessibility settings"
+        onFocusCapture={() => act((game) => game.setUiFocused(true))}
+        onBlurCapture={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+            act((game) => game.setUiFocused(false));
+          }
+        }}
+      >
         <h1>Gracefell</h1>
         <p id="game-instructions">
           Move with WASD or arrow keys, roll with Space, attack with J, use a heavy attack with K,

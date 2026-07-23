@@ -9,7 +9,10 @@ export interface SpatialAudio {
 
 type VoicePriority = 'normal' | 'critical';
 type SpatialInput = SpatialAudio | number;
-const PREPARED_SAMPLE_RATE = 48000;
+// The authored noise and room response contain no useful ultrasonic detail.
+// Preparing them at 24 kHz halves cold-start work and memory; they are smoothly
+// resampled into the device AudioContext when the graph is created.
+const PREPARED_SAMPLE_RATE = 24000;
 const SOUNDTRACK_VERSION = '2.8';
 
 interface VoiceVariation {
@@ -70,9 +73,10 @@ export class GameAudio {
   private reverbWet!: GainNode;
   private noiseBuffer: AudioBuffer | null = null;
   private preparedNoise: Float32Array | null = null;
-  private preparedImpulse: [Float32Array, Float32Array] | null = null;
+  private preparedImpulse: Float32Array | null = null;
   private prepareHandle: number | null = null;
   private prepareUsesIdleCallback = false;
+  private reverbBuildHandle: number | null = null;
   private musicNodes: AudioNode[] = [];
   private soundtrackElement: HTMLAudioElement | null = null;
   private soundtrackSource: MediaElementAudioSourceNode | null = null;
@@ -109,15 +113,10 @@ export class GameAudio {
       this.prepareUsesIdleCallback = false;
       this.ensureWaveData();
     };
-    const idleWindow = window as typeof window & {
-      requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
-    };
-    if (idleWindow.requestIdleCallback) {
-      this.prepareUsesIdleCallback = true;
-      this.prepareHandle = idleWindow.requestIdleCallback(run, { timeout: 500 });
-    } else {
-      this.prepareHandle = window.setTimeout(run, 80);
-    }
+    // A zero-delay task runs before a realistically fast first tap. Chromium's
+    // idle callback can wait 50 ms under startup load, moving waveform work
+    // into the gesture handler and causing an audible-control hitch on phones.
+    this.prepareHandle = window.setTimeout(run, 0);
   }
 
   init() {
@@ -188,13 +187,23 @@ export class GameAudio {
     this.ensureWaveData();
     this.noiseBuffer = this.buildNoiseBuffer();
     this.reverb = this.ctx.createConvolver();
-    const irStartedAt = performance.now();
-    this.reverb.buffer = this.buildArenaImpulse();
-    this.irBuildCostMs = performance.now() - irStartedAt;
     this.reverbWet = this.ctx.createGain();
     this.reverbWet.gain.value = 0.19;
     this.reverb.connect(this.reverbWet).connect(this.master);
     this.initCostMs = performance.now() - initStartedAt;
+
+    // The first combat noise cannot occur until after the intro, so attach the
+    // already-prepared room buffer on the next task instead of making the input
+    // gesture pay its allocation/copy cost. Dry SFX remain valid during this
+    // tiny window and the common reverb route does not change.
+    const initializedContext = this.ctx;
+    this.reverbBuildHandle = window.setTimeout(() => {
+      this.reverbBuildHandle = null;
+      if (this.ctx !== initializedContext || !this.reverb) return;
+      const irStartedAt = performance.now();
+      this.reverb.buffer = this.buildArenaImpulse();
+      this.irBuildCostMs = performance.now() - irStartedAt;
+    }, 0);
 
     this.startDrone();
     void this.loadSoundtrack(this.ctx);
@@ -202,6 +211,10 @@ export class GameAudio {
 
   destroy() {
     this.cancelPreparation();
+    if (this.reverbBuildHandle !== null) {
+      window.clearTimeout(this.reverbBuildHandle);
+      this.reverbBuildHandle = null;
+    }
     if (this.schedulerTimer !== null) {
       window.clearInterval(this.schedulerTimer);
       this.schedulerTimer = null;
@@ -384,8 +397,11 @@ export class GameAudio {
   }
 
   private ensureWaveData() {
-    if (!this.preparedNoise) this.preparedNoise = this.buildNoiseData(2.5, PREPARED_SAMPLE_RATE);
-    if (!this.preparedImpulse) this.preparedImpulse = this.buildImpulseData(1.9, PREPARED_SAMPLE_RATE);
+    // The noise bed covers the 1.8 s death cue. A mono room response is applied
+    // to the already-spatialized stereo send, halving IR allocation/copy work
+    // without collapsing positional SFX.
+    if (!this.preparedNoise) this.preparedNoise = this.buildNoiseData(1.9, PREPARED_SAMPLE_RATE);
+    if (!this.preparedImpulse) this.preparedImpulse = this.buildImpulseData(1.55, PREPARED_SAMPLE_RATE);
   }
 
   private buildNoiseData(seconds: number, sampleRate: number) {
@@ -399,21 +415,18 @@ export class GameAudio {
     return data;
   }
 
-  private buildImpulseData(seconds: number, sampleRate: number): [Float32Array, Float32Array] {
+  private buildImpulseData(seconds: number, sampleRate: number) {
     const len = Math.max(1, Math.floor(sampleRate * seconds));
-    const channels: [Float32Array, Float32Array] = [new Float32Array(len), new Float32Array(len)];
-    for (let ch = 0; ch < channels.length; ch++) {
-      const data = channels[ch];
-      let low = 0;
-      for (let i = 0; i < len; i++) {
-        const white = Math.random() * 2 - 1;
-        low = low * 0.965 + white * 0.035;
-        const stoneMid = white * 0.32 + (white - low) * 0.68;
-        const decay = Math.pow(1 - i / len, 3.25);
-        data[i] = stoneMid * decay * (ch === 0 ? 0.92 : 0.87);
-      }
+    const data = new Float32Array(len);
+    let low = 0;
+    for (let i = 0; i < len; i++) {
+      const white = Math.random() * 2 - 1;
+      low = low * 0.965 + white * 0.035;
+      const stoneMid = white * 0.32 + (white - low) * 0.68;
+      const decay = Math.pow(1 - i / len, 3.25);
+      data[i] = stoneMid * decay * 0.9;
     }
-    return channels;
+    return data;
   }
 
   private buildNoiseBuffer() {
@@ -427,11 +440,10 @@ export class GameAudio {
 
   private buildArenaImpulse() {
     const ctx = this.ctx!;
-    const channels = this.preparedImpulse!;
-    const length = Math.max(1, Math.round(channels[0].length * ctx.sampleRate / PREPARED_SAMPLE_RATE));
-    const impulse = ctx.createBuffer(2, length, ctx.sampleRate);
-    this.copyPreparedData(channels[0], impulse.getChannelData(0));
-    this.copyPreparedData(channels[1], impulse.getChannelData(1));
+    const data = this.preparedImpulse!;
+    const length = Math.max(1, Math.round(data.length * ctx.sampleRate / PREPARED_SAMPLE_RATE));
+    const impulse = ctx.createBuffer(1, length, ctx.sampleRate);
+    this.copyPreparedData(data, impulse.getChannelData(0));
     return impulse;
   }
 
@@ -699,7 +711,21 @@ export class GameAudio {
     const key = heavy ? 'hit-heavy' : 'hit';
     if (!this.allowCue(key, 0.035)) return;
     const variation = this.vary(`${key}-${variant % 3}`, 0.7, true);
-    this.noise({ dur: heavy ? 0.009 : 0.006, gain: heavy ? 0.34 : 0.25, type: 'highpass', freq: heavy ? 7600 : 9200, freqEnd: 5200, q: 0.55, spatial, reverb: 0.08, variation, priority: heavy ? 'critical' : 'normal' });
+    // Keep one phone-speaker contact crack inside the reserved critical budget.
+    // This replaces the expendable >9 kHz light transient rather than adding a
+    // new layer or voice.
+    this.noise({
+      dur: heavy ? 0.009 : 0.014,
+      gain: heavy ? 0.34 : 0.29,
+      type: heavy ? 'highpass' : 'bandpass',
+      freq: heavy ? 7600 : 3200,
+      freqEnd: heavy ? 5200 : 1450,
+      q: heavy ? 0.55 : 1.15,
+      spatial,
+      reverb: 0.08,
+      variation,
+      priority: 'critical',
+    });
     this.noise({ dur: heavy ? 0.19 : 0.11, gain: heavy ? 0.3 : 0.22, type: 'bandpass', freq: heavy ? 620 : 880, freqEnd: heavy ? 190 : 310, q: 0.9, spatial, reverb: heavy ? 0.16 : 0.08, variation, priority: heavy ? 'critical' : 'normal' });
     const now = this.now();
     const subDur = heavy ? 0.38 : 0.19;
@@ -708,7 +734,7 @@ export class GameAudio {
       this.tone({ freq: heavy ? 92 : 118, freqEnd: heavy ? 30 : 46, dur: subDur, type: 'sine', gain: heavy ? 0.43 : 0.24, spatial, reverb: heavy ? 0.14 : 0.04, variation, priority: heavy ? 'critical' : 'normal' });
     }
     this.metalResonance(heavy ? 122 : 164, heavy, spatial, variation);
-    if (heavy) this.duckMusic(0.5, 0.34);
+    this.duckMusic(heavy ? 0.5 : 0.62, heavy ? 0.34 : 0.2);
   }
 
   dodge(spatial: SpatialInput = 0) {

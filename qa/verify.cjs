@@ -58,6 +58,23 @@ async function installAudioSampleRate(context) {
       if (step.semantics.canvasRole !== 'application' || !step.semantics.labelledCanvas || !step.semantics.liveStatus || step.semantics.semanticControls < 6) {
         out.errors.push(vp.name + ': semantic companion controls missing: ' + JSON.stringify(step.semantics));
       }
+      if (vp.name === 'desktop') {
+        // Focused DOM controls own Enter/Space. They must not confirm the game
+        // or leak a combat action through the window-level input handler.
+        const soundButton = pg.locator('.game-accessibility button').nth(1);
+        await soundButton.focus();
+        const semanticBefore = await pg.evaluate(() => ({ state: window.__game.state, muted: window.__game.audio.muted }));
+        await pg.keyboard.press('Enter');
+        await pg.waitForTimeout(80);
+        const semanticAfter = await pg.evaluate(() => ({ state: window.__game.state, muted: window.__game.audio.muted,
+          light: window.__game.input.hasBuffered('light'), roll: window.__game.input.hasBuffered('roll') }));
+        step.semanticKeyboard = { before: semanticBefore, after: semanticAfter };
+        if (semanticAfter.state !== 'title' || semanticAfter.muted === semanticBefore.muted || semanticAfter.light || semanticAfter.roll) {
+          out.errors.push('desktop: semantic Sound control leaked into game input: ' + JSON.stringify(step.semanticKeyboard));
+        }
+        await pg.keyboard.press('Enter'); // restore sound for the audio checks
+        await pg.locator('canvas').focus();
+      }
       // canvas exists and draws
       const ink0 = await pg.evaluate(() => {
         const c = document.querySelector('canvas');
@@ -78,10 +95,46 @@ async function installAudioSampleRate(context) {
 
       // start fight — click through title, then wait for intro to auto-advance
       await pg.mouse.click(vp.w / 2, vp.h / 2);
+      await pg.waitForFunction(() => window.__game && window.__game.state === 'intro', null, { timeout: 2500 }).catch(() => {});
+      const introClean = await pg.evaluate(() => {
+        const g = window.__game;
+        return { state: g.state, playerState: g.player.state, stamina: g.player.stam, bossState: g.boss.state,
+          projectiles: g.projectiles.length, rings: g.rings.length, meteors: g.meteors.length };
+      });
+      step.introIsolation = introClean;
+      if (introClean.state !== 'intro' || introClean.playerState !== 'move' || introClean.stamina !== 100
+        || introClean.projectiles || introClean.rings || introClean.meteors) {
+        out.errors.push(vp.name + ': title confirmation or intro leaked combat: ' + JSON.stringify(introClean));
+      }
       await pg.waitForFunction(() => (window).__game && (window).__game.state === 'fight', null, { timeout: 8000 }).catch(() => {});
       const st1 = await pg.evaluate(() => (window).__game && (window).__game.state);
       step.stateAfterStart = st1;
       if (st1 !== 'fight') out.errors.push(vp.name + ': did not reach fight state (' + st1 + ')');
+
+      if (vp.name === 'desktop') {
+        // Revealing/focusing settings during combat pauses the simulation;
+        // Space activates the DOM button only and cannot roll behind it.
+        const soundButton = pg.locator('.game-accessibility button').nth(1);
+        const beforeFocus = await pg.evaluate(() => ({ fightTime: window.__game.fightTime, muted: window.__game.audio.muted,
+          playerState: window.__game.player.state, stamina: window.__game.player.stam }));
+        await soundButton.focus();
+        await pg.waitForFunction(() => window.__game.paused, null, { timeout: 1000 }).catch(() => {});
+        const pausedAt = await pg.evaluate(() => ({ fightTime: window.__game.fightTime, muted: window.__game.audio.muted,
+          playerState: window.__game.player.state, stamina: window.__game.player.stam }));
+        await pg.waitForTimeout(260);
+        await pg.keyboard.press('Space');
+        await pg.waitForTimeout(100);
+        const duringFocus = await pg.evaluate(() => ({ paused: window.__game.paused, fightTime: window.__game.fightTime,
+          muted: window.__game.audio.muted, playerState: window.__game.player.state, stamina: window.__game.player.stam }));
+        step.semanticCombatPause = { before: beforeFocus, pausedAt, during: duringFocus };
+        if (!duringFocus.paused || Math.abs(duringFocus.fightTime - pausedAt.fightTime) > 0.03
+          || duringFocus.muted === pausedAt.muted || duringFocus.playerState === 'roll' || duringFocus.stamina < pausedAt.stamina) {
+          out.errors.push('desktop: focused settings did not isolate/pause combat: ' + JSON.stringify(step.semanticCombatPause));
+        }
+        await pg.keyboard.press('Space'); // restore sound
+        await pg.locator('canvas').focus();
+        await pg.waitForFunction(() => !window.__game.paused, null, { timeout: 1500 }).catch(() => {});
+      }
 
       // Audio cannot be heard headlessly, but its runtime architecture and every
       // distinct boss cue can still be initialized and exercised without errors.
@@ -100,7 +153,16 @@ async function installAudioSampleRate(context) {
         g.audio.chargeScrape(farRight);
         g.audio.roar(true, farLeft);
         g.audio.updateCombatState(0.12, 0.18, true);
-        return g.audio.debugState();
+        // At the normal-voice cutoff, the light contact crack must still enter
+        // the six-voice critical reserve instead of disappearing under music.
+        const normalVoices = g.audio.activeVoices;
+        g.audio.activeVoices = g.audio.maxVoices - 6;
+        const pressureBefore = g.audio.activeVoices;
+        g.audio.hit(false, { pan: 0, distance: 30 }, 1);
+        const pressureAfter = g.audio.activeVoices;
+        const debug = g.audio.debugState();
+        g.audio.activeVoices = normalVoices;
+        return { ...debug, lightPressureDelta: pressureAfter - pressureBefore };
       });
       step.audio = audioState;
       if (!audioState.initialized || !audioState.hasLimiter || !audioState.hasPeakLimiter || !audioState.hasReusableNoise) {
@@ -111,6 +173,9 @@ async function installAudioSampleRate(context) {
       }
       if (audioState.soundtrackState !== 'playing') {
         out.errors.push(vp.name + ': generated soundtrack did not load: ' + JSON.stringify(audioState));
+      }
+      if (!audioState.waveDataPrepared || audioState.lightPressureDelta < 1) {
+        out.errors.push(vp.name + ': light-hit contact cue did not survive voice pressure: ' + JSON.stringify(audioState));
       }
       if (audioState.soundtrackMode !== 'stream') {
         out.errors.push(vp.name + ': soundtrack is not using the streaming path: ' + JSON.stringify(audioState));
@@ -232,6 +297,160 @@ async function installAudioSampleRate(context) {
           out.errors.push('death did not clear active hazards: ' + JSON.stringify(deathCleanup));
         }
 
+        // Deterministic combat-system regressions. Pause RAF while stepping the
+        // private simulation clock so refresh rate and browser load cannot hide
+        // state-machine failures.
+        const combatRegression = await pg.evaluate(() => {
+          const g = window.__game;
+          cancelAnimationFrame(g.raf); g.raf = 0; g.paused = true;
+          const oldMuted = g.audio.muted; g.audio.muted = true;
+          const result = {};
+          try {
+            // Victory owns a same-frame trade and prevents any late damage from
+            // producing a dead player with a persisted win.
+            g.resetFight(); g.state = 'fight';
+            const winsBefore = g.wins;
+            g.player.hp = 1; g.boss.hp = 0; g.boss.state = 'stalk';
+            g.onBossDeath();
+            g.player.takeDamage(99, g.boss.x, g.boss.y, g);
+            result.terminalTrade = { state: g.state, playerState: g.player.state, playerHp: g.player.hp,
+              bossHp: g.boss.hp, winsDelta: g.wins - winsBefore, projectiles: g.projectiles.length,
+              rings: g.rings.length, meteors: g.meteors.length };
+
+            // A natural impact-time follow-up must retain its full simulation
+            // TTL while hit-stop freezes the attack recovery.
+            g.resetFight(); g.state = 'fight'; g.input.reset();
+            g.player.state = 'light'; g.player.t = 0.16; g.player.attackHit = true; g.player.stam = 100;
+            g.hitstop = 0.12; g.input.bufferPress('light');
+            for (let i = 0; i < 8; i++) g.frame(1 / 60);
+            const bufferedAfterStop = g.input.hasBuffered('light');
+            for (let i = 0; i < 13; i++) g.frame(1 / 60);
+            result.hitstopBuffer = { bufferedAfterStop, state: g.player.state, stamina: g.player.stam };
+
+            // Heavy remains committed, but a roll pressed on the contact frame
+            // must execute as soon as its roughly 200 ms recovery completes.
+            g.resetFight(); g.state = 'fight'; g.input.reset();
+            g.player.state = 'heavy'; g.player.t = 0.20; g.player.attackHit = true; g.player.stam = 100;
+            g.hitstop = 0.09; g.input.bufferPress('roll');
+            for (let i = 0; i < 6; i++) g.frame(1 / 60);
+            const heavyRollAfterStop = g.input.hasBuffered('roll');
+            for (let i = 0; i < 15; i++) g.frame(1 / 60);
+            result.heavyRollBuffer = { bufferedAfterStop: heavyRollAfterStop,
+              state: g.player.state, stamina: g.player.stam };
+
+            const runLunge = (hz) => {
+              g.resetFight(); g.state = 'fight'; g.input.reset();
+              g.player.x = 0; g.player.y = 0; g.player.facing = 0;
+              g.boss.x = 500; g.boss.y = 0; g.boss.state = 'staggered'; g.boss.t = 9;
+              g.input.bufferPress('light');
+              let remaining = 0.32;
+              while (remaining > 1e-7) {
+                const dt = Math.min(1 / hz, remaining);
+                g.player.update(dt, g.input, g); g.input.endFrame(dt); remaining -= dt;
+              }
+              return g.player.x;
+            };
+            const lunge = [30, 60, 120].map((hz) => ({ hz, x: runLunge(hz) }));
+            result.lunge = { samples: lunge, spread: Math.max(...lunge.map((v) => v.x)) - Math.min(...lunge.map((v) => v.x)) };
+
+            const runWindup = (hz) => {
+              g.resetFight(); g.state = 'fight';
+              const b = g.boss; b.state = 'windup'; b.attack = 'volley'; b.t = 0.6; b.x = 0; b.y = -220; b.vx = 200; b.vy = 0;
+              let remaining = 0.3;
+              while (remaining > 1e-7) { const dt = Math.min(1 / hz, remaining); b.update(dt, g); remaining -= dt; }
+              return b.x;
+            };
+            const windup = [30, 60, 120].map((hz) => ({ hz, x: runWindup(hz) }));
+            result.windup = { samples: windup, spread: Math.max(...windup.map((v) => v.x)) - Math.min(...windup.map((v) => v.x)) };
+
+            const runMeteor = (phase) => {
+              g.resetFight(); g.state = 'fight';
+              const b = g.boss; b.phase = phase; b.state = 'strike'; b.attack = 'meteor'; b.t = 999;
+              b.x = 0; b.y = -220; b.vx = 0; b.vy = 0;
+              const count = phase === 3 ? 9 : 6;
+              b.meteorQueue = Array.from({ length: count }, (_, i) => ({ x: i * 3, y: 0,
+                fuse: i === 0 ? 0.25 : phase === 3 ? 0.27 : 0.34,
+                maxFuse: i === 0 ? 0.25 : phase === 3 ? 0.27 : 0.34, r: 95, dmg: 20 }));
+              let elapsed = 0;
+              while (b.meteorQueue.length && elapsed < 4) { b.update(1 / 120, g); elapsed += 1 / 120; }
+              return { elapsed, drift: Math.hypot(b.x, b.y + 220), spawned: g.meteors.length };
+            };
+            result.meteor2 = runMeteor(2);
+            result.meteor3 = runMeteor(3);
+
+            const heavyStep = (withHit) => {
+              g.resetFight(); g.state = 'fight';
+              const p = g.player, b = g.boss;
+              p.x = -60; p.y = 0; p.facing = 0;
+              b.x = 0; b.y = 0; b.facing = Math.PI; b.state = 'stalk'; b.t = 1;
+              if (withHit) g.playerStrike(true);
+              const impulseBefore = b.impulseVx;
+              b.update(1 / 60, g);
+              return { x: b.x, impulseBefore, impulseAfter: b.impulseVx };
+            };
+            const noHit = heavyStep(false), hit = heavyStep(true);
+            result.heavyImpulse = { noHit, hit, displacementAdded: hit.x - noHit.x };
+
+            // Generic post-hit i-frames are not a perfect dodge. Only the
+            // dedicated early-roll window earns stamina/poise rewards.
+            g.resetFight(); g.state = 'fight';
+            g.player.state = 'roll'; g.player.t = 0.35; g.player.iframes = 0.3; g.player.rollIframes = 0;
+            g.player.perfectCd = 0; g.player.stam = 10;
+            const numsBefore = g.dmgNums.length, poiseBefore = g.boss.poise;
+            g.player.takeDamage(10, g.player.x + 30, g.player.y, g);
+            result.postHitIframe = { stamina: g.player.stam, newNumbers: g.dmgNums.length - numsBefore,
+              poiseDelta: g.boss.poise - poiseBefore };
+
+            // Phase presentation clears old hazards, leaves a baked scar, and
+            // retains its authored push as an impulse.
+            g.resetFight(); g.state = 'fight';
+            g.projectiles.push({ x: 0, y: 0, vx: 0, vy: 0, r: 5, dmg: 1, life: 1, hostile: true, hue: '#ff2d17' });
+            g.rings.push({ x: 0, y: 0, r: 10, speed: 1, thickness: 5, dmg: 1, maxR: 100, hostile: true, hitDone: false });
+            g.meteors.push({ x: 0, y: 0, fuse: 1, maxFuse: 1, r: 20, dmg: 1 });
+            g.boss.state = 'stalk'; g.boss.t = 9; g.boss.hp = g.boss.maxHp * 0.5;
+            g.boss.update(1 / 60, g);
+            const alpha = g.scorchCtx.getImageData(0, 0, g.scorchCanvas.width, g.scorchCanvas.height).data;
+            let scarSamples = 0; for (let i = 3; i < alpha.length; i += 64) if (alpha[i] > 0) scarSamples++;
+            result.phaseTransition = { phase: g.boss.phase, projectiles: g.projectiles.length, rings: g.rings.length,
+              meteors: g.meteors.length, playerImpulse: Math.hypot(g.player.impulseVx, g.player.impulseVy), scarSamples };
+          } finally {
+            g.audio.muted = oldMuted;
+            g.paused = false; g.lastTs = performance.now(); g.startLoop();
+          }
+          return result;
+        });
+        step.combatRegression = combatRegression;
+        const tr = combatRegression.terminalTrade;
+        if (tr.state !== 'victory' || tr.playerState === 'dead' || tr.playerHp <= 0 || tr.bossHp !== 0 || tr.winsDelta !== 1
+          || tr.projectiles || tr.rings || tr.meteors) out.errors.push('terminal trade arbitration failed: ' + JSON.stringify(tr));
+        if (!combatRegression.hitstopBuffer.bufferedAfterStop || combatRegression.hitstopBuffer.state !== 'light') {
+          out.errors.push('natural combo input expired during hit-stop: ' + JSON.stringify(combatRegression.hitstopBuffer));
+        }
+        if (!combatRegression.heavyRollBuffer.bufferedAfterStop || combatRegression.heavyRollBuffer.state !== 'roll'
+          || combatRegression.heavyRollBuffer.stamina > 81) {
+          out.errors.push('heavy-contact roll input expired before recovery: ' + JSON.stringify(combatRegression.heavyRollBuffer));
+        }
+        if (combatRegression.lunge.spread > 3) out.errors.push('player lunge is refresh-rate dependent: ' + JSON.stringify(combatRegression.lunge));
+        if (combatRegression.windup.spread > 3) out.errors.push('boss windup damping is refresh-rate dependent: ' + JSON.stringify(combatRegression.windup));
+        if (Math.abs(combatRegression.meteor2.elapsed - 1.95) > 0.05 || combatRegression.meteor2.spawned !== 6 || combatRegression.meteor2.drift > 1) {
+          out.errors.push('phase-2 meteor cadence/drift regressed: ' + JSON.stringify(combatRegression.meteor2));
+        }
+        if (Math.abs(combatRegression.meteor3.elapsed - 2.41) > 0.05 || combatRegression.meteor3.spawned !== 9 || combatRegression.meteor3.drift > 1) {
+          out.errors.push('phase-3 meteor cadence/drift regressed: ' + JSON.stringify(combatRegression.meteor3));
+        }
+        if (combatRegression.heavyImpulse.hit.impulseBefore < 50 || combatRegression.heavyImpulse.hit.impulseAfter <= 0
+          || combatRegression.heavyImpulse.displacementAdded < 0.8) {
+          out.errors.push('heavy knockback did not survive stalk locomotion: ' + JSON.stringify(combatRegression.heavyImpulse));
+        }
+        if (combatRegression.postHitIframe.stamina !== 10 || combatRegression.postHitIframe.newNumbers !== 0
+          || combatRegression.postHitIframe.poiseDelta !== 0) {
+          out.errors.push('generic post-hit iframe falsely triggered perfect dodge: ' + JSON.stringify(combatRegression.postHitIframe));
+        }
+        const ptr = combatRegression.phaseTransition;
+        if (ptr.phase !== 2 || ptr.projectiles || ptr.rings || ptr.meteors || ptr.playerImpulse < 400 || ptr.scarSamples < 1) {
+          out.errors.push('phase transition did not clear/move/scar cleanly: ' + JSON.stringify(ptr));
+        }
+
         // perfect dodge unit check
         const pd = await pg.evaluate(() => {
           const g = (window).__game;
@@ -244,7 +463,7 @@ async function installAudioSampleRate(context) {
           } catch { /* browser may expose a non-configurable vibration stub */ }
           g.state = 'fight';
           const p = g.player;
-          p.state = 'roll'; p.t = 0.35; p.iframes = 0.3; p.perfectCd = 0; p.stam = 10;
+          p.state = 'roll'; p.t = 0.35; p.iframes = 0.3; p.rollIframes = 0.3; p.perfectCd = 0; p.stam = 10;
           const before = g.dmgNums.length;
           const hpBefore = p.hp;
           p.takeDamage(10, p.x + 30, p.y, g);
@@ -491,10 +710,12 @@ async function installAudioSampleRate(context) {
       });
       await pg.waitForTimeout(700);
       const after = await pg.evaluate(() => ({ x: window.__game.player.x, y: window.__game.player.y,
+                                               hintT: window.__game.hintT,
                                                joy: { a: window.__game.input.joyActive, x: window.__game.input.joyX, y: window.__game.input.joyY } }));
       t.joystick = { before, after };
       if (!after.joy.a) out.errors.push('touch: drag on the left half did not engage the joystick');
       if (Math.hypot(after.x - before.x, after.y - before.y) < 4) out.errors.push('touch: joystick drag did not move the player');
+      if (after.hintT > 0.35) out.errors.push('touch: tutorial did not dismiss after meaningful movement (' + after.hintT + ')');
       await pg.evaluate(() => {
         const c = document.querySelector('canvas');
         const t = new Touch({ identifier: 1, target: c, clientX: 160, clientY: 530 });
@@ -516,6 +737,31 @@ async function installAudioSampleRate(context) {
       await pg.waitForFunction(() => window.__game.player.state === 'light', null, { timeout: 1000 }).catch(() => {});
       t.atkState = await pg.evaluate(() => window.__game.player.state);
       if (t.atkState !== 'light') out.errors.push('touch: ATK button did not enter the light-attack state (' + t.atkState + ')');
+
+      // Expanded fingertip regions can overlap even though the circles do not.
+      // A point on the visible ATK edge must resolve to exactly one nearest
+      // normalized action, never ATK + ROLL together.
+      t.expandedTargeting = await pg.evaluate(() => {
+        const g = window.__game, c = document.querySelector('canvas');
+        const btns = g.touchLayout().btns;
+        const a = btns.find((b) => b.id === 'light'), b = btns.find((v) => v.id === 'roll');
+        const d = Math.hypot(b.x - a.x, b.y - a.y);
+        const x = a.x + (b.x - a.x) / d * (a.r - 1);
+        const y = a.y + (b.y - a.y) / d * (a.r - 1);
+        g.setUiFocused(true); g.input.clearCombatActions();
+        const touch = new Touch({ identifier: 77, target: c, clientX: x, clientY: y });
+        c.dispatchEvent(new TouchEvent('touchstart', { changedTouches: [touch], touches: [touch], bubbles: true, cancelable: true }));
+        const result = { x, y, inLight: Math.hypot(x - a.x, y - a.y) < a.r + 10,
+          inRoll: Math.hypot(x - b.x, y - b.y) < b.r + 10,
+          light: g.input.hasBuffered('light'), roll: g.input.hasBuffered('roll'), heavy: g.input.hasBuffered('heavy') };
+        c.dispatchEvent(new TouchEvent('touchend', { changedTouches: [touch], touches: [], bubbles: true, cancelable: true }));
+        g.input.clearCombatActions(); g.setUiFocused(false);
+        return result;
+      });
+      if (!t.expandedTargeting.inLight || !t.expandedTargeting.inRoll || !t.expandedTargeting.light
+        || t.expandedTargeting.roll || t.expandedTargeting.heavy) {
+        out.errors.push('touch: expanded overlap did not resolve to one nearest action: ' + JSON.stringify(t.expandedTargeting));
+      }
 
       // 7. touch actions share the keyboard/mouse buffer through hit-stop
       const roll = t.layout.btns.find((b) => b.id === 'roll');
@@ -553,7 +799,35 @@ async function installAudioSampleRate(context) {
       t.consoleErrors = cerr;
       out.steps.touch = t;
       await pg.screenshot({ path: path.join(ARTIFACT_DIR, 'touch-combat.png') });
+      await pg.evaluate(() => {
+        const g = window.__game; g.state = 'fight'; g.boss.phase = 2;
+        g.banner('THE SOVEREIGN BURNS', 'phase'); g.render();
+      });
+      await pg.screenshot({ path: path.join(ARTIFACT_DIR, 'touch-phase2.png') });
       await tctx.close();
+    }
+
+    // Cold-start audio guard: do not hide first-tap work behind the main pass's
+    // 1.2 second settle. This opens a fresh phone context and gestures as soon
+    // as the Game instance exists.
+    {
+      const fastCtx = await browser.newContext({
+        viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 3,
+      });
+      await installAudioSampleRate(fastCtx);
+      const fast = await fastCtx.newPage();
+      await fast.goto(URL, { waitUntil: 'load' });
+      await fast.waitForFunction(() => Boolean(window.__game), null, { timeout: 3000 });
+      const preparedBeforeGesture = await fast.evaluate(() => window.__game.audio.debugState().waveDataPrepared);
+      await fast.touchscreen.tap(195, 300);
+      await fast.waitForTimeout(100);
+      const fastAudio = await fast.evaluate(() => window.__game.audio.debugState());
+      out.steps.fastFirstTapAudio = { preparedBeforeGesture, initCostMs: fastAudio.initCostMs,
+        initialized: fastAudio.initialized, sampleRate: fastAudio.contextSampleRate };
+      if (!preparedBeforeGesture || !fastAudio.initialized || fastAudio.initCostMs > 20) {
+        out.errors.push('touch: fast first-tap audio missed the 20ms budget: ' + JSON.stringify(out.steps.fastFirstTapAudio));
+      }
+      await fastCtx.close();
     }
 
     out.ok = out.errors.length === 0;

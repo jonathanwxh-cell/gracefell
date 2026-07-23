@@ -20,7 +20,7 @@ The sovereign has an audio language, not one generic warning: swipes whistle, ch
 
 **v2 — extended by Claude (Opus 4.8).** Combat depth, a third phase, a full rendering pass, persistence, and a headless verification gate. Details in [DESIGN.md](DESIGN.md).
 
-**v2.4–v2.5 — audio extended by Codex (GPT-5).** Attack-specific procedural cues, spatial mix protection, and the MiniMax-generated score with a procedural fallback. The generation prompt and file hash are recorded in [`public/audio/README.md`](public/audio/README.md).
+**v2.4–v2.9 — audio, responsiveness, and combat polish extended by Codex (GPT-5).** Attack-specific procedural cues, spatial mix protection, the MiniMax-generated score, mobile/accessibility hardening, and the v2.9 combat correctness pass. The generation prompt and file hash are recorded in [`public/audio/README.md`](public/audio/README.md).
 
 Directed by [@jonathanwxh-cell](https://github.com/jonathanwxh-cell), who asked for "AAA grade" and meant it.
 
@@ -111,12 +111,37 @@ Combat owns the mix. The score sits on a lower bus with a broad 1.8 kHz presence
 player verb and boss windup briefly ducks it before the action lands. Those cues use the reserved
 critical voices, so a dense projectile storm cannot spend the voice budget needed for a warning.
 
+Light sword contact has its own short 1.45–3.2 kHz critical crack and an immediate score duck.
+That presence-band layer replaces an expendable ultrasonic transient, so ordinary hits remain
+clear on a phone speaker and under phase-three voice pressure without adding another sound layer.
+
 The MP3 is streamed through the Web Audio music bus instead of being fully decoded into memory.
 Generated noise and the arena response are prepared before the first gesture, keeping the first
 attack responsive while preserving the same spatial mix, ducking, and limiter path.
 
 If the tab loses focus or a phone interruption hides the page, simulation and audio pause together.
 Returning resumes from the same fight frame rather than letting Malakar attack an absent player.
+
+## Fixed by Codex — v2.9 combat polish
+
+Three read-only game-developer reviews covered adversarial play, combat systems, and combat UX
+before this pass was implemented. The fixes include:
+
+- one explicit same-frame trade policy (victory wins), clean terminal persistence, and no damage
+  after combat has ended;
+- intro isolation, hit-stop-safe simulation-time input buffering, refresh-rate-independent lunges
+  and boss damping, preserved heavy knockback, corrected meteor cadence, and a real volley windup;
+- one-action mobile touch targeting even where expanded fingertip regions overlap, action-state
+  button feedback, first-action tutorial dismissal, and a visibly unavailable empty flask;
+- semantic controls that own Enter/Space and pause combat while focused, plus unclipped mobile
+  phase banners, boss names, and phase pips;
+- deterministic irregular flagstone wear, four subtle outer-arena landmarks, capped footprints,
+  sharper impact cracks, phase-damaged wards, and a handful of grace flakes. These reuse the
+  existing baked floor, scorch canvas, and 64-mote budget—no new render surface or particle load.
+
+The regression gate now reproduces the reported failures directly, tests 30/60/120 Hz motion,
+checks first-tap audio under 20 ms, samples the expanded touch overlap, and drives DOM focus,
+desktop, mobile, and real-touch paths. The completed local gate reports zero errors.
 
 ## Running it
 
@@ -144,11 +169,16 @@ PROVENANCE.md        who built what, and the rules for the next agent
 scripts/provenance.sh  regenerates that ledger from git trailers
 ```
 
-`window.__game` is live in the console if you want to poke at it.
+`window.__game` is live in the console if you want to poke at it. A local production build is
+served at `http://127.0.0.1:8491/` when `node server.mjs` is running.
 
 ## On "done"
 
-Nothing here ships on a claim. `npm run qa` drives a real Chromium at 1280×800 and 390×844 and asserts the canvas has ink, the console is clean, the generated soundtrack streams through the mix, interruption pause works, touch actions survive hit-stop, semantic controls exist, all three phases trigger, victory computes a grade, saves round-trip, and a perfect dodge refunds stamina without taking damage. Green, or it isn't done.
+Nothing here ships on a claim. `npm run qa` drives real Chromium at 1280×800 and 390×844,
+plus an emulated real-touch phone. It checks canvas output, console health, streamed audio, cold
+first-tap cost, accessibility focus/pause, intro and terminal isolation, expanded touch targeting,
+hit-stop buffering, 30/60/120 Hz combat motion, meteor cadence, heavy impulse, phase cleanup,
+victory/grade/persistence, and genuine perfect-dodge behavior. Green, or it isn't done.
 
 ## License
 

@@ -449,3 +449,89 @@ use the six reserved critical voices rather than competing with phase-three proj
   coverage, and minimum duck depth.
 - Adaptive intensity can still lift the score slightly, but no longer opens it past the action-safe
   spectral ceiling; stagger now clears more space rather than merely reducing the drums.
+
+## v2.9 — Codex (GPT-5), "fixed by Codex: trustworthy combat" (2026-07-23)
+
+The owner asked for game-developer testing before implementation. Three independent read-only
+reviewers covered combat systems, adversarial state/input QA, and player-facing combat UX. Their
+runtime reproductions became acceptance tests before deployment rather than remaining review notes.
+
+### Combat must tell one truth
+
+Input TTLs now age in simulation time, so a natural follow-up pressed on a hit spark survives the
+50–90 ms hit-stop that freezes attack recovery. Title/retry confirmation clears combat actions,
+and the 2.6-second intro animates without updating the boss or live hazards. Damage is accepted only
+in `fight`; victory owns a same-frame trade, clears every hazard, persists once, and cannot be
+overwritten by a contradictory death screen.
+
+The shared action queue is 260 ms rather than the original 190 ms. A read-only post-fix playtest
+showed that heavy contact leaves about 200 ms of committed recovery, so a roll pressed on contact
+expired one frame before it could execute. The longer queue does not cancel the commitment; it only
+retains the command until recovery ends, and it still expires well before a delayed ghost action.
+
+Player roll i-frames are tracked separately from generic post-hit invulnerability, so only the
+early roll window can produce a perfect dodge. Player lunge motion integrates its authored velocity
+envelope across each timestep; measured light reach is 41.44 world units at 30, 60, and 120 Hz.
+Boss windup/recovery damping uses time-scaled exponents. Heavy and finisher force lives in a
+separate decaying impulse so stalk AI cannot overwrite it.
+
+Meteor barrages now use relative intervals after a real windup: six phase-two markers span about
+1.95 seconds and nine phase-three markers about 2.41 seconds, with stale movement cleared. Volley
+has a cheap danger-coded fan preview. Phase changes remove pre-existing projectiles, rings, and
+meteors before the forced ring windup, preserve their push as player impulse, and stamp the ward.
+
+### Touch and semantic controls cannot fight the player
+
+Expanded fingertip targets deliberately remain generous, but an overlap resolves to exactly one
+nearest normalized action. Touch action plates remain active through both queued and executing
+states; the first real move/attack dismisses the tutorial; an empty flask is dimmed. Mobile phase
+copy shrinks to fit, the phase-two sovereign name uses a compact form, and phase pips retain their
+reserved width.
+
+Window-level game input ignores interactive DOM targets. Focusing the semantic companion during a
+fight pauses simulation and audio; Enter/Space activates only the focused control. Leaving the
+companion resumes from a fresh RAF timestamp. This fixes both the inaccessible Sound button and
+the hidden roll that previously happened behind it.
+
+### Make the room specific without making it heavier
+
+The old soft circular floor variance read as bokeh. `buildFloor()` now deterministically bakes
+irregular stone wear and angular chips, biased away from the central telegraph band. A broken grace
+seal, fallen blade, toppled censer, and split tablet sit at the outer ring as low-contrast landmarks.
+Boss steps stamp at most 16 footprints; slams, meteors, and charge impacts add sharper cracks; phase
+changes draw amber seams and charcoal ward failures onto the existing scorch canvas. Eight of the
+existing 64 motes render as tiny grace flakes. There is no new canvas, particle, gradient-per-frame,
+or decorative hazard-red work.
+
+### Let light hits own a phone speaker
+
+The light-hit layer most likely to disappear was an expendable transient above 9 kHz. It is now a
+short 1.45–3.2 kHz band-pass contact crack inside the six-voice critical reserve, and every impact
+briefly ducks the music. QA artificially fills the ordinary voice budget and verifies that this
+contact cue is still admitted.
+
+Cold audio setup also changed shape. Canonical waveform preparation runs in the first zero-delay
+task at 24 kHz; the full 1.9-second noise bed still covers the longest cue, while a 1.55-second mono
+stone impulse is applied to the already-spatialized stereo send one task after the gesture. This
+replaces v2.8's longer synchronous stereo allocation and keeps a fresh mobile first gesture below
+the 20 ms gate without changing the common music/SFX/limiter route.
+
+### Verification and release contract
+
+`npm run lint`, `npm run build`, and `npm run qa` pass locally. The expanded Playwright gate covers
+desktop, 390×844 mobile, and genuine touch; exact ATK/ROLL expanded-region overlap; DOM Enter/Space
+ownership; focused-settings pause; clean intro/retry; same-frame terminal arbitration; natural
+combo buffering through hit-stop; 30/60/120 Hz lunge and boss damping; 1.95/2.41-second meteor
+cadence; preserved heavy impulse; roll-only perfect dodge; phase hazard cleanup/scars; pressure-safe
+light-hit audio; and cold first-tap initialization. It also retains the previous phase, victory,
+save migration, hazard-palette, soundtrack, and interruption checks.
+
+### Changed from v2.8
+
+- The sparse MiniMax composition remains unchanged. The fix is contact-band SFX priority and
+  per-impact ducking, not another music replacement.
+- Arena identity is still procedural and baked; the soft circular material pass is replaced, not
+  layered with more runtime effects.
+- The room response is now 1.55-second mono after spatialization rather than a longer stereo IR.
+- Read-only reviewer agents are credited here for verification input; the code and documentation
+  changes in this pass were implemented by Codex and recorded as such in `PROVENANCE.md`.
