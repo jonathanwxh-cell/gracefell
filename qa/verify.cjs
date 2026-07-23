@@ -49,6 +49,34 @@ async function installAudioSampleRate(context) {
       await pg.waitForTimeout(1200);
 
       const step = {};
+      step.firstJourney = await pg.evaluate(() => {
+        const g = window.__game;
+        const ui = g.uiSnapshot();
+        const save = localStorage.getItem('gracefell');
+        return {
+          grace: g.grace,
+          label: g.graceLabel(),
+          summary: g.graceSummary(),
+          clearTells: g.difficultyForGrace().clearTells,
+          flasks: g.difficultyForGrace().flasks,
+          uiGrace: ui.grace,
+          uiSummary: ui.graceSummary,
+          hasSave: save !== null,
+        };
+      });
+      if (
+        step.firstJourney.grace !== -2
+        || step.firstJourney.label !== 'JOURNEY -2'
+        || !step.firstJourney.summary.includes('recommended')
+        || !step.firstJourney.clearTells
+        || step.firstJourney.flasks !== 4
+        || step.firstJourney.uiGrace !== -2
+        || step.firstJourney.uiSummary !== step.firstJourney.summary
+        || step.firstJourney.hasSave
+      ) {
+        out.errors.push(vp.name + ': fresh player did not begin on the transparent Journey: '
+          + JSON.stringify(step.firstJourney));
+      }
       step.semantics = await pg.evaluate(() => ({
         canvasRole: document.querySelector('canvas')?.getAttribute('role'),
         labelledCanvas: Boolean(document.querySelector('canvas')?.getAttribute('aria-label')),
@@ -276,10 +304,13 @@ async function installAudioSampleRate(context) {
         const immediateScore = victoryImmediate.saved?.lastScore;
         const immediateBest = victoryImmediate.saved?.bestScores?.[String(victoryImmediate.trial)];
         if (victoryImmediate.state !== 'victory' || victoryImmediate.stateT !== 0
-          || victoryImmediate.saved?.v !== 3
+          || victoryImmediate.saved?.v !== 4
           || immediateScore?.grade !== victoryImmediate.grade
           || Math.abs((immediateScore?.time ?? -1) - victoryImmediate.fightTime) > 0.000001
           || immediateScore?.trial !== victoryImmediate.trial
+          || typeof immediateScore?.perfectDodges !== 'number'
+          || typeof immediateScore?.flasksUsed !== 'number'
+          || typeof immediateScore?.oathRank !== 'number'
           || immediateBest?.grade !== victoryImmediate.grade
           || victoryImmediate.delay < 4.5) {
           out.errors.push('victory score was not saved immediately: ' + JSON.stringify(victoryImmediate));
@@ -406,6 +437,7 @@ async function installAudioSampleRate(context) {
             g.boss.state = 'recover'; g.boss.t = 99; g.boss.vx = 0; g.boss.vy = 0;
             const comboSteps = [];
             const comboCues = [];
+            const comboFeedback = [];
             const originalPlayerStrike = g.playerStrike.bind(g);
             const originalSwing = g.audio.swing.bind(g.audio);
             const originalSwingHeavy = g.audio.swingHeavy.bind(g.audio);
@@ -413,6 +445,11 @@ async function installAudioSampleRate(context) {
             g.playerStrike = (heavy) => {
               comboSteps.push({ heavy, step: g.player.comboStep });
               originalPlayerStrike(heavy);
+              comboFeedback.push({
+                hits: g.playerChainHits,
+                finished: g.playerChainFinished,
+                visibleFor: g.playerChainT,
+              });
             };
             g.audio.swing = (step) => comboCues.push(`swing-${step}`);
             g.audio.swingHeavy = () => comboCues.push('swing-heavy');
@@ -424,6 +461,7 @@ async function installAudioSampleRate(context) {
             result.rapidLightCombo = {
               steps: comboSteps,
               cues: comboCues,
+              feedback: comboFeedback,
               queuedAtEnd: g.player.queuedLightAttacks,
               state: g.player.state,
             };
@@ -537,7 +575,10 @@ async function installAudioSampleRate(context) {
           || combatRegression.rapidLightCombo.queuedAtEnd !== 0
           || combatRegression.rapidLightCombo.cues.some((cue) => cue.includes('heavy'))
           || !combatRegression.rapidLightCombo.cues.includes('swing-2')
-          || !combatRegression.rapidLightCombo.cues.includes('hit-light-2')) {
+          || !combatRegression.rapidLightCombo.cues.includes('hit-light-2')
+          || combatRegression.rapidLightCombo.feedback.map((v) => v.hits).join(',') !== '1,2,3'
+          || !combatRegression.rapidLightCombo.feedback[2]?.finished
+          || combatRegression.rapidLightCombo.feedback.some((v) => v.visibleFor < 1)) {
           out.errors.push('rapid ATK did not produce a distinct three-hit light combo: '
             + JSON.stringify(combatRegression.rapidLightCombo));
         }
@@ -595,7 +636,7 @@ async function installAudioSampleRate(context) {
         await pg.evaluate(() => { window.__game.state = 'fight'; });
         await pg.waitForTimeout(300);
         const semanticTrialLocked = await pg.evaluate(() => [...document.querySelectorAll('.game-accessibility button')]
-          .filter((button) => /trial/i.test(button.textContent || ''))
+          .filter((button) => /Grace|Oath/i.test(button.textContent || ''))
           .every((button) => button.disabled));
         const acc = await pg.evaluate(() => {
           const g = window.__game;
@@ -618,7 +659,13 @@ async function installAudioSampleRate(context) {
               maxPoise: g.boss.maxPoise,
               staggerDuration: preview.staggerDuration,
               noStagger: preview.noStagger,
+              clearTells: preview.clearTells,
+              chainRank: preview.chainRank,
+              recoveryMul: preview.recoveryMul,
               bossExtraSpeed: g.boss.extraSpeed,
+              bossChainRank: g.boss.chainRank,
+              bossRecoveryMul: g.boss.recoveryMul,
+              summary: g.graceSummary(grace),
             });
           }
           // A run is authored once at the title. Neither the semantic controls
@@ -634,7 +681,7 @@ async function installAudioSampleRate(context) {
           g.player.takeDamage(20, g.player.x + 40, g.player.y, g);
           out.lockedDamageLoss = hp - g.player.hp;
           out.semanticTrialLocked = [...document.querySelectorAll('.game-accessibility button')]
-            .filter((button) => /trial/i.test(button.textContent || ''))
+            .filter((button) => /Grace|Oath/i.test(button.textContent || ''))
             .every((button) => button.disabled);
           g.state = 'title'; g.setGrace(3); g.resetFight(); g.state = 'fight';
           g.boss.state = 'stalk'; g.boss.applyPoise(g.boss.maxPoise, g);
@@ -660,17 +707,28 @@ async function installAudioSampleRate(context) {
         acc.semanticTrialLocked = semanticTrialLocked;
         await pg.waitForTimeout(300);
         acc.semanticTrialUnlocked = await pg.evaluate(() => [...document.querySelectorAll('.game-accessibility button')]
-          .filter((button) => /trial/i.test(button.textContent || ''))
+          .filter((button) => /Grace|Oath/i.test(button.textContent || ''))
           .every((button) => !button.disabled));
         step.accessibility = acc;
         if (acc.min !== -3 || acc.max !== 5) out.errors.push('grace does not clamp to -3..5: ' + JSON.stringify([acc.min, acc.max]));
         const expectedFlasks = [4, 4, 3, 3, 3, 2, 2, 2, 1];
         const expectedPoise = [120, 120, 120, 120, 120, 120, 162, 204, 204];
+        const expectedChains = [0, 0, 0, 0, 1, 1, 2, 2, 3];
         if (acc.levels.length !== 9) out.errors.push('difficulty audit did not cover all nine levels');
         acc.levels.forEach((level, i) => {
           if (level.flasks !== expectedFlasks[i]) out.errors.push(`grace ${level.grace}: expected ${expectedFlasks[i]} flasks, got ${level.flasks}`);
           if (level.maxPoise !== expectedPoise[i]) out.errors.push(`grace ${level.grace}: expected ${expectedPoise[i]} poise, got ${level.maxPoise}`);
           if (level.noStagger !== (level.grace === 5)) out.errors.push(`grace ${level.grace}: no-stagger should be exclusive to +5`);
+          if (level.clearTells !== (level.grace <= -2)) out.errors.push(`grace ${level.grace}: clear tells should be exclusive to beginner Grace`);
+          if (level.chainRank !== expectedChains[i] || level.bossChainRank !== expectedChains[i]) {
+            out.errors.push(`grace ${level.grace}: Oath chain rank mismatch: ${JSON.stringify(level)}`);
+          }
+          if (Math.abs(level.recoveryMul - level.bossRecoveryMul) > 0.000001) {
+            out.errors.push(`grace ${level.grace}: preview recovery differs from active boss recovery`);
+          }
+          if (typeof level.summary !== 'string' || level.summary.length < 16) {
+            out.errors.push(`grace ${level.grace}: path summary missing`);
+          }
           if (Math.abs(level.speed - level.bossExtraSpeed) > 0.000001) out.errors.push(`grace ${level.grace}: preview speed differs from active boss speed`);
           if (i > 0 && !(level.speed > acc.levels[i - 1].speed)) out.errors.push(`grace ${level.grace}: boss speed is not strictly increasing`);
           if (i > 0 && !(level.damage > acc.levels[i - 1].damage)) out.errors.push(`grace ${level.grace}: damage is not strictly increasing`);
@@ -692,6 +750,122 @@ async function installAudioSampleRate(context) {
         if (acc.bestAtFive !== 120 || acc.bestAtZero !== 40) out.errors.push('selected-trial record lookup is wrong: ' + JSON.stringify([acc.bestAtFive, acc.bestAtZero]));
         if (!acc.shakeOffWorks || !acc.shakeOnWorks) out.errors.push('screen shake toggle broken');
         if (!(acc.flashReducedScale < acc.flashFullScale)) out.errors.push('flash reduction not applied');
+
+        // Expert Oaths add readable authored packets instead of simply
+        // shrinking every opening. Journey keeps the original one-attack turn.
+        const oathPackets = await pg.evaluate(() => {
+          const g = window.__game;
+          const originalRandom = Math.random;
+          const originalMuted = g.audio.muted;
+          cancelAnimationFrame(g.raf); g.raf = 0; g.paused = true;
+          g.audio.muted = true;
+          try {
+            const allAttacks = ['swipe', 'slam', 'charge', 'volley', 'meteor', 'ring', 'spiral'];
+            const forceVolley = (grace) => {
+              g.state = 'title'; g.setGrace(grace); g.resetFight(); g.state = 'fight';
+              const b = g.boss;
+              b.phase = 3; b.state = 'stalk'; b.t = 0;
+              for (const attack of allAttacks) b.cooldowns[attack] = 999;
+              b.cooldowns.volley = 0;
+              Math.random = () => 0;
+              b.chooseAttack(g, 240);
+              return b;
+            };
+
+            const b = forceVolley(5);
+            const first = {
+              attack: b.attack, step: b.chainStep, total: b.chainTotal,
+              queue: [...b.chainQueue], rank: b.chainRank, recovery: b.recoveryMul,
+            };
+            b.state = 'stalk'; b.cooldowns.charge = 0;
+            b.chooseAttack(g, 240);
+            const second = { attack: b.attack, step: b.chainStep, total: b.chainTotal, queue: [...b.chainQueue] };
+            b.state = 'stalk'; b.cooldowns.swipe = 0;
+            b.chooseAttack(g, 100);
+            const third = { attack: b.attack, step: b.chainStep, total: b.chainTotal, queue: [...b.chainQueue] };
+
+            const measuredBoss = forceVolley(0);
+            const measured = {
+              attack: measuredBoss.attack, total: measuredBoss.chainTotal,
+              queue: [...measuredBoss.chainQueue], rank: measuredBoss.chainRank,
+              recovery: measuredBoss.recoveryMul,
+            };
+            g.state = 'title'; g.setGrace(-2); g.resetFight();
+            const journey = { rank: g.boss.chainRank, recovery: g.boss.recoveryMul };
+            return { first, second, third, measured, journey };
+          } finally {
+            Math.random = originalRandom;
+            g.audio.muted = originalMuted;
+            g.paused = false;
+            g.lastTs = performance.now();
+            g.startLoop();
+          }
+        });
+        step.oathPackets = oathPackets;
+        if (oathPackets.first.attack !== 'volley'
+          || oathPackets.first.step !== 1
+          || oathPackets.first.total !== 3
+          || oathPackets.first.queue.join(',') !== 'charge,swipe'
+          || oathPackets.second.attack !== 'charge'
+          || oathPackets.second.step !== 2
+          || oathPackets.third.attack !== 'swipe'
+          || oathPackets.third.step !== 3
+          || oathPackets.third.queue.length !== 0
+          || oathPackets.measured.total !== 1
+          || oathPackets.measured.queue.length !== 0
+          || oathPackets.measured.rank !== 0
+          || oathPackets.first.recovery >= oathPackets.measured.recovery
+          || oathPackets.journey.recovery <= oathPackets.measured.recovery) {
+          out.errors.push('authored Oath/Journey pacing packet is incoherent: ' + JSON.stringify(oathPackets));
+        }
+
+        // The contextual rite teaches one interaction at a time and persists
+        // completion only after the player punishes a real stagger.
+        const teaching = await pg.evaluate(() => {
+          const g = window.__game;
+          const originalMuted = g.audio.muted;
+          cancelAnimationFrame(g.raf); g.raf = 0; g.paused = true;
+          g.audio.muted = true;
+          try {
+            g.state = 'title'; g.setGrace(-2); g.tutorialStage = 'move'; g.resetFight(); g.state = 'fight';
+            const start = { stage: g.tutorialStage, message: g.tutorialMessage() };
+            g.input.held.right = true;
+            g.frame(1 / 60);
+            g.input.held.right = false;
+            const moved = { stage: g.tutorialStage, message: g.tutorialMessage() };
+            g.player.state = 'roll'; g.player.t = 0.35; g.player.iframes = 0.3;
+            g.player.rollIframes = 0.3; g.player.perfectCd = 0;
+            g.onPerfectDodge();
+            const dodged = { stage: g.tutorialStage, message: g.tutorialMessage(), count: g.perfectDodges };
+            g.boss.state = 'stalk'; g.boss.applyPoise(g.boss.maxPoise, g);
+            const staggered = { stage: g.tutorialStage, message: g.tutorialMessage(), boss: g.boss.state };
+            g.player.x = 0; g.player.y = 0; g.player.facing = 0; g.player.comboStep = 0;
+            g.boss.x = 60; g.boss.y = 0; g.boss.hp = Math.max(g.boss.hp, 100);
+            g.playerStrike(false);
+            const completed = {
+              stage: g.tutorialStage,
+              saved: JSON.parse(localStorage.getItem('gracefell') || 'null')?.tutorialComplete,
+            };
+            return { start, moved, dodged, staggered, completed };
+          } finally {
+            g.input.held.right = false;
+            g.audio.muted = originalMuted;
+            g.paused = false;
+            g.lastTs = performance.now();
+            g.startLoop();
+          }
+        });
+        step.teaching = teaching;
+        if (teaching.start.stage !== 'move'
+          || teaching.moved.stage !== 'roll'
+          || teaching.dodged.stage !== 'poise'
+          || teaching.dodged.count < 1
+          || teaching.staggered.stage !== 'stagger'
+          || teaching.staggered.boss !== 'staggered'
+          || teaching.completed.stage !== 'done'
+          || teaching.completed.saved !== true) {
+          out.errors.push('contextual combat rite did not progress or persist: ' + JSON.stringify(teaching));
+        }
 
         // hazard-hue discipline: ambient particles must never use PAL.danger
         const hue = await pg.evaluate(async () => {
@@ -765,17 +939,17 @@ async function installAudioSampleRate(context) {
         }
         if (bladeSaint.hitRadius !== 34) out.errors.push('Blade-Saint visual pass changed the boss hit radius');
 
-        // save schema v3 round-trip incl. settings and scorecards
-        const sv3 = await pg.evaluate(() => {
+        // save schema v4 round-trip incl. settings, scorecards and teaching state
+        const sv4 = await pg.evaluate(() => {
           const g = window.__game;
           g.state = 'title';
           g.setGrace(2); g.shakeEnabled = false; g.flashReduced = true; g.persist();
           return JSON.parse(localStorage.getItem('gracefell'));
         });
-        step.saveV3 = sv3;
-        if (sv3.v !== 3 || sv3.grace !== 2 || sv3.shakeEnabled !== false || sv3.flashReduced !== true
-          || !sv3.bests || !sv3.lastScore || !sv3.bestScores) {
-          out.errors.push('save v3 did not round-trip settings and scores: ' + JSON.stringify(sv3));
+        step.saveV4 = sv4;
+        if (sv4.v !== 4 || sv4.grace !== 2 || sv4.shakeEnabled !== false || sv4.flashReduced !== true
+          || !sv4.bests || !sv4.lastScore || !sv4.bestScores || typeof sv4.tutorialComplete !== 'boolean') {
+          out.errors.push('save v4 did not round-trip settings, teaching state and scores: ' + JSON.stringify(sv4));
         }
         const scoreReload = await pg.evaluate(() => {
           const live = window.__game;
@@ -792,8 +966,8 @@ async function installAudioSampleRate(context) {
         });
         step.scoreReload = scoreReload;
         if (!scoreReload.lastScore || !scoreReload.bestScore
-          || scoreReload.lastScore.grade !== sv3.lastScore.grade
-          || scoreReload.bestScore.grade !== sv3.lastScore.grade) {
+          || scoreReload.lastScore.grade !== sv4.lastScore.grade
+          || scoreReload.bestScore.grade !== sv4.lastScore.grade) {
           out.errors.push('saved victory score did not reload: ' + JSON.stringify(scoreReload));
         }
 
@@ -1084,10 +1258,16 @@ async function installAudioSampleRate(context) {
         g.boss.x = 70; g.boss.y = 0; g.boss.hp = 9999; g.boss.maxHp = 9999;
         g.boss.state = 'recover'; g.boss.t = 99; g.boss.vx = 0; g.boss.vy = 0;
         window.__touchComboSteps = [];
+        window.__touchComboFeedback = [];
         window.__touchComboOriginalStrike = g.playerStrike.bind(g);
         g.playerStrike = (heavy) => {
           window.__touchComboSteps.push({ heavy, step: g.player.comboStep });
           window.__touchComboOriginalStrike(heavy);
+          window.__touchComboFeedback.push({
+            hits: g.playerChainHits,
+            finished: g.playerChainFinished,
+            visibleFor: g.playerChainT,
+          });
         };
       });
       for (let press = 0; press < 3; press++) {
@@ -1099,19 +1279,28 @@ async function installAudioSampleRate(context) {
         const g = window.__game;
         const result = {
           steps: window.__touchComboSteps,
+          feedback: window.__touchComboFeedback,
           queuedAtEnd: g.player.queuedLightAttacks,
         };
+        g.playerChainHits = 3;
+        g.playerChainFinished = true;
+        g.playerChainT = 1.4;
+        g.render();
         g.playerStrike = window.__touchComboOriginalStrike;
         delete window.__touchComboOriginalStrike;
         delete window.__touchComboSteps;
+        delete window.__touchComboFeedback;
         return result;
       });
       if (t.rapidAtkCombo.steps.length !== 3
         || t.rapidAtkCombo.steps.some((hit, index) => hit.heavy || hit.step !== index)
+        || t.rapidAtkCombo.feedback.map((v) => v.hits).join(',') !== '1,2,3'
+        || !t.rapidAtkCombo.feedback[2]?.finished
         || t.rapidAtkCombo.queuedAtEnd !== 0) {
         out.errors.push('touch: rapid ATK did not complete the three-hit light combo: '
           + JSON.stringify(t.rapidAtkCombo));
       }
+      await pg.screenshot({ path: path.join(ARTIFACT_DIR, 'touch-combo-finisher.png') });
 
       // Expanded fingertip regions can overlap even though the circles do not.
       // A point on the visible ATK edge must resolve to exactly one nearest
@@ -1220,6 +1409,51 @@ async function installAudioSampleRate(context) {
         before: t.pointerRetryBefore, after: t.pointerRetryAfter,
       }));
 
+      // Repeated deaths offer one explicit, non-automatic step toward Grace.
+      // The lethal source also needs to produce a useful next-attempt hint.
+      t.deathGraceBefore = await pg.evaluate(() => {
+        const g = window.__game;
+        g.state = 'title'; g.setGrace(0); g.attempts = 2;
+        g.resetFight(); g.state = 'fight'; g.player.iframes = 0;
+        g.player.takeDamage(g.player.maxHp * 10, g.boss.x, g.boss.y, g, 'ring');
+        return {
+          state: g.state,
+          grace: g.grace,
+          hint: g.deathHint(),
+          rect: g.deathGraceRect(),
+          confirmSequence: g.input.confirmSequence,
+        };
+      });
+      await pg.waitForFunction(() => window.__game.state === 'dead' && window.__game.stateT > 1.65, null, { timeout: 8000 }).catch(() => {});
+      await pg.screenshot({ path: path.join(ARTIFACT_DIR, 'touch-death-grace-before.png') });
+      await pg.touchscreen.tap(
+        t.deathGraceBefore.rect.x + t.deathGraceBefore.rect.width / 2,
+        t.deathGraceBefore.rect.y + t.deathGraceBefore.rect.height / 2,
+      );
+      await pg.waitForFunction(() => window.__game.grace === -1, null, { timeout: 1500 }).catch(() => {});
+      t.deathGraceAfter = await pg.evaluate(() => ({
+        state: window.__game.state,
+        grace: window.__game.grace,
+        confirmSequence: window.__game.input.confirmSequence,
+        terminalConfirmSequence: window.__game.terminalConfirmSequence,
+      }));
+      if (t.deathGraceBefore.state !== 'dead'
+        || t.deathGraceBefore.grace !== 0
+        || !t.deathGraceBefore.hint.includes('bright edge')
+        || t.deathGraceAfter.state !== 'dead'
+        || t.deathGraceAfter.grace !== -1
+        || t.deathGraceAfter.terminalConfirmSequence !== t.deathGraceAfter.confirmSequence) {
+        out.errors.push('touch: Receive Grace or lethal-source hint failed: ' + JSON.stringify({
+          before: t.deathGraceBefore, after: t.deathGraceAfter,
+        }));
+      }
+      await pg.screenshot({ path: path.join(ARTIFACT_DIR, 'touch-death-grace-after.png') });
+      await pg.touchscreen.tap(195, 500);
+      await pg.waitForFunction(() => window.__game.state === 'intro', null, { timeout: 3000 }).catch(() => {});
+      if (await pg.evaluate(() => window.__game.state) !== 'intro') {
+        out.errors.push('touch: retry stopped working after Receive Grace');
+      }
+
       // Mobile victory scorecard must fit the real touch viewport and carry
       // the same immediately persisted result as desktop.
       t.victoryScore = await pg.evaluate(() => {
@@ -1274,6 +1508,51 @@ async function installAudioSampleRate(context) {
         g.banner('THE SOVEREIGN BURNS', 'phase'); g.render();
       });
       await pg.screenshot({ path: path.join(ARTIFACT_DIR, 'touch-phase2.png') });
+
+      t.journeyTell = await pg.evaluate(() => {
+        const g = window.__game;
+        g.state = 'title'; g.setGrace(-2); g.resetFight(); g.state = 'fight';
+        g.boss.phase = 2; g.boss.state = 'windup'; g.boss.attack = 'ring'; g.boss.t = 0.5;
+        const labels = [];
+        const ctx = g.ctx;
+        const originalFillText = ctx.fillText;
+        ctx.fillText = function (text, x, y, maxWidth) {
+          labels.push(String(text));
+          return maxWidth === undefined
+            ? originalFillText.call(this, text, x, y)
+            : originalFillText.call(this, text, x, y, maxWidth);
+        };
+        g.render();
+        ctx.fillText = originalFillText;
+        return { clearTells: g.mods.clearTells, labels };
+      });
+      if (!t.journeyTell.clearTells || !t.journeyTell.labels.includes('READ · RING')) {
+        out.errors.push('touch: Journey did not expose the authored boss tell: ' + JSON.stringify(t.journeyTell));
+      }
+      await pg.screenshot({ path: path.join(ARTIFACT_DIR, 'touch-journey-tell.png') });
+
+      t.oathChainHud = await pg.evaluate(() => {
+        const g = window.__game;
+        g.state = 'title'; g.setGrace(5); g.resetFight(); g.state = 'fight';
+        g.boss.state = 'windup'; g.boss.attack = 'charge'; g.boss.t = 0.5;
+        g.boss.chainStep = 2; g.boss.chainTotal = 3;
+        const labels = [];
+        const ctx = g.ctx;
+        const originalFillText = ctx.fillText;
+        ctx.fillText = function (text, x, y, maxWidth) {
+          labels.push(String(text));
+          return maxWidth === undefined
+            ? originalFillText.call(this, text, x, y)
+            : originalFillText.call(this, text, x, y, maxWidth);
+        };
+        g.render();
+        ctx.fillText = originalFillText;
+        return { rank: g.mods.chainRank, labels };
+      });
+      if (t.oathChainHud.rank !== 3 || !t.oathChainHud.labels.includes('OATH CHAIN  2/3')) {
+        out.errors.push('touch: Oath chain HUD did not surface the current packet: ' + JSON.stringify(t.oathChainHud));
+      }
+      await pg.screenshot({ path: path.join(ARTIFACT_DIR, 'touch-oath-chain.png') });
       await tctx.close();
     }
 

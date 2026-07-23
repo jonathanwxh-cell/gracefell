@@ -5,8 +5,10 @@ const INITIAL_UI: GameUiSnapshot = {
   state: 'title',
   status: 'Title screen',
   muted: false,
-  grace: 0,
-  graceLabel: 'MEASURED',
+  grace: -2,
+  graceLabel: 'JOURNEY -2',
+  graceSummary: 'recommended · 15% slower · 30% softer · 4 flasks',
+  oathRank: 0,
   shakeEnabled: true,
   flashReduced: false,
   hapticsEnabled: true,
@@ -88,7 +90,9 @@ export default function Home() {
         <h1>Gracefell</h1>
         <p id="game-instructions">
           Move with WASD or arrow keys, roll with Space, attack with J, use a heavy attack with K,
-          and drink a flask with F. On touch screens, steer on the left and use the action buttons on the right.
+          and drink a flask with F. Roll through an attack for a perfect dodge; perfect dodges,
+          heavy attacks, and combo finishers break poise so a staggered Malakar takes extra damage.
+          On touch screens, steer on the left and use the action buttons on the right.
         </p>
         <p id="game-status" aria-live="polite">{ui.status}</p>
         <div className="game-accessibility__actions">
@@ -103,12 +107,13 @@ export default function Home() {
             Sound {ui.muted ? 'off' : 'on'}
           </button>
           <button type="button" disabled={trialLocked} onClick={() => act((game) => game.setGrace(game.grace - 1))}>
-            Easier trial
+            More Grace
           </button>
           <output aria-label="Current trial">{ui.graceLabel}</output>
           <button type="button" disabled={trialLocked} onClick={() => act((game) => game.setGrace(game.grace + 1))}>
-            Harder trial
+            More Oath
           </button>
+          <output aria-label="Trial effects">{ui.graceSummary}</output>
           <button type="button" onClick={() => act((game) => game.toggleShake())}>
             Screen shake {ui.shakeEnabled ? 'on' : 'off'}
           </button>
