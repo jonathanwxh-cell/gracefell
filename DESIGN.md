@@ -652,14 +652,16 @@ named local evidence runs remain available without polluting a future commit.
 
 ## v2.11-rc1 — Codex (GPT-5), "the silhouette is the animation" (2026-07-23)
 
-This is a local, not-yet-deployed candidate for GitHub issue #10. The first Penitent prototype
-copied the Kimi painting's dark hood, thin gold trim, face ellipse, and line-cross sigil into the
-existing circular body. The real `390x844` capture disproved the premise: at the authored `0.55`
-camera zoom, the body is only about 19 CSS pixels wide, so those internal details became dust and
-combat states still depended on the sword.
+This is a local, not-yet-deployed candidate for GitHub issue #10. Kimi / OKComputer supplied the
+original Penitent concept image and brief. The first Codex prototype copied that image's dark hood,
+thin gold trim, face ellipse, and line-cross sigil into the existing circular body. The real
+`390x844` capture disproved the premise: at the authored `0.55` camera zoom, the body is only about
+19 CSS pixels wide, so those internal details became dust and combat states still depended on the
+sword.
 
 The owner requested a design-house redesign and selected the second of three generated directions,
-the Kite-Veil state strip. Three read-only studios worked independently:
+the Kite-Veil state strip. It is a derived direction that partially carries Kimi's hooded-penitent
+idea, not a full implementation of Kimi's raster. Three read-only studios worked independently:
 
 - character silhouette: make the parchment hood the outer facing contour, not an accessory;
 - combat UX: give move, roll, light, heavy, flask, stagger, and death different large masses;
@@ -708,11 +710,11 @@ so the acceptance criterion is the absolute 16.7 ms frame budget plus the full g
 
 ## v2.11-rc2 — Codex (GPT-5), "the halo keeps the score" (2026-07-23)
 
-The owner asked for Malakar to receive the same production character pass. GitHub issue #14 was
-already a strong canonical brief: replace the radial spiked monster with a Fallen Blade-Saint
-whose broken sword halo is both identity and volley ammunition. Its Kimi concept image was used as
-the visual source; the issue's procedural specification remained authoritative where painterly
-detail could not survive the mobile camera.
+The owner asked for Malakar to receive the same production character pass. Kimi / OKComputer's
+GitHub issue #14 supplied the concept image and brief: replace the radial spiked monster with a
+Fallen Blade-Saint whose broken sword halo is both identity and volley ammunition. Codex authored
+the live Canvas 2D renderer and state logic as a partial translation; painterly detail and literal
+raster fidelity were never shipped or claimed.
 
 The earlier `?concept=kimi` route had proven that a pointed, facing-led body, split cape, and nine
 orbiting blades read more clearly than the old sphere. It was not production-ready: the default
@@ -806,3 +808,27 @@ pulse trough—which remain future polish rather than silently expanding the rel
 - Desktop QA covers the real accessible Start button path and its focus/RAF invariants.
 - Documentation now distinguishes initial deployment, post-launch persona evidence, the fixed
   blocker, future polish, and bounded browser/device claims.
+
+## v2.11-doc1 — Codex (GPT-5), "credit the image, keep acceptance open" (2026-07-23)
+
+The owner clarified the provenance and lifecycle boundary after v2.11 shipped. Kimi / OKComputer
+created the six original GitHub concept images and briefs in issues #10–#15. Codex did not convert
+those images directly into sprites: the live player and boss are procedural Canvas 2D systems that
+only partially translate the selected #10 and #14 visual ideas.
+
+For the player, Kimi's hooded Penitent image was an upstream reference. The later Kite-Veil
+seven-state strip came from the Codex-led design-house pass and intentionally diverged toward
+phone-scale macro-silhouettes. For Malakar, Kimi's Fallen Blade-Saint image and brief supplied the
+halo/cape/duelist identity; Codex implemented the persistent ammo halo, reforge timing, stagger
+wobble, and animated shadow sword.
+
+Because "partially translated" is not the same as final visual acceptance, graphics issues
+#10–#15 were reopened and annotated on GitHub. Their final closure is deferred until the owner's
+later review. Completed audio issues remain closed.
+
+### Changed from v2.11
+
+- Attribution now separates Kimi's concept images/briefs from Codex's procedural implementation.
+- Documentation no longer implies the selected images were reproduced in full.
+- Graphics issue state now reflects deferred acceptance instead of zero open issues.
+- No runtime code, asset, gameplay, balance, audio, bundle, or deployment behavior changed.
