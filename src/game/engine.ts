@@ -1408,6 +1408,26 @@ export interface GameUiSnapshot {
   touch: boolean;
 }
 
+export interface VictoryScore {
+  grade: string;
+  time: number;
+  trial: number;
+  attempt: number;
+  damageDealt: number;
+  woundsTaken: number;
+}
+
+function isVictoryScore(value: unknown): value is VictoryScore {
+  if (!value || typeof value !== 'object') return false;
+  const score = value as Partial<VictoryScore>;
+  return typeof score.grade === 'string'
+    && typeof score.time === 'number' && Number.isFinite(score.time) && score.time >= 0
+    && typeof score.trial === 'number' && score.trial >= -3 && score.trial <= 5
+    && typeof score.attempt === 'number' && score.attempt >= 1
+    && typeof score.damageDealt === 'number' && Number.isFinite(score.damageDealt) && score.damageDealt >= 0
+    && typeof score.woundsTaken === 'number' && score.woundsTaken >= 0;
+}
+
 export function reducedMotionPreferred(): boolean {
   try { return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches; }
   catch { return false; }
@@ -1473,13 +1493,16 @@ export class Game {
   // persistence
   bestTime = 0; wins = 0; newRecord = false; grade = '';
   bests: Record<string, number> = {};
+  lastScore: VictoryScore | null = null;
+  bestScores: Record<string, VictoryScore> = {};
   // accessibility / difficulty — one dial, -3 (aided) .. +5 (vowed)
   grace = 0;
   shakeEnabled = !reducedMotionPreferred();
   flashReduced = reducedMotionPreferred();
   hapticsEnabled = true;
   safeBottom = 0; safeRight = 0;
-  static SAVE_VERSION = 2;
+  static SAVE_VERSION = 3;
+  static VICTORY_INPUT_DELAY = 4.5;
   private previousTouchBridge?: (event: TouchEvent, phase: string) => void;
   private previousGame?: Game;
   private readonly touchBridge = (event: TouchEvent, phase: string) => this.handleTouch(event, phase);
@@ -1526,6 +1549,12 @@ export class Game {
       if (typeof sv.attempts === 'number') this.attempts = Math.max(1, sv.attempts);
       if (sv.muted) this.audio.muted = true;
       if (sv.bests && typeof sv.bests === 'object') this.bests = sv.bests;
+      if (isVictoryScore(sv.lastScore)) this.lastScore = sv.lastScore;
+      if (sv.bestScores && typeof sv.bestScores === 'object') {
+        this.bestScores = Object.fromEntries(
+          Object.entries(sv.bestScores).filter((entry): entry is [string, VictoryScore] => isVictoryScore(entry[1])),
+        );
+      }
       if (typeof sv.bestTime === 'number' && sv.bestTime > 0) {
         this.bestTime = sv.bestTime;
         if (this.bests['0'] === undefined) this.bests['0'] = sv.bestTime; // v1 runs were all grace 0
@@ -1723,6 +1752,7 @@ export class Game {
       localStorage.setItem('gracefell', JSON.stringify({
         v: Game.SAVE_VERSION,
         bestTime: this.bestTime, bests: this.bests, wins: this.wins,
+        lastScore: this.lastScore, bestScores: this.bestScores,
         attempts: this.attempts, muted: this.audio.muted,
         grace: this.grace, shakeEnabled: this.shakeEnabled, flashReduced: this.flashReduced,
         hapticsEnabled: this.hapticsEnabled,
@@ -1764,7 +1794,7 @@ export class Game {
       : this.state === 'intro' ? 'Malakar enters the arena'
       : this.state === 'fight' ? 'Battle in progress'
       : this.state === 'dead' ? `Defeated. Malakar has ${Math.max(0, Math.ceil((this.boss.hp / this.boss.maxHp) * 100))}% health remaining`
-      : `Victory. Grade ${this.grade}`;
+      : `Victory. Grade ${this.grade}. Score saved`;
     return {
       state: this.state,
       status,
@@ -2113,6 +2143,16 @@ export class Game {
     if (this.newRecord) this.bests[key] = this.fightTime;
     if (this.bestTime === 0 || this.fightTime < this.bestTime) this.bestTime = this.fightTime;
     this.grade = this.computeGrade();
+    const score: VictoryScore = {
+      grade: this.grade,
+      time: this.fightTime,
+      trial: this.graceAtStart,
+      attempt: this.attempts,
+      damageDealt: Math.round(this.damageDealt),
+      woundsTaken: this.hitsTaken,
+    };
+    this.lastScore = score;
+    if (this.newRecord || !this.bestScores[key]) this.bestScores[key] = score;
     this.persist();
   }
 
@@ -2337,7 +2377,13 @@ export class Game {
         this.state = 'intro'; this.stateT = 0;
       }
     } else if (this.state === 'victory') {
-      if (this.stateT > 2.2 && this.input.confirmSequence > this.terminalConfirmSequence) {
+      // Do not let a celebratory double-click queue a restart behind the
+      // reveal. The scorecard owns the screen until the prompt appears, then
+      // requires one fresh confirmation.
+      if (this.stateT <= Game.VICTORY_INPUT_DELAY && this.input.confirmSequence > this.terminalConfirmSequence) {
+        this.terminalConfirmSequence = this.input.confirmSequence;
+        this.input.consume('confirm');
+      } else if (this.stateT > Game.VICTORY_INPUT_DELAY && this.input.confirmSequence > this.terminalConfirmSequence) {
         this.input.consume('confirm');
         this.attempts++;
         this.resetFight();
@@ -3134,6 +3180,7 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
     const parts: string[] = [];
     if (this.wins > 0) parts.push(`${this.wins} victor${this.wins === 1 ? 'y' : 'ies'}`);
     if (selectedBest > 0) parts.push(`best ${bm}:${bs2.toString().padStart(2, '0')}`);
+    if (this.lastScore) parts.push(`last grade ${this.lastScore.grade}`);
     ctx.fillText(parts.join('   \u00b7   '), cx, this.h * 0.60 + 26);
   }
   ctx.font = body(13, 400);
@@ -3254,11 +3301,17 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
     `wounds taken \u2014 ${this.hitsTaken}`,
   ];
   stats.forEach((s, i) => ctx.fillText(s, this.w / 2, this.h * 0.4 + size * 0.9 + 62 + i * 26));
-  if (t > 2.4) {
-    ctx.globalAlpha = a * (0.55 + Math.sin(this.time * 3) * 0.4);
+  const footerY = this.h * 0.4 + size * 0.9 + 62 + stats.length * 26 + 4;
+  ctx.globalAlpha = a * 0.88;
+  ctx.font = body(12, 750);
+  ctx.fillStyle = PAL.spirit;
+  ctx.fillText('SCORE SAVED', this.w / 2, footerY);
+  if (t > Game.VICTORY_INPUT_DELAY) {
+    // A slow, shallow breath keeps the prompt alive without strobing.
+    ctx.globalAlpha = a * (0.76 + Math.sin((t - Game.VICTORY_INPUT_DELAY) * 1.15) * 0.12);
     ctx.font = serif(16, 600);
     ctx.fillStyle = PAL.gold;
-    ctx.fillText(this.input.isTouch ? 'touch to face him again' : 'click or press Enter to face him again', this.w / 2, this.h * 0.4 + size * 0.9 + 62 + stats.length * 26 + 30);
+    ctx.fillText(this.input.isTouch ? 'touch to face him again' : 'click or press Enter to face him again', this.w / 2, footerY + 30);
   }
   ctx.globalAlpha = 1;
 };
