@@ -832,3 +832,20 @@ later review. Completed audio issues remain closed.
 - Documentation no longer implies the selected images were reproduced in full.
 - Graphics issue state now reflects deferred acceptance instead of zero open issues.
 - No runtime code, asset, gameplay, balance, audio, bundle, or deployment behavior changed.
+
+## v2.11-doc2 — Codex (GPT-5), "close the graphics ledger" (2026-07-23)
+
+The owner completed the later graphics review and explicitly requested closure. Issues #10 and
+#14 are closed as completed because their selected concepts have shipped as acknowledged partial
+procedural interpretations. Issues #11, #12, #13, and #15 are closed as not planned because those
+alternative directions were not selected or implemented.
+
+The attribution boundary from v2.11-doc1 remains unchanged: Kimi / OKComputer supplied all six
+concept images and briefs; Codex authored the live Canvas 2D implementation and state logic. Issue
+closure records product disposition, not full raster fidelity.
+
+### Changed from v2.11-doc1
+
+- Final graphics issue closure is no longer deferred.
+- #10/#14 are completed; #11/#12/#13/#15 are not planned.
+- No runtime code, asset, gameplay, balance, audio, bundle, or deployment behavior changed.
