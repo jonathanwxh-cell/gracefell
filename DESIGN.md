@@ -923,3 +923,141 @@ stamina, hit-stop, camera punch, knockback, poise, and combo timing are unchange
 - The third light hit is sonically and visually distinct from HVY.
 - No balance value, boss behavior, difficulty, collision, save schema, UI layout, music asset, or
   rendering asset changes.
+
+## v2.12 — Codex (GPT-5), "easier to finish, harder to master" (2026-07-23)
+
+The owner wanted this genre to welcome a beginner without becoming trivial for a strong player.
+The existing nine-position dial was mathematically coherent, but it mixed assistance, baseline
+authorship, and mastery into one unexplained row. A new player started on Measured 0 before the
+game had taught its defensive loop, while the expert end mostly compressed the same reactions
+through speed, damage, flask, poise, and stagger values.
+
+The research pass separated the product promise into three layers:
+
+1. **Journey** is a visible recommended first-completion candidate.
+2. **Measured** remains the canonical existing baseline.
+3. **Oaths** add learnable decisions for expert rematches.
+
+This follows the shared pattern in Xbox difficulty guidance, Hades' explicit God Mode versus
+Hell/Pact paths, Steelrising's barrier-specific assistance, and Dead Cells' granular accessibility
+options. It also keeps the FromSoftware-like mastery premise intact: stable rules allow the player
+to attribute a win to recognition and execution rather than hidden adaptation.
+
+### Why Journey reuses -2
+
+Journey starts at the existing -2 values instead of inventing a new balance branch: approximately
+0.85x boss speed, 0.70x incoming damage, wider roll/perfect windows, and four flasks. Those values
+already had nine-level regression coverage and did not remove a boss move or phase. The new work is
+mostly disclosure and teaching:
+
+- the title says `recommended · 15% slower · 30% softer · 4 flasks`;
+- boss windups name the attack at -3/-2;
+- a four-beat contextual rite teaches move → roll → perfect-dodge poise → stagger punish;
+- the death screen turns the recorded lethal source into one next-attempt instruction;
+- attempt two exposes one explicit step toward Grace.
+
+A truly absent save starts at -2. Existing saves keep a stored `grace`; old saves that never had
+the field deliberately remain Measured 0. That distinction prevents a release from silently
+reclassifying a returning player's records or preferred timing.
+
+The tutorial persists only when the player strikes a real stagger. Merely calling the instruction
+or seeing the state is not completion. Each new beat replaces the previous one because the
+phone-scale arena cannot afford a tutorial checklist over combat.
+
+### Why Oaths use packets
+
+An expert already recognizes a faster isolated swipe. Further speed compression eventually tests
+reaction hardware and motor speed more than judgment. Oaths therefore keep the v2.10 numeric curve
+but add capped authored packets and modest recovery pressure.
+
+Only the four direct attacks may chain:
+
+- volley → charge → swipe;
+- charge → swipe → slam;
+- swipe → slam → volley;
+- slam → volley → charge.
+
+Ring, meteor, and spiral remain isolated because composing area-denial moves can close the arena
+without producing an interesting decision. A queued step must still pass its normal range, phase,
+and cooldown eligibility. Immediate-repeat weighting is reduced, and the existing touch windup
+floors remain load-bearing. Oath I/II may add one follow-up; Oath III/IV increase frequency and
+recovery pressure without adding a third beat; Oath V may add two follow-ups. The queue clears on
+phase transition and stagger.
+
+The HUD says `OATH CHAIN step/total` because a new rule must be visible while the player is
+learning it. The deterministic QA route forces `volley 1/3 → charge 2/3 → swipe 3/3`, then proves
+Measured and Journey have no queued packet.
+
+### Combo feedback is contact truth
+
+v2.11.2 made three rapid ATK taps mechanically reliable but did not show the player that the
+string was progressing. v2.12 adds a presentation-only contact chain:
+
+- `CHAIN 1/3 ◆◇◇`;
+- `CHAIN 2/3 ◆◆◇`;
+- `LIGHT FINISHER ◆◆◆`.
+
+The counter advances inside `playerStrike()` only after a valid arc/range contact. A whiff does not
+earn visible progress. Damage, heavy, roll, or timer expiry breaks it. This state never drives
+damage or attack selection, so presentation cannot become a second combo authority. The finisher
+uses the silver/spirit treatment established in v2.11.2 and remains clearly separate from HVY.
+
+### Death input ownership
+
+The Grace offer introduced a subtle terminal-input risk: a touch event also increments the
+monotonic confirmation sequence used by **rise again**. If the offer only changed the number, the
+same gesture could restart behind it on the next frame. `handleDeathGraceInput()` owns that
+sequence, consumes the short confirm flag, and leaves the state dead. A later fresh touch still
+retries normally. QA proves both steps and retains the earlier pointer-only resurrection path.
+
+### Save and scoring
+
+Save schema v4 adds `tutorialComplete` and optional scorecard fields for perfect dodges, flasks
+used, and Oath rank. Optional fields keep old scorecards valid. The victory card surfaces execution
+and the Oath when relevant; per-path bests remain authoritative.
+
+### Rejected alternatives
+
+- **Default phase checkpoints or continuation:** retry has no runback, so this would remove the
+  whole-fight endurance arc while adding terminal-state and persistence complexity. Unscored phase
+  practice remains a later evidence-driven option.
+- **Hidden death-responsive tuning:** assistance is an offer, never an invisible rules change.
+- **A large assist dashboard:** a first-time player cannot yet diagnose which of many sliders they
+  need. One recommended path and one-step Grace offer keep the choice legible.
+- **Chaining hazards:** area denial is excluded from packets.
+- **More particles or world detail:** all new feedback uses existing screen-space primitives and
+  tiny state fields. The environment and asset footprint stay unchanged.
+- **Expert input penalties:** Oaths do not shrink buttons, remove buffering, conceal tells, or
+  lower mobile reaction floors.
+
+### Validation and deployment
+
+The candidate `52debee54e3cd012984246a70996ab982330c200` passed lint, build, and the complete
+local desktop/mobile/true-touch suite with zero errors. The phone evidence was visually inspected
+for the Journey title/tell, Oath packet, combo finisher, and Receive Grace states. GitHub Actions
+run `30015973110` passed before PR #26 merged.
+
+Production was fast-forwarded to
+`0a9cea3a742edeb9e438aaffe6c6886ffc6e5e7b`, built on the host, and restarted. The service is
+active, the loopback and public health endpoints pass, and a second complete suite against
+<https://gracefell.alyoechosys.dev> reports zero errors. The host bundle is `347.91 kB`
+(`108.35 kB` gzip); no runtime asset was added. Accepted public audio initialization was 14.8 ms
+desktop, 12.4 ms mobile, and 19.6 ms on the immediate fresh-phone gesture.
+
+The machine gate establishes coherence, input ownership, UI fit, and rule stability. It cannot
+declare the numerical Journey candidate universally optimal. Beginner, intermediate, and expert
+human cohorts remain the correct source for later tuning.
+
+### Changed from v2.11.2
+
+- First-time default changes from Measured 0 to disclosed Journey -2; existing/legacy saves retain
+  Measured or their stored path.
+- Negative Grace gains named beginner tells and slightly longer recovery.
+- Positive paths become Oaths with authored direct-attack packets and shorter recovery.
+- The perfect-dodge/poise/stagger loop gains a contextual persistent rite.
+- Death gains attack-specific advice and a voluntary, input-safe Grace offer.
+- Connected light attacks gain transient chain and finisher feedback.
+- Save schema changes from v3 to v4 with backward-compatible tutorial/execution fields.
+- Boss health, phases, individual attack mechanics, player damage/timing, music, action SFX,
+  procedural character art, collision, touch layout, input buffering, and established mobile
+  tell floors remain otherwise unchanged.
