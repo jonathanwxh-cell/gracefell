@@ -2,6 +2,10 @@
 
 ## Comparison target
 
+- Attribution boundary: Kimi / OKComputer supplied the original GitHub #10 player
+  concept image and brief. The later Kite-Veil state strip was produced during
+  the Codex-led design-house pass and is a derived direction, not Kimi's final
+  sprite. Production only partially carries the original hooded-penitent idea.
 - Source visual truth: `.artifacts/design-house-10/option-2-kite-veil-states.png`
   (`2076x758`). This is the selected seven-state character strip, not a complete
   application viewport.
@@ -64,7 +68,8 @@ The implementation preserves the selected visual hierarchy:
 - Colors and visual tokens: the body uses Gracefell's parchment, charcoal,
   soot-violet, background-black, and grace-gold families. No decorative
   `PAL.danger` or `PAL.dangerEdge` is introduced.
-- Image quality and asset fidelity: the selected raster is a design source only.
+- Image quality and asset fidelity: the selected derived raster is a design
+  source only, and the Kimi #10 image/brief is an upstream partial reference.
   GitHub issue #10 explicitly requires a zero-bitmap procedural Canvas2D player,
   so the production implementation intentionally reduces painterly costume
   detail to the source's large outer masses. The silhouette, state grammar,
@@ -101,6 +106,9 @@ The implementation preserves the selected visual hierarchy:
 
 ## Fallen Blade-Saint boss comparison
 
+- Attribution boundary: Kimi / OKComputer supplied the GitHub #14 concept image
+  and brief. Codex authored the live Canvas 2D renderer and state logic as a
+  partial translation rather than a raster-to-sprite conversion.
 - Source visual truth:
   `.artifacts/boss-blade-saint/reference.jpg` (`640x640`) plus the canonical
   procedural requirements in GitHub issue #14.
@@ -119,9 +127,10 @@ The implementation preserves the selected visual hierarchy:
   five-blade partial reforge, poise stagger, partial phase-three sword draw,
   and the completed dual-sword phase.
 
-The production translation preserves the concept's hierarchy at real play
-scale: broken blade halo first, split ash cape second, pointed consecrated
-armor and failing amber core third. The body is elongated along facing and
+The partial production translation preserves the concept's hierarchy at real
+play scale: broken blade halo first, split ash cape second, pointed consecrated
+armor and failing amber core third. Painterly surface detail and literal
+silhouette fidelity are not claimed. The body is elongated along facing and
 stays inside the existing collision circle; the cape, coatswords, and halo are
 non-collision silhouette and telegraph elements.
 

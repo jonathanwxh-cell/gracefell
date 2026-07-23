@@ -37,9 +37,11 @@ The sovereign has an audio language, not one generic warning: swipes whistle, ch
 Codex (GPT-5).** Attack-specific procedural cues, spatial mix protection, the MiniMax-generated
 score, mobile/accessibility hardening, trustworthy combat and retry behavior, the verified
 nine-level difficulty pass, and the production Kite-Veil/Blade-Saint silhouettes. The v2.11 player
-direction was selected from three independent design-house proposals; Kimi's issue #14 concept is
-the source for Malakar's Blade-Saint identity. The music generation prompt and file hash are
-recorded in [`public/audio/README.md`](public/audio/README.md).
+direction was selected from three independent design-house proposals. Kimi / OKComputer supplied
+the six original issue concept images and briefs (#10–#15); the shipped player and boss are
+Codex-authored procedural interpretations that only partially translate the selected #10 and #14
+images. The music generation prompt and file hash are recorded in
+[`public/audio/README.md`](public/audio/README.md).
 
 Directed by [@jonathanwxh-cell](https://github.com/jonathanwxh-cell), who asked for "AAA grade" and meant it.
 
@@ -213,11 +215,13 @@ detail. The player uses seven Kite-Veil silhouettes: arrow/fin movement, compact
 light spear, heavy hammerhead, flask seed, broken stagger, and flattened death leaf. The resting
 sword disappears when it would blur the roll, flask, stagger, or death read.
 
-Malakar is now the Fallen Blade-Saint from Kimi's issue #14 concept. His nine-blade halo is a real
-volley counter: phase one spends five fragments, phase two spends seven, phase three spends nine,
-and one blade reforges every 0.8 seconds. Phase-two tips ignite amber, stagger slows and breaks the
-orbit, and phase three visibly draws a second shadow sword over 0.4 seconds. Boss collision,
-health, damage, movement, cooldowns, and attack timing are unchanged.
+Malakar is now a procedural interpretation of the Fallen Blade-Saint from Kimi's issue #14 image
+and brief. The implementation partially preserves its halo, ash cape, pointed armor, and
+dual-sword hierarchy; it is not the raster image or a verbatim sprite conversion. His nine-blade
+halo is a real volley counter: phase one spends five fragments, phase two spends seven, phase
+three spends nine, and one blade reforges every 0.8 seconds. Phase-two tips ignite amber, stagger
+slows and breaks the orbit, and phase three visibly draws a second shadow sword over 0.4 seconds.
+Boss collision, health, damage, movement, cooldowns, and attack timing are unchanged.
 
 Both designs remain procedural Canvas 2D, so the production bundle gains no sprite sheet, texture,
 model, or per-frame render surface. Their source-to-implementation comparisons are committed below:
