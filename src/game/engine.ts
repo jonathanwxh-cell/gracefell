@@ -1572,7 +1572,7 @@ export interface VictoryScore {
   oathRank?: number;
 }
 
-function isVictoryScore(value: unknown): value is VictoryScore {
+export function isVictoryScore(value: unknown): value is VictoryScore {
   if (!value || typeof value !== 'object') return false;
   const score = value as Partial<VictoryScore>;
   return typeof score.grade === 'string'
@@ -1603,6 +1603,35 @@ const TOUCH_BTNS = [
   { id: 'heavy', label: 'HVY', ox: 1.15, oy: 3.10, ur: 0.75 },
   { id: 'flask', label: 'FLASK', ox: 3.20, oy: 3.00, ur: 0.62 },
 ];
+
+export function difficultyForGrace(grace: number): DifficultyMods {
+  const g = clamp(Math.round(grace), -3, 5);
+  const aid = clamp(-g, 0, 3) / 3;
+  // Oath I/II already introduce chained decisions. Ease their raw speed,
+  // damage, and recovery compression so the first vows teach that contract
+  // before Oath III resumes the established expert curve.
+  const oathSpeed = [1, 1.04, 1.10, 1.18, 1.24, 1.30];
+  const oathDamage = [1, 1.05, 1.13, 1.24, 1.32, 1.40];
+  const oathRecovery = [1, 0.99, 0.96, 0.91, 0.88, 0.85];
+  return {
+    bossSpeed: g > 0 ? oathSpeed[g] : 1 - aid * 0.22,
+    dmgTaken: g > 0 ? oathDamage[g] : 1 - aid * 0.45,
+    iframe: 1 + aid * 0.55,
+    perfectWindow: 1 + aid * 0.6,
+    // FAMINE removes one flask at +2. The final flask and all stagger access
+    // are reserved for the explicit FORSAKEN +5 capstone instead of stacking
+    // two large discontinuities at +3/+4.
+    flasks: 3 + (g <= -2 ? 1 : 0) - (g >= 5 ? 2 : g >= 2 ? 1 : 0),
+    poiseMul: g >= 4 ? 1.7 : g >= 3 ? 1.35 : 1,
+    staggerDuration: g >= 4 ? 1.25 : g >= 3 ? 1.45 : 1.7,
+    noStagger: g >= 5,
+    clearTells: g <= -2,
+    // Positive trials are Oaths: the established numerical curve remains,
+    // while authored chains and recovery pressure add new decisions.
+    chainRank: g >= 5 ? 3 : g >= 3 ? 2 : g >= 1 ? 1 : 0,
+    recoveryMul: g > 0 ? oathRecovery[g] : 1 + aid * 0.1,
+  };
+}
 
 export class Game {
   canvas: HTMLCanvasElement;
@@ -1924,33 +1953,10 @@ export class Game {
   // grace lengthens the read (slower boss, longer telegraphs, wider i-frames,
   // softer hits) rather than making the fight a different fight — the pattern
   // you learn at -3 is the same pattern you execute at +5.
+  // Single derivation point: delegates to the pure, unit-tested module
+  // function difficultyForGrace() so the balance table stays lockable by tests.
   difficultyForGrace(grace = this.grace): DifficultyMods {
-    const g = clamp(Math.round(grace), -3, 5);
-    const aid = clamp(-g, 0, 3) / 3;
-    // Oath I/II already introduce chained decisions. Ease their raw speed,
-    // damage, and recovery compression so the first vows teach that contract
-    // before Oath III resumes the established expert curve.
-    const oathSpeed = [1, 1.04, 1.10, 1.18, 1.24, 1.30];
-    const oathDamage = [1, 1.05, 1.13, 1.24, 1.32, 1.40];
-    const oathRecovery = [1, 0.99, 0.96, 0.91, 0.88, 0.85];
-    return {
-      bossSpeed: g > 0 ? oathSpeed[g] : 1 - aid * 0.22,
-      dmgTaken: g > 0 ? oathDamage[g] : 1 - aid * 0.45,
-      iframe: 1 + aid * 0.55,
-      perfectWindow: 1 + aid * 0.6,
-      // FAMINE removes one flask at +2. The final flask and all stagger
-      // access are reserved for the explicit FORSAKEN +5 capstone instead of
-      // stacking two large discontinuities at +3/+4.
-      flasks: 3 + (g <= -2 ? 1 : 0) - (g >= 5 ? 2 : g >= 2 ? 1 : 0),
-      poiseMul: g >= 4 ? 1.7 : g >= 3 ? 1.35 : 1,
-      staggerDuration: g >= 4 ? 1.25 : g >= 3 ? 1.45 : 1.7,
-      noStagger: g >= 5,
-      clearTells: g <= -2,
-      // Positive trials are Oaths: the established numerical curve remains,
-      // while authored chains and recovery pressure add new decisions.
-      chainRank: g >= 5 ? 3 : g >= 3 ? 2 : g >= 1 ? 1 : 0,
-      recoveryMul: g > 0 ? oathRecovery[g] : 1 + aid * 0.1,
-    };
+    return difficultyForGrace(grace);
   }
 
   get mods(): DifficultyMods {
@@ -2960,7 +2966,7 @@ export interface Game {
 const serif = (size: number, weight = 700) => `${weight} ${size}px Cinzel, 'Times New Roman', serif`;
 const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Garamond', Georgia, serif`;
 
-(Game.prototype as any).render = function render(this: Game) {
+Game.prototype.render = function render(this: Game) {
   const ctx = this.ctx;
   ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
   ctx.clearRect(0, 0, this.w, this.h);
@@ -3210,7 +3216,7 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
   if (this.manualPaused && this.state === 'fight') this.drawPause(ctx);
 };
 
-(Game.prototype as any).drawArena = function drawArena(this: Game, ctx: CanvasRenderingContext2D) {
+Game.prototype.drawArena = function drawArena(this: Game, ctx: CanvasRenderingContext2D) {
   const R = this.arenaR;
   const S = this.floorSize;
   // baked floor
@@ -3257,7 +3263,7 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
 
 };
 
-(Game.prototype as any).drawHUD = function drawHUD(this: Game, ctx: CanvasRenderingContext2D) {
+Game.prototype.drawHUD = function drawHUD(this: Game, ctx: CanvasRenderingContext2D) {
   const p = this.player;
   const pad = Math.max(18, this.w * 0.02);
   const barW = clamp(this.w * 0.3, 190, 380);
@@ -3470,7 +3476,7 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
   }
 };
 
-(Game.prototype as any).drawBanner = function drawBanner(this: Game, ctx: CanvasRenderingContext2D) {
+Game.prototype.drawBanner = function drawBanner(this: Game, ctx: CanvasRenderingContext2D) {
   if (this.bannerT <= 0) return;
   const a = clamp(this.bannerT / 0.5, 0, 1);
   ctx.textAlign = 'center';
@@ -3497,7 +3503,7 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
   ctx.globalAlpha = 1;
 };
 
-(Game.prototype as any).drawTitle = function drawTitle(this: Game, ctx: CanvasRenderingContext2D) {
+Game.prototype.drawTitle = function drawTitle(this: Game, ctx: CanvasRenderingContext2D) {
   ctx.fillStyle = 'rgba(5,4,3,0.55)';
   ctx.fillRect(0, 0, this.w, this.h);
   const cx = this.w / 2;
@@ -3660,7 +3666,7 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
   ctx.fillText('the sovereign does not forgive \u00b7 grace answers', cx, this.h - 26);
 };
 
-(Game.prototype as any).drawIntro = function drawIntro(this: Game, ctx: CanvasRenderingContext2D) {
+Game.prototype.drawIntro = function drawIntro(this: Game, ctx: CanvasRenderingContext2D) {
   const t = this.stateT;
   if (t > 2.2) return;
   const a = t < 0.4 ? t / 0.4 : t > 1.8 ? clamp((2.2 - t) / 0.4, 0, 1) : 1;
@@ -3685,7 +3691,7 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
   ctx.globalAlpha = 1;
 };
 
-(Game.prototype as any).drawDeath = function drawDeath(this: Game, ctx: CanvasRenderingContext2D) {
+Game.prototype.drawDeath = function drawDeath(this: Game, ctx: CanvasRenderingContext2D) {
   const t = this.stateT;
   const fade = clamp(t / 1.2, 0, 1);
   ctx.fillStyle = `rgba(10,2,2,${fade * 0.72})`;
@@ -3736,7 +3742,7 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
   ctx.globalAlpha = 1;
 };
 
-(Game.prototype as any).drawVictory = function drawVictory(this: Game, ctx: CanvasRenderingContext2D) {
+Game.prototype.drawVictory = function drawVictory(this: Game, ctx: CanvasRenderingContext2D) {
   const t = this.stateT;
   if (t < 1.1) return; // slow-mo plays first
   const fade = clamp((t - 1.1) / 1, 0, 1);
@@ -3809,7 +3815,7 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
   ctx.globalAlpha = 1;
 };
 
-(Game.prototype as any).drawTouchUI = function drawTouchUI(this: Game, ctx: CanvasRenderingContext2D) {
+Game.prototype.drawTouchUI = function drawTouchUI(this: Game, ctx: CanvasRenderingContext2D) {
   // joystick
   if (this.input.joyActive) {
     ctx.globalAlpha = 0.25;
@@ -3868,7 +3874,7 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
   ctx.fillText(`×${this.player.flasks}`, fb.x, fb.y - fb.r - 8);
 };
 
-(Game.prototype as any).drawPause = function drawPause(this: Game, ctx: CanvasRenderingContext2D) {
+Game.prototype.drawPause = function drawPause(this: Game, ctx: CanvasRenderingContext2D) {
   ctx.save();
   ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
   ctx.fillStyle = 'rgba(5,4,3,0.72)';

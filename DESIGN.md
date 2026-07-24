@@ -1367,3 +1367,23 @@ manifest (was audio-only).
 New `verify.cjs` check: served HTML has zero `googleapis`/`gstatic`, a manifest + icon link + meta
 description, and favicon/manifest return 200. Fonts serve from `/assets/` as `font/woff2` immutable
 (curl-confirmed). lint/build clean; gate green apart from the load-sensitive audio-init budgets.
+
+## v2.17.1 — Claude (Opus 4.8), "code quality: tests + typing" (2026-07-24)
+
+Resolves audit issues #43 and #42. No behaviour change.
+
+### #43 unit tests
+Added Vitest + `src/game/engine.test.ts` (14 tests): math helpers, deterministic `seededRandom`,
+the `difficultyForGrace` −3..+5 balance contract, and the `isVictoryScore` save-v4 validator. To
+test `difficultyForGrace` without a canvas, its logic became a pure exported module function and the
+`Game` method delegates to it (single derivation point preserved). `isVictoryScore` exported. CI
+runs `npm test` before the Playwright gate. Importing `./engine` in node works — no top-level DOM.
+
+### #42 typing
+The 10 render methods were `(Game.prototype as any).X = …`; the `export interface Game` merge
+already declares them, so the `as any` was redundant — now plain `Game.prototype.X`. The full
+render-extraction refactor was deliberately not done (high risk / low benefit on a live engine).
+
+### Verification
+`npm test` 14/14; lint/build clean (build typechecks the test too); full gate green apart from the
+load-sensitive audio-init budgets. Closes out all ten repo-audit issues (v2.16 → v2.17.1).

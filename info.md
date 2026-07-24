@@ -1,7 +1,7 @@
 # GRACEFELL project facts
 
-- Current package: `gracefell@2.17.0`
-- Gameplay release: `v2.15` (v2.16–v2.17 are server/build/dependency/web hygiene, no gameplay change)
+- Current package: `gracefell@2.17.1`
+- Gameplay release: `v2.15` (v2.16–v2.17.1 are server/build/dependency/web/code-quality hygiene, no gameplay change)
 - Character release: Kite-Veil Penitent + Fallen Blade-Saint
 - Production: <https://gracefell.alyoechosys.dev>
 - Repository: <https://github.com/jonathanwxh-cell/gracefell>
