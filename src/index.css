@@ -1,3 +1,15 @@
+/* Self-hosted display fonts (latin subset) — no third-party CDN, offline-capable.
+   Cinzel and Cormorant Garamond are variable fonts, so one file per family covers
+   every weight (exactly as Google Fonts served them); the per-weight faces below
+   just map the weights the game requests onto that file. */
+@font-face{font-family:'Cinzel';font-style:normal;font-weight:400;font-display:swap;src:url('./fonts/cinzel-400.woff2') format('woff2');}
+@font-face{font-family:'Cinzel';font-style:normal;font-weight:600;font-display:swap;src:url('./fonts/cinzel-400.woff2') format('woff2');}
+@font-face{font-family:'Cinzel';font-style:normal;font-weight:700;font-display:swap;src:url('./fonts/cinzel-400.woff2') format('woff2');}
+@font-face{font-family:'Cinzel';font-style:normal;font-weight:900;font-display:swap;src:url('./fonts/cinzel-400.woff2') format('woff2');}
+@font-face{font-family:'Cormorant Garamond';font-style:normal;font-weight:400;font-display:swap;src:url('./fonts/cormorant-garamond-400.woff2') format('woff2');}
+@font-face{font-family:'Cormorant Garamond';font-style:normal;font-weight:500;font-display:swap;src:url('./fonts/cormorant-garamond-400.woff2') format('woff2');}
+@font-face{font-family:'Cormorant Garamond';font-style:italic;font-weight:400;font-display:swap;src:url('./fonts/cormorant-garamond-400-italic.woff2') format('woff2');}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

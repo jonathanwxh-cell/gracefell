@@ -1343,3 +1343,27 @@ react-dom, react-router. `src/` is now six files. CSS bundle 80 KB → 10.6 KB; 
 `tsc` passing is the proof nothing live imported the deleted tree (a broken import fails the build).
 lint/build clean; lockfile regenerated; `npm ci` verified; full gate green apart from the
 load-sensitive audio-init budgets (green on CI).
+
+## v2.17 — Claude (Opus 4.8), "web polish: fonts + PWA" (2026-07-24)
+
+Resolves audit issues #39 and #40. No gameplay change.
+
+### #39 self-hosted fonts
+`index.html` pulled Cinzel + Cormorant Garamond from Google's CDN every load (IP leak,
+render-blocking, no offline). Now self-hosted: latin-subset woff2 in `src/fonts/`, bundled +
+content-hashed by Vite into `/assets/` (inherits the `immutable` cache), `@font-face` in
+`index.css`. Both are variable fonts — Google served one latin file per family for all requested
+weights (Cinzel 400–900, Cormorant 400/500), so three files + seven weight-mapped faces reproduce
+the exact prior rendering. Zero third-party requests now.
+
+### #40 favicon / PWA / meta
+Code-drawn `public/favicon.svg` (grace-gold halo + falling blade on `#0b0907`). `apple-touch-icon`
+(180) + `icon-192`/`icon-512` rendered from the SVG by headless Chromium (code-generated, not
+authored bitmaps). `public/manifest.webmanifest` (standalone, theme `#0b0907`, the three icons).
+`<meta description>` + Open Graph + Twitter card. `public/` now holds the audio + these icons +
+manifest (was audio-only).
+
+### QA
+New `verify.cjs` check: served HTML has zero `googleapis`/`gstatic`, a manifest + icon link + meta
+description, and favicon/manifest return 200. Fonts serve from `/assets/` as `font/woff2` immutable
+(curl-confirmed). lint/build clean; gate green apart from the load-sensitive audio-init budgets.
