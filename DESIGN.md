@@ -1703,5 +1703,10 @@ so action sounds and the phase score keep their established mix priority.
 - The 64-mote count, existing particle cap, runtime asset set, audio graph,
   difficulty, boss patterns, player timing/damage, saves, layout, and controls
   are unchanged.
-- This is a completed local candidate. No GitHub push, production service
-  restart, or public verification is claimed by this pass.
+- The implementation passed clean-runner CI in GitHub Actions run 30091146680,
+  merged through PR #55 as `a9d9ad2`, and was deployed to the production
+  `gracefell.service`.
+- The complete public desktop/mobile/true-touch gate passed against
+  `https://gracefell.alyoechosys.dev/` with `ok=true`, zero errors, and the
+  weather, accessibility, audio, navigation, retry, victory, and score-history
+  contracts intact.
