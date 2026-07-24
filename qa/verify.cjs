@@ -38,6 +38,22 @@ async function installAudioSampleRate(context) {
   if (process.env.PLAYWRIGHT_CHROMIUM_PATH) launchOptions.executablePath = process.env.PLAYWRIGHT_CHROMIUM_PATH;
   const browser = await chromium.launch(launchOptions);
   try {
+    // v2.16 (#45/#46): server.mjs hardening — security headers + immutable audio.
+    {
+      const rootRes = await fetch(URL);
+      const audioRes = await fetch(new globalThis.URL('/audio/gracefell-sovereigns-fall.mp3', URL), { method: 'HEAD' });
+      const h = (r, k) => (r.headers.get(k) || '').toLowerCase();
+      out.steps.serverHeaders = {
+        nosniff: h(rootRes, 'x-content-type-options'),
+        referrer: h(rootRes, 'referrer-policy'),
+        frame: h(rootRes, 'x-frame-options'),
+        audioCache: h(audioRes, 'cache-control'),
+      };
+      const sh = out.steps.serverHeaders;
+      if (sh.nosniff !== 'nosniff') out.errors.push('v2.16 (#45): missing X-Content-Type-Options: nosniff (' + JSON.stringify(sh) + ')');
+      if (!sh.referrer) out.errors.push('v2.16 (#45): missing Referrer-Policy header');
+      if (!/immutable/.test(sh.audioCache)) out.errors.push('v2.16 (#46): /audio/ not served immutable (' + sh.audioCache + ')');
+    }
     for (const vp of [{ name: 'desktop', w: 1280, h: 800 }, { name: 'mobile', w: 390, h: 844 }]) {
       const ctxB = await browser.newContext({ viewport: { width: vp.w, height: vp.h } });
       await installAudioSampleRate(ctxB);

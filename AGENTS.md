@@ -97,4 +97,4 @@ folder. Named release runs may set `GRACEFELL_QA_DIR` / `GRACEFELL_QA_RESULT`; r
 ## Known scope edges
 - Touch is genuinely tested: `qa/verify.cjs` runs a third `hasTouch + isMobile` pass that taps to start, verifies +5 swipe floors/visual timing and IRONBOUND disclosure, drives a real drag, completes a visible three-hit ATK chain, checks button geometry, dies naturally, proves touchscreen and pointer-only resurrection, receives Grace without retry leakage, and reloads a victory score. The desktop lane enumerates all nine paths, the immutable snapshot, authored Oath packet, contextual rite, save migration, and audio/combat contracts. Dedicated Journey tell, Oath chain, combo finisher, Grace death, FORSAKEN title, and IRONBOUND captures guard the new UI.
 - Still unverified by machine: haptics (no vibration API headless) and real iOS Safari URL-bar / dvh behaviour.
-- `npm ci` fails on this lockfile (kimi plugin resolution) — use `npm install`.
+- `npm ci` installs deterministically from the committed lockfile (verified in v2.16). Keep the lockfile in sync when you change dependencies (`npm install`, then commit `package-lock.json`).
