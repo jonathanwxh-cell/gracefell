@@ -8,24 +8,21 @@ rules are all decided by what works one-handed on a 390px screen.
 
 **Play it: [gracefell.alyoechosys.dev](https://gracefell.alyoechosys.dev)**
 
-Current gameplay release: **v2.15** — an offense pass: hold HVY to charge a poise-breaking smash, and
-phase three's music now lifts to match its fire. It builds on v2.14's feel & spectacle work — a
-camera that tightens for a duel and widens for a storm, a staggered Malakar you can *execute*, and an
-arena that burns down as his phases fall. New players begin on a disclosed, forgiving Journey;
-experts can answer with authored Oath attack chains, and every fight can now be paused and resumed
-without advancing combat or audio. Phone players have a persistent 44px control beside SOUND;
-desktop players can use P or Escape. The complete test, deployment, and production record is
-preserved in [`docs/releases/v2.13.md`](docs/releases/v2.13.md); the previous combat-clarity record
-remains in [`docs/releases/v2.12.1.md`](docs/releases/v2.12.1.md), and the original Journey/Oaths
-research and
-save-migration record remains in [`docs/releases/v2.12.md`](docs/releases/v2.12.md).
-The v2.11 character design record remains available in
-[`docs/releases/v2.11.md`](docs/releases/v2.11.md).
+Current gameplay release: **v2.18** — each boss phase now has its own restrained
+MiniMax Music 3.0 cue. The three loop-safe masters are loudness-matched, streamed
+through two permanent decks, and moved between phases in under one second. Combat
+still owns the foreground: overlapping warnings use strongest-wins ducking, and
+players can independently set Music and Combat effects from a safe in-fight MIX
+dialog that pauses the fight while leaving the score audible. v2.18 retains the
+charged heavy, duel camera, stagger execution, burning arena, Journey onboarding,
+authored Oath chains, score persistence, and explicit pause/resume from earlier
+passes. The complete local implementation and verification record is in
+[`docs/releases/v2.18.md`](docs/releases/v2.18.md).
 
-Zero runtime art assets, one generated music track. Every character silhouette, sword, halo blade,
+Zero runtime art assets, three generated music tracks. Every character silhouette, sword, halo blade,
 stone in the floor, ember, cape, and combat cue is generated at runtime from code — canvas 2D for
 the visuals and Web Audio for the SFX. Documentation screenshots do not enter the production
-bundle. A MiniMax Music 3.0 instrumental supplies the score, with the original procedural drone
+bundle. Three MiniMax Music 3.0 instrumentals supply the phase score, with the original procedural drone
 and phase-aware drums kept underneath and available as the offline fallback. The visual game
 remains one `<canvas>`; a focus-revealed semantic companion exposes controls and safety settings to
 keyboards and assistive technology without covering the playfield.
@@ -40,9 +37,9 @@ The sovereign has an audio language, not one generic warning: swipes whistle, ch
 
 **v2 — extended by Claude (Opus 4.8).** Combat depth, a third phase, a full rendering pass, persistence, and a headless verification gate. Details in [DESIGN.md](DESIGN.md).
 
-**v2.4–v2.13 — audio, responsiveness, combat integrity, character readability, progression, victory persistence, and player-controlled pause extended by
+**v2.4–v2.18 — audio, responsiveness, combat integrity, character readability, progression, victory persistence, player-controlled pause, and adaptive phase scoring extended by
 Codex (GPT-5).** Attack-specific procedural cues, spatial mix protection, the MiniMax-generated
-score, mobile/accessibility hardening, trustworthy combat and retry behavior, the verified
+score family, mobile/accessibility hardening, trustworthy combat and retry behavior, the verified
 Grace-to-Oaths mastery path, and the production Kite-Veil/Blade-Saint silhouettes. The v2.11 player
 direction was selected from three independent design-house proposals. Kimi / OKComputer supplied
 the six original issue concept images and briefs (#10–#15); the shipped player and boss are
@@ -68,6 +65,7 @@ who did which pass, and the rules any future agent follows before touching the c
 | **ROLL** | invincible — roll *into* a swing for a perfect dodge |
 | **HVY** | heavy, slow, big poise damage |
 | **FLASK** | heal (Journey starts with four; the selected path is shown before the fight) |
+| **MIX** | freezes combat while the score remains audible; set Music/Combat effects, test SFX, then Done |
 | **PAUSE / RESUME** | freezes the fight and audio; no time, attack, or input advances |
 
 The buttons scale with your screen and sit clear of the home indicator. Haptics fire on hits and
@@ -156,8 +154,10 @@ reads as motion rather than hue.
 
 ## Listening to the fight
 
-The sparse two-and-a-half-minute dark-fantasy score was generated with MiniMax and ships locally,
-with a procedural fallback if it cannot stream. Combat audio is synthesized in the browser: every attack
+Three sparse dark-fantasy phase cues were generated with MiniMax Music 3.0, mastered to exact
+78 BPM loop forms, and ship locally with a procedural fallback. Two permanent streaming decks move
+from Quiet Ash to The Sovereign Burns to Gracefall with no more than 250 ms of beat quantization
+and a 720 ms equal-power crossfade. Combat audio is synthesized in the browser: every attack
 has a stable tell, repeated swings and impacts receive subtle non-repeating variations, and hits use
 different metal, flesh, and low-frequency layers. Malakar has a layered organic roar plus footsteps
 and charge-scrape foley.
@@ -176,9 +176,16 @@ Light sword contact has its own short 1.45–3.2 kHz critical crack and an immed
 That presence-band layer replaces an expendable ultrasonic transient, so ordinary hits remain
 clear on a phone speaker and under phase-three voice pressure without adding another sound layer.
 
-The MP3 is streamed through the Web Audio music bus instead of being fully decoded into memory.
+The MP3s are streamed through the Web Audio music bus instead of being fully decoded into memory.
+Only Phase 1 is eagerly prepared; later phases remain deferred. Playback failures retain and retry
+the requested phase without creating new nodes, then fall back to the procedural score.
 Generated noise and the arena response are prepared before the first gesture, keeping the first
 attack responsive while preserving the same spatial mix, ducking, and limiter path.
+
+Music and Combat effects have separate persistent sliders (85% and 100% defaults). MIX pauses the
+simulation while deliberately leaving the score audible, provides a TEST SFX action, and closes
+through Done, Escape, or the backdrop without passing that input into combat. A manual PAUSE still
+suspends both simulation and audio and temporarily disables MIX.
 
 If the tab loses focus or a phone interruption hides the page, simulation and audio pause together.
 Returning resumes from the same fight frame rather than letting Malakar attack an absent player.
@@ -296,7 +303,8 @@ changing the rules.
 Expert Oaths preserve the established curve and add capped, learnable boss packets with visible
 step counts and recovery pressure. Ring, meteor, and spiral never join those packets. Connected
 player light hits now show the full chain and finisher, and victory scorecards retain perfect
-dodges, flask use, and Oath rank in save schema v4.
+dodges, flask use, and Oath rank. Save schema v5 also persists separate Music and Combat effects
+levels; older saves migrate to 85% / 100%.
 
 The complete local suite, GitHub Actions run, exact-SHA host deployment, public health checks, and
 full production replay all passed. See the
@@ -378,6 +386,30 @@ graph — both fragile enough to want their own QA lane:
   nodes, no new track.
 
 Full rationale and evidence: [`docs/releases/v2.15.md`](docs/releases/v2.15.md).
+
+## Fixed by Codex — v2.18 adaptive phase score
+
+- **Three accepted cues, mastered for combat.** MiniMax Music 3.0 generated one
+  related piece per phase. Codex removed Phase 2's generated dropout and Phase
+  3's quiet intro/surge, then built exact bar-aligned wrap loops matched within
+  0.01 LU. The old larger single score is gone.
+- **Fast, resilient transitions.** Two permanent streaming decks reuse their
+  Web Audio nodes. A phase waits at most 250 ms for a beat and crossfades in
+  720 ms; rejected playback retries safely and persistent failure returns to
+  the procedural score.
+- **Actions stay clear.** Strongest-wins ducking protects a boss warning from a
+  later weaker action. The established full SFX / low music / presence-dip
+  contract remains unchanged.
+- **Tune by ear, safely.** MIX freezes combat but keeps the score audible.
+  Music and Combat effects are separate, persisted controls; TEST SFX,
+  Done, Escape, and the backdrop never leak a combat input.
+- **Verified failure paths.** Desktop, 390×844, and true-touch QA now cover
+  crossfade pause/resume, rejected playback, fixed node count, duck expiry,
+  save-v5 migration, and MIX focus/dismissal as well as every earlier game flow.
+
+Full rationale, measurements, and evidence:
+[`docs/releases/v2.18.md`](docs/releases/v2.18.md) and
+[`public/audio/README.md`](public/audio/README.md).
 
 ## Running it
 

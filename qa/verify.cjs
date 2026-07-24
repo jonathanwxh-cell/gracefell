@@ -41,7 +41,7 @@ async function installAudioSampleRate(context) {
     // v2.16 (#45/#46): server.mjs hardening — security headers + immutable audio.
     {
       const rootRes = await fetch(URL);
-      const audioRes = await fetch(new globalThis.URL('/audio/gracefell-sovereigns-fall.mp3', URL), { method: 'HEAD' });
+      const audioRes = await fetch(new globalThis.URL('/audio/gracefell-phase-1-quiet-ash.mp3?v=2.18', URL), { method: 'HEAD' });
       const h = (r, k) => (r.headers.get(k) || '').toLowerCase();
       out.steps.serverHeaders = {
         nosniff: h(rootRes, 'x-content-type-options'),
@@ -95,6 +95,8 @@ async function installAudioSampleRate(context) {
           flasks: g.difficultyForGrace().flasks,
           uiGrace: ui.grace,
           uiSummary: ui.graceSummary,
+          musicVolume: ui.musicVolume,
+          sfxVolume: ui.sfxVolume,
           hasSave: save !== null,
         };
       });
@@ -104,9 +106,11 @@ async function installAudioSampleRate(context) {
         || !step.firstJourney.summary.includes('recommended')
         || !step.firstJourney.clearTells
         || step.firstJourney.flasks !== 4
-        || step.firstJourney.uiGrace !== -2
-        || step.firstJourney.uiSummary !== step.firstJourney.summary
-        || step.firstJourney.hasSave
+          || step.firstJourney.uiGrace !== -2
+          || step.firstJourney.uiSummary !== step.firstJourney.summary
+          || step.firstJourney.musicVolume !== 0.85
+          || step.firstJourney.sfxVolume !== 1
+          || step.firstJourney.hasSave
       ) {
         out.errors.push(vp.name + ': fresh player did not begin on the transparent Journey: '
           + JSON.stringify(step.firstJourney));
@@ -114,10 +118,12 @@ async function installAudioSampleRate(context) {
       step.semantics = await pg.evaluate(() => ({
         canvasRole: document.querySelector('canvas')?.getAttribute('role'),
         labelledCanvas: Boolean(document.querySelector('canvas')?.getAttribute('aria-label')),
-        liveStatus: Boolean(document.querySelector('[aria-live="polite"]')),
-        semanticControls: document.querySelectorAll('.game-accessibility button').length,
-      }));
-      if (step.semantics.canvasRole !== 'application' || !step.semantics.labelledCanvas || !step.semantics.liveStatus || step.semantics.semanticControls < 6) {
+          liveStatus: Boolean(document.querySelector('[aria-live="polite"]')),
+          semanticControls: document.querySelectorAll('.game-accessibility button').length,
+          audioSliders: document.querySelectorAll('.game-accessibility input[type="range"]').length,
+        }));
+      if (step.semantics.canvasRole !== 'application' || !step.semantics.labelledCanvas || !step.semantics.liveStatus
+        || step.semantics.semanticControls < 6 || step.semantics.audioSliders !== 2) {
         out.errors.push(vp.name + ': semantic companion controls missing: ' + JSON.stringify(step.semantics));
       }
       if (vp.name === 'desktop') {
@@ -136,6 +142,24 @@ async function installAudioSampleRate(context) {
           out.errors.push('desktop: semantic Sound control leaked into game input: ' + JSON.stringify(step.semanticKeyboard));
         }
         await pg.keyboard.press('Enter'); // restore sound for the audio checks
+
+        const musicSlider = pg.getByRole('slider', { name: 'Music volume' });
+        const sfxSlider = pg.getByRole('slider', { name: 'Combat effects volume' });
+        await musicSlider.fill('70');
+        await sfxSlider.fill('90');
+        const semanticMix = await pg.evaluate(() => ({
+          music: window.__game.audio.musicVolume,
+          sfx: window.__game.audio.sfxVolume,
+          save: JSON.parse(localStorage.getItem('gracefell')),
+        }));
+        step.semanticMix = semanticMix;
+        if (Math.abs(semanticMix.music - 0.7) > 0.001 || Math.abs(semanticMix.sfx - 0.9) > 0.001
+          || Math.abs(semanticMix.save.musicVolume - 0.7) > 0.001
+          || Math.abs(semanticMix.save.sfxVolume - 0.9) > 0.001) {
+          out.errors.push('desktop: independent music/effects controls did not persist: ' + JSON.stringify(semanticMix));
+        }
+        await musicSlider.fill('85');
+        await sfxSlider.fill('100');
 
         // Post-launch persona review alleged that a pointer activation of the
         // semantic path controls could start the fight or shift the selected
@@ -243,6 +267,84 @@ async function installAudioSampleRate(context) {
         out.errors.push(vp.name + ': pause control is missing, clipped, or too small: '
           + JSON.stringify(step.pauseControl));
       }
+
+      const mixControl = pg.locator('.game-mix-toggle');
+      const beforeMix = await pg.evaluate(() => ({
+        playerState: window.__game.player.state,
+        fightTime: window.__game.fightTime,
+      }));
+      await mixControl.click();
+      await pg.waitForFunction(() => document.querySelector('.game-accessibility')?.classList.contains('is-mix-open'),
+        null, { timeout: 1200 }).catch(() => {});
+      const mixOpenState = await pg.evaluate(() => ({
+        expanded: document.querySelector('.game-mix-toggle')?.getAttribute('aria-expanded'),
+        dialog: document.querySelector('.game-accessibility')?.getAttribute('role'),
+        paused: window.__game.paused,
+        manualPaused: window.__game.manualPaused,
+        audio: window.__game.audio.debugState().contextState,
+        playerState: window.__game.player.state,
+        fightTime: window.__game.fightTime,
+        activeLabel: document.activeElement?.getAttribute('aria-label'),
+        pauseDisabled: document.querySelector('.game-pause-toggle')?.disabled,
+        canvasTabIndex: document.querySelector('canvas')?.tabIndex,
+      }));
+      await pg.waitForTimeout(150);
+      const mixHeldState = await pg.evaluate(() => ({
+        paused: window.__game.paused,
+        playerState: window.__game.player.state,
+        fightTime: window.__game.fightTime,
+        audio: window.__game.audio.debugState().contextState,
+      }));
+      let focusTrap = null;
+      if (vp.name === 'desktop') {
+        await pg.keyboard.press('Shift+Tab');
+        await pg.keyboard.press('Shift+Tab');
+        focusTrap = await pg.evaluate(() => ({
+          text: document.activeElement?.textContent?.trim(),
+          insideDialog: Boolean(document.activeElement?.closest('[role="dialog"]')),
+        }));
+      }
+      const testSfx = pg.getByRole('button', { name: 'TEST SFX' });
+      const testSfxCount = await testSfx.count();
+      if (testSfxCount === 1) await testSfx.click();
+      if (vp.name === 'desktop') {
+        const musicSlider = pg.getByRole('slider', { name: 'Music volume' });
+        await musicSlider.press('Escape');
+      } else {
+        const done = pg.getByRole('button', { name: 'DONE · RESUME' });
+        const doneCount = await done.count();
+        if (doneCount === 1) await done.click();
+      }
+      await pg.waitForFunction(() => !window.__game.paused
+        && document.querySelector('.game-mix-toggle')?.getAttribute('aria-expanded') === 'false',
+      null, { timeout: 1200 }).catch(() => {});
+      const afterMix = await pg.evaluate(() => ({
+        expanded: document.querySelector('.game-mix-toggle')?.getAttribute('aria-expanded'),
+        paused: window.__game.paused,
+        audio: window.__game.audio.debugState().contextState,
+        playerState: window.__game.player.state,
+        fightTime: window.__game.fightTime,
+        bufferedLight: window.__game.input.hasBuffered('light'),
+        activeIsCanvas: document.activeElement === document.querySelector('canvas'),
+      }));
+      step.mixControl = { before: beforeMix, open: mixOpenState, held: mixHeldState, focusTrap, after: afterMix };
+      if (mixOpenState.expanded !== 'true' || mixOpenState.dialog !== 'dialog'
+        || !mixOpenState.paused || mixOpenState.manualPaused || mixOpenState.audio !== 'running'
+        || mixOpenState.playerState !== beforeMix.playerState
+        || mixOpenState.activeLabel !== 'Music volume'
+        || !mixOpenState.pauseDisabled || mixOpenState.canvasTabIndex !== -1
+        || !mixHeldState.paused || mixHeldState.audio !== 'running'
+        || mixHeldState.playerState !== mixOpenState.playerState
+        || Math.abs(mixHeldState.fightTime - mixOpenState.fightTime) > 0.03
+        || (vp.name === 'desktop' && (!focusTrap?.insideDialog || focusTrap.text !== 'DONE · RESUME'))
+        || testSfxCount !== 1
+        || afterMix.expanded !== 'false' || afterMix.paused || afterMix.audio !== 'running'
+        || afterMix.playerState !== beforeMix.playerState || afterMix.bufferedLight
+        || !afterMix.activeIsCanvas) {
+        out.errors.push(vp.name + ': combat MIX did not audition and dismiss safely: '
+          + JSON.stringify(step.mixControl));
+      }
+
       if (vp.name === 'desktop') {
         const semanticStart = await pg.evaluate(() => ({
           paused: window.__game.paused,
@@ -284,6 +386,7 @@ async function installAudioSampleRate(context) {
           status: window.__game.uiSnapshot().status,
           button: document.querySelector('.game-pause-toggle')?.textContent?.trim(),
           ariaPressed: document.querySelector('.game-pause-toggle')?.getAttribute('aria-pressed'),
+          mixDisabled: document.querySelector('.game-mix-toggle')?.disabled,
           lightBuffered: window.__game.input.hasBuffered('light'),
         }));
         step.manualPause = { before: beforeManualPause, pausedAt, during: duringManualPause };
@@ -300,6 +403,7 @@ async function installAudioSampleRate(context) {
           activeIsCanvas: document.activeElement === document.querySelector('canvas'),
           button: document.querySelector('.game-pause-toggle')?.textContent?.trim(),
           ariaPressed: document.querySelector('.game-pause-toggle')?.getAttribute('aria-pressed'),
+          mixDisabled: document.querySelector('.game-mix-toggle')?.disabled,
           lightBuffered: window.__game.input.hasBuffered('light'),
         }));
         step.manualPause.after = afterManualResume;
@@ -312,12 +416,14 @@ async function installAudioSampleRate(context) {
           || duringManualPause.status !== 'Paused'
           || duringManualPause.button !== 'RESUME'
           || duringManualPause.ariaPressed !== 'true'
+          || !duringManualPause.mixDisabled
           || afterManualResume.paused
           || afterManualResume.manualPaused
           || !afterManualResume.rafRunning
           || !afterManualResume.activeIsCanvas
           || afterManualResume.button !== 'PAUSE'
           || afterManualResume.ariaPressed !== 'false'
+          || afterManualResume.mixDisabled
           || afterManualResume.lightBuffered
           || afterManualResume.playerState === 'light') {
           out.errors.push('desktop: player pause/resume contract failed: ' + JSON.stringify(step.manualPause));
@@ -356,11 +462,13 @@ async function installAudioSampleRate(context) {
         const pan = [-0.8, -0.5, -0.2, 0.2, 0.5, 0.8, 0];
         ['swipe', 'slam', 'charge', 'volley', 'meteor', 'ring', 'spiral']
           .forEach((cue, i) => g.audio.telegraph(cue, pan[i]));
+        const strongDuck = g.audio.debugState().mix.currentDuckAmount;
+        g.audio.swing(1, { pan: 0, distance: 0 });
+        const overlapDuck = g.audio.debugState().mix.currentDuckAmount;
         const farLeft = { pan: -0.8, distance: 470 };
         const farRight = { pan: 0.8, distance: 430 };
         g.audio.meteorWarning(farLeft);
         g.audio.ring(farRight);
-        g.audio.swing(1, { pan: 0, distance: 0 });
         g.audio.hit(true, farRight, 2);
         g.audio.bossStep(farLeft, 1.1);
         g.audio.chargeScrape(farRight);
@@ -375,7 +483,7 @@ async function installAudioSampleRate(context) {
         const pressureAfter = g.audio.activeVoices;
         const debug = g.audio.debugState();
         g.audio.activeVoices = normalVoices;
-        return { ...debug, lightPressureDelta: pressureAfter - pressureBefore };
+        return { ...debug, lightPressureDelta: pressureAfter - pressureBefore, strongDuck, overlapDuck };
       });
       step.audio = audioState;
       if (!audioState.initialized || !audioState.hasLimiter || !audioState.hasPeakLimiter || !audioState.hasReusableNoise) {
@@ -393,9 +501,15 @@ async function installAudioSampleRate(context) {
       if (audioState.soundtrackMode !== 'stream') {
         out.errors.push(vp.name + ': soundtrack is not using the streaming path: ' + JSON.stringify(audioState));
       }
+      if (audioState.soundtrackPhase !== 1 || audioState.soundtrackDeckCount !== 2) {
+        out.errors.push(vp.name + ': phase soundtrack decks were not prepared: ' + JSON.stringify(audioState));
+      }
       const audioInitBudgetMs = vp.name === 'mobile' ? 20 : 25;
       if (audioState.initCostMs > audioInitBudgetMs) {
         out.errors.push(vp.name + ': first-gesture audio init exceeded ' + audioInitBudgetMs + 'ms: ' + JSON.stringify(audioState));
+      }
+      if (!(audioState.soundtrackStartCostMs > 0) || audioState.soundtrackStartCostMs > 1500) {
+        out.errors.push(vp.name + ': streamed soundtrack unlock/start exceeded 1500ms: ' + JSON.stringify(audioState));
       }
       if (audioState.arenaIrDuration < 1.5 || audioState.irBuildCostMs > 50) {
         out.errors.push(vp.name + ': arena IR failed duration/init budget: ' + JSON.stringify(audioState));
@@ -414,6 +528,12 @@ async function installAudioSampleRate(context) {
       if (audioState.mix.duckCount < 10 || audioState.mix.minDuckAmount > 0.25) {
         out.errors.push(vp.name + ': action-triggered music ducking was not exercised: ' + JSON.stringify(audioState.mix));
       }
+      if (audioState.strongDuck > 0.21 || audioState.overlapDuck > audioState.strongDuck + 0.001) {
+        out.errors.push(vp.name + ': weaker action raised music during a critical duck: ' + JSON.stringify({
+          strongDuck: audioState.strongDuck,
+          overlapDuck: audioState.overlapDuck,
+        }));
+      }
       if (audioState.variationCount < 4 || audioState.maxObservedDistance < 400) {
         out.errors.push(vp.name + ': variation/spatial audio paths were not exercised: ' + JSON.stringify(audioState));
       }
@@ -422,6 +542,34 @@ async function installAudioSampleRate(context) {
       }
 
       if (vp.name === 'desktop') {
+        await pg.evaluate(() => window.__game.setUiFocused(true, true));
+        await pg.waitForTimeout(1600);
+        const duckRecovery = await pg.evaluate(() => {
+          const g = window.__game;
+          const recovered = g.audio.debugState();
+          g.audio.telegraph('slam', 0);
+          g.setMusicVolume(0.6);
+          const volumeDuringDuck = g.audio.debugState();
+          return { recovered, volumeDuringDuck };
+        });
+        await pg.waitForTimeout(1100);
+        const duckRecoveredAfterVolume = await pg.evaluate(() => {
+          const g = window.__game;
+          g.setMusicVolume(0.85);
+          const recovered = g.audio.debugState();
+          g.setUiFocused(false);
+          return recovered;
+        });
+        step.duckLifecycle = { ...duckRecovery, recoveredAfterVolume: duckRecoveredAfterVolume };
+        if (duckRecovery.recovered.mix.activeDuckCount !== 0
+          || duckRecovery.recovered.mix.currentDuckAmount < 0.99
+          || duckRecovery.volumeDuringDuck.mix.musicVolume !== 0.6
+          || duckRecovery.volumeDuringDuck.mix.currentDuckAmount > 0.25
+          || duckRecoveredAfterVolume.mix.currentDuckAmount < 0.99) {
+          out.errors.push('desktop: stacked music duck did not expire/recover across a volume change: '
+            + JSON.stringify(step.duckLifecycle));
+        }
+
         // simulate combat: move, roll, attack; force phase transitions via damage
 
         // v2.14 (1): dynamic combat camera. Intent is numeric, like menuGeom —
@@ -462,21 +610,79 @@ async function installAudioSampleRate(context) {
 
         // phase 2
         await pg.evaluate(() => { const g = (window).__game; g.boss.takeDamage(g.boss.maxHp * 0.5, g, g.player.x, g.player.y); });
-        await pg.waitForTimeout(700);
+        await pg.waitForFunction(() => window.__game.audio.debugState().soundtrackTransitioning,
+          null, { timeout: 1500 }).catch(() => {});
+        const phase2TransitionStarted = await pg.evaluate(() => window.__game.audio.debugState().soundtrackTransitioning);
+        if (phase2TransitionStarted) {
+          await pg.keyboard.press('KeyP');
+          await pg.waitForFunction(() => window.__game.audio.debugState().contextState === 'suspended',
+            null, { timeout: 1200 }).catch(() => {});
+          await pg.waitForTimeout(160);
+          await pg.keyboard.press('Escape');
+          await pg.waitForFunction(() => window.__game.audio.debugState().contextState === 'running',
+            null, { timeout: 1200 }).catch(() => {});
+        }
+        // The score waits at most 250ms for the next nominal 78 BPM beat,
+        // then completes its 720ms equal-power crossfade.
+        await pg.waitForFunction(() => {
+          const audio = window.__game.audio.debugState();
+          return audio.soundtrackPhase === 2 && !audio.soundtrackTransitioning;
+        }, null, { timeout: 3500 }).catch(() => {});
         const ph2 = await pg.evaluate(() => (window).__game.boss.phase);
         step.phase2 = ph2;
         if (ph2 !== 2) out.errors.push('phase 2 did not trigger (phase=' + ph2 + ')');
+        const musicPh2 = await pg.evaluate(() => window.__game.audio.debugState());
+        step.musicPhase2 = musicPh2;
+        if (musicPh2.soundtrackPhase !== 2 || musicPh2.soundtrackTransitioning) {
+          out.errors.push('phase 2 score did not complete its beat-aware crossfade: ' + JSON.stringify(musicPh2));
+        }
+        if (!phase2TransitionStarted || musicPh2.soundtrackDecksPaused[musicPh2.soundtrackPhase === 2 ? 1 : 0]) {
+          out.errors.push('phase 2 score did not survive pause during its crossfade: ' + JSON.stringify(musicPh2));
+        }
         // v2.14 (4): the arena visibly deteriorates as the sovereign burns.
         const decayPh2 = await pg.evaluate(() => (window).__game.phaseDecay ?? null);
         step.decayPh2 = decayPh2;
         if (decayPh2 === null || !(decayPh2 >= 1)) out.errors.push('v2.14 (4): phase-2 arena decay not applied (decay=' + decayPh2 + ')');
 
+        // The first incoming phase-3 play is rejected deliberately. The
+        // controller must retain the phase request, retry the same permanent
+        // deck, and complete without growing its retained node set.
+        const phase3RetryProbe = await pg.evaluate(() => {
+          const audio = window.__game.audio;
+          const toIndex = audio.activeSoundtrackDeck === 0 ? 1 : 0;
+          const deck = audio.soundtrackDecks[toIndex];
+          const originalPlay = deck.element.play.bind(deck.element);
+          let rejected = false;
+          deck.element.play = () => {
+            if (!rejected) {
+              rejected = true;
+              return Promise.reject(new DOMException('QA playback rejection', 'NotAllowedError'));
+            }
+            return originalPlay();
+          };
+          return { beforeNodes: audio.debugState().musicNodeCount, toIndex };
+        });
         // phase 3
         await pg.evaluate(() => { const g = (window).__game; g.boss.takeDamage(g.boss.maxHp * 0.35, g, g.player.x, g.player.y); });
-        await pg.waitForTimeout(900);
+        await pg.waitForFunction(() => {
+          const audio = window.__game.audio.debugState();
+          return audio.soundtrackPhase === 3 && !audio.soundtrackTransitioning;
+        }, null, { timeout: 4500 }).catch(() => {});
         const ph3 = await pg.evaluate(() => (window).__game.boss.phase);
         step.phase3 = ph3;
         if (ph3 !== 3) out.errors.push('phase 3 did not trigger (phase=' + ph3 + ')');
+        const musicPh3 = await pg.evaluate(() => window.__game.audio.debugState());
+        step.musicPhase3 = musicPh3;
+        if (musicPh3.soundtrackPhase !== 3 || musicPh3.soundtrackTransitioning) {
+          out.errors.push('phase 3 score did not complete its beat-aware crossfade: ' + JSON.stringify(musicPh3));
+        }
+        step.phase3Retry = { ...phase3RetryProbe, afterNodes: musicPh3.musicNodeCount,
+          retryCount: musicPh3.soundtrackRetryCount };
+        if (musicPh3.musicNodeCount !== phase3RetryProbe.beforeNodes
+          || musicPh3.soundtrackDecksPaused[phase3RetryProbe.toIndex]) {
+          out.errors.push('phase soundtrack retry leaked nodes or promoted a paused deck: '
+            + JSON.stringify(step.phase3Retry));
+        }
         // v2.14 (4): phase 3 deepens the decay further.
         const decayPh3 = await pg.evaluate(() => (window).__game.phaseDecay ?? null);
         step.decayPh3 = decayPh3;
@@ -579,7 +785,7 @@ async function installAudioSampleRate(context) {
         const immediateScore = victoryImmediate.saved?.lastScore;
         const immediateBest = victoryImmediate.saved?.bestScores?.[String(victoryImmediate.trial)];
         if (victoryImmediate.state !== 'victory' || victoryImmediate.stateT !== 0
-          || victoryImmediate.saved?.v !== 4
+          || victoryImmediate.saved?.v !== 5
           || immediateScore?.grade !== victoryImmediate.grade
           || Math.abs((immediateScore?.time ?? -1) - victoryImmediate.fightTime) > 0.000001
           || immediateScore?.trial !== victoryImmediate.trial
@@ -1214,17 +1420,19 @@ async function installAudioSampleRate(context) {
         }
         if (bladeSaint.hitRadius !== 34) out.errors.push('Blade-Saint visual pass changed the boss hit radius');
 
-        // save schema v4 round-trip incl. settings, scorecards and teaching state
-        const sv4 = await pg.evaluate(() => {
+        // save schema v5 round-trip incl. independent mix, settings, scorecards and teaching state
+        const sv5 = await pg.evaluate(() => {
           const g = window.__game;
           g.state = 'title';
+          g.setMusicVolume(0.65); g.setSfxVolume(0.95);
           g.setGrace(2); g.shakeEnabled = false; g.flashReduced = true; g.persist();
           return JSON.parse(localStorage.getItem('gracefell'));
         });
-        step.saveV4 = sv4;
-        if (sv4.v !== 4 || sv4.grace !== 2 || sv4.shakeEnabled !== false || sv4.flashReduced !== true
-          || !sv4.bests || !sv4.lastScore || !sv4.bestScores || typeof sv4.tutorialComplete !== 'boolean') {
-          out.errors.push('save v4 did not round-trip settings, teaching state and scores: ' + JSON.stringify(sv4));
+        step.saveV5 = sv5;
+        if (sv5.v !== 5 || sv5.grace !== 2 || sv5.shakeEnabled !== false || sv5.flashReduced !== true
+          || sv5.musicVolume !== 0.65 || sv5.sfxVolume !== 0.95
+          || !sv5.bests || !sv5.lastScore || !sv5.bestScores || typeof sv5.tutorialComplete !== 'boolean') {
+          out.errors.push('save v5 did not round-trip mix, settings, teaching state and scores: ' + JSON.stringify(sv5));
         }
         const scoreReload = await pg.evaluate(() => {
           const live = window.__game;
@@ -1241,8 +1449,8 @@ async function installAudioSampleRate(context) {
         });
         step.scoreReload = scoreReload;
         if (!scoreReload.lastScore || !scoreReload.bestScore
-          || scoreReload.lastScore.grade !== sv4.lastScore.grade
-          || scoreReload.bestScore.grade !== sv4.lastScore.grade) {
+          || scoreReload.lastScore.grade !== sv5.lastScore.grade
+          || scoreReload.bestScore.grade !== sv5.lastScore.grade) {
           out.errors.push('saved victory score did not reload: ' + JSON.stringify(scoreReload));
         }
 
@@ -1253,13 +1461,21 @@ async function installAudioSampleRate(context) {
           const G = live.constructor;            // window.__game debug hook, and
           const c = document.createElement('canvas');
           const g2 = new G(c);                   // destroy() does not put it back —
-          const r = { best: g2.bestTime, wins: g2.wins, bestsZero: g2.bests['0'], grace: g2.grace };
+          const r = {
+            best: g2.bestTime,
+            wins: g2.wins,
+            bestsZero: g2.bests['0'],
+            grace: g2.grace,
+            musicVolume: g2.audio.musicVolume,
+            sfxVolume: g2.audio.sfxVolume,
+          };
           g2.destroy();
           window.__game = live;                  // so restore it, or every later
           return r;                              // assertion reads a dead instance.
         });
         step.migration = mig;
-        if (mig.best !== 42 || mig.wins !== 3 || mig.bestsZero !== 42 || mig.grace !== 0) {
+        if (mig.best !== 42 || mig.wins !== 3 || mig.bestsZero !== 42 || mig.grace !== 0
+          || mig.musicVolume !== 0.85 || mig.sfxVolume !== 1) {
           out.errors.push('v1 save did not migrate: ' + JSON.stringify(mig));
         }
 
