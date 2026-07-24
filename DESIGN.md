@@ -1601,5 +1601,9 @@ alone:
 - Web Audio state changes are serialized to protect rapid pause-owner handoffs.
 - No difficulty value, boss pattern, player timing/damage, grade formula,
   soundtrack asset/mix ceiling, render budget, or touch-combat geometry changed.
-- This record covers the completed local candidate only; it does not claim a
-  GitHub push, merge, or production deployment.
+- The implementation passed clean-runner CI in GitHub Actions run 30086801225,
+  merged through PR #53 as `741999d`, and was deployed to the production
+  `gracefell.service`.
+- The complete public desktop/mobile/true-touch gate passed against
+  `https://gracefell.alyoechosys.dev/` with `ok=true`, zero console errors, and
+  the established performance thresholds unchanged.
