@@ -8,16 +8,20 @@ rules are all decided by what works one-handed on a 390px screen.
 
 **Play it: [gracefell.alyoechosys.dev](https://gracefell.alyoechosys.dev)**
 
-Current gameplay release: **v2.19** — every active battle now has a safe **MENU**
-route back to the title, and the title has a **SCORES** chronicle for the latest
-20 victories with grade, time, trial, completion date, and execution details.
+Current gameplay release: **v2.20** — the arena weather now changes with Malakar:
+Quiet Ash becomes an Ember Gale, then reverses into the pale Gracefall Storm.
+The same fixed pool of 64 motes supplies all three phases, with background ash
+behind combat signals and an edge-only foreground layer for depth.
+Every active battle also has a safe **MENU** route back to the title, and the
+title has a **SCORES** chronicle for the latest 20 victories.
 Rapid light taps acknowledge queued follow-ups, the combat HUD labels HP, stamina,
 and flasks, and assistive technology receives current player, boss, telegraph, and
 combo state without turning changing percentages into live-announcement spam.
 Save schema v6 migrates an older last score honestly as “Date unavailable.”
 The adaptive MiniMax phase score, MIX controls, Journey/Oath curve, retry behavior,
-and combat timing are unchanged. The complete implementation, CI, deployment, and
-public verification record is in [`docs/releases/v2.19.md`](docs/releases/v2.19.md).
+and combat timing are unchanged. The completed local weather implementation and
+verification record is in [`docs/releases/v2.20.md`](docs/releases/v2.20.md);
+the deployed v2.19 record remains in [`docs/releases/v2.19.md`](docs/releases/v2.19.md).
 
 Zero runtime art assets, three generated music tracks. Every character silhouette, sword, halo blade,
 stone in the floor, ember, cape, and combat cue is generated at runtime from code — canvas 2D for
@@ -37,7 +41,7 @@ The sovereign has an audio language, not one generic warning: swipes whistle, ch
 
 **v2 — extended by Claude (Opus 4.8).** Combat depth, a third phase, a full rendering pass, persistence, and a headless verification gate. Details in [DESIGN.md](DESIGN.md).
 
-**v2.4–v2.19 — audio, responsiveness, combat integrity, character readability, progression, victory persistence, player-controlled pause, adaptive phase scoring, and navigation/accessibility polish extended by
+**v2.4–v2.20 — audio, responsiveness, combat integrity, character readability, progression, victory persistence, player-controlled pause, adaptive phase scoring, navigation/accessibility polish, and fixed-pool phase weather extended by
 Codex (GPT-5).** Attack-specific procedural cues, spatial mix protection, the MiniMax-generated
 score family, mobile/accessibility hardening, trustworthy combat and retry behavior, the verified
 Grace-to-Oaths mastery path, and the production Kite-Veil/Blade-Saint silhouettes. The v2.11 player
@@ -441,6 +445,28 @@ Full rationale, measurements, and evidence:
   battle confirmation, return flow, focus restoration, and an empty error log.
 
 Full rationale and evidence: [`docs/releases/v2.19.md`](docs/releases/v2.19.md).
+
+## Added by Codex — v2.20 fixed-pool phase weather
+
+- **Quiet Ash.** Phase one keeps the room restrained: short, slow ash with
+  steady grace rays and the existing neutral backdrop.
+- **Ember Gale.** Phase two pushes warm diagonal streaks across the arena,
+  leans existing embers with the same wind, warms the backdrop, and increases
+  ray movement while keeping every combat signal above the weather.
+- **Gracefall Storm.** Phase three reverses the wind into longer pale streaks,
+  cools and darkens the room, and weakens the rays. The change crossfades over
+  2.4 seconds with the phase score rather than switching randomly.
+- **Depth without growth.** The original 64 motes remain the complete pool:
+  48 low-alpha motes sit above the cached floor but below telegraphs, entities,
+  hazards, and world effects; 16 edge-only motes sit below the HUD.
+- **Comfort and performance.** Flash-reduced or shake-disabled play lowers
+  weather motion to 45% and shortens its streaks. Across two green full runs,
+  all phase profiles stayed at 0.4–0.5 ms median and 0.6–1.0 ms p95; the worst
+  observed Phase 3 increase was 0 ms median and 0.4 ms p95.
+
+No image, video, fog surface, shader, particle pool, audio loop, dependency,
+network request, save field, or gameplay value was added. Full rationale and
+evidence: [`docs/releases/v2.20.md`](docs/releases/v2.20.md).
 
 ## Running it
 
