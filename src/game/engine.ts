@@ -77,7 +77,7 @@ const KEYMAP: Record<string, string> = {
   KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right',
   Space: 'roll', ShiftLeft: 'roll', ShiftRight: 'roll',
   KeyJ: 'light', KeyK: 'heavy', KeyF: 'flask', KeyL: 'flask',
-  Enter: 'confirm', KeyM: 'mute',
+  Enter: 'confirm', KeyM: 'mute', KeyP: 'pause', Escape: 'pause',
 };
 
 // Primary-pointer test, not "has a touchscreen" — a laptop with a touch panel
@@ -93,6 +93,7 @@ export function coarsePointer(): boolean {
 export class Input {
   private canvas: HTMLCanvasElement;
   private onFirstGesture: () => void;
+  private onPause: () => void;
   held: Record<string, boolean> = {};
   // Monotonic rather than frame-bound: terminal overlays can outlive a short
   // action buffer, a focus handoff, or a browser translating touch to Pointer
@@ -108,9 +109,10 @@ export class Input {
   isTouch = coarsePointer();
   taps: { x: number; y: number }[] = []; // consumed by menu hit-tests each frame
 
-  constructor(canvas: HTMLCanvasElement, onFirstGesture: () => void) {
+  constructor(canvas: HTMLCanvasElement, onFirstGesture: () => void, onPause: () => void) {
     this.canvas = canvas;
     this.onFirstGesture = onFirstGesture;
+    this.onPause = onPause;
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
     canvas.addEventListener('pointerdown', this.onPointerDown);
@@ -156,6 +158,13 @@ export class Input {
       e.preventDefault();
       if (!this.held[k]) {
         if (k === 'confirm') this.queueConfirm();
+        else if (k === 'pause') {
+          // Initialize audio before pausing. If this were deferred to the
+          // generic gesture hook below, AudioContext.init() could immediately
+          // resume the context that the pause transition just suspended.
+          this.fireGesture();
+          this.onPause();
+        }
         else this.pressed[k] = Input.BUFFER_S;
       }
       this.held[k] = true;
@@ -1504,6 +1513,8 @@ export interface DifficultyMods {
 export interface GameUiSnapshot {
   state: GameState;
   status: string;
+  paused: boolean;
+  manualPaused: boolean;
   muted: boolean;
   grace: number;
   graceLabel: string;
@@ -1595,6 +1606,8 @@ export class Game {
   bossBarFill = 0;
   destroyed = false;
   paused = false;
+  manualPaused = false;
+  uiChanged: (() => void) | null = null;
   private interruptionPaused = false;
   private uiFocused = false;
   private terminalConfirmSequence = 0;
@@ -1628,7 +1641,11 @@ export class Game {
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d')!;
-    this.input = new Input(canvas, () => { this.audio.init(); if (this.audio.muted) this.audio.setMuted(true); });
+    this.input = new Input(
+      canvas,
+      () => { this.audio.init(); if (this.audio.muted) this.audio.setMuted(true); },
+      () => this.togglePause(),
+    );
     this.audio.prepare();
     this.previousTouchBridge = window.__graceTouch;
     window.__graceTouch = this.touchBridge;
@@ -1693,6 +1710,7 @@ export class Game {
 
   destroy() {
     this.destroyed = true;
+    this.uiChanged = null;
     cancelAnimationFrame(this.raf);
     this.input.destroy();
     this.audio.destroy();
@@ -1721,7 +1739,9 @@ export class Game {
 
   private syncPauseState() {
     if (this.destroyed) return;
-    const shouldPause = this.interruptionPaused || (this.uiFocused && this.state === 'fight');
+    const shouldPause = this.interruptionPaused
+      || this.manualPaused
+      || (this.uiFocused && this.state === 'fight');
     if (shouldPause === this.paused) return;
     this.paused = shouldPause;
     if (shouldPause) {
@@ -1739,6 +1759,18 @@ export class Game {
   setUiFocused(focused: boolean) {
     this.uiFocused = focused;
     this.syncPauseState();
+  }
+
+  togglePause() {
+    if (this.state !== 'fight') return;
+    const resuming = this.manualPaused;
+    this.manualPaused = !this.manualPaused;
+    // Inputs made while the pause card owns the screen must never fire as a
+    // surprise attack or dodge on the first resumed frame.
+    if (resuming) this.input.reset();
+    this.syncPauseState();
+    this.vibrate(this.manualPaused ? 12 : 8);
+    this.uiChanged?.();
   }
 
   private pauseForInterruption = () => {
@@ -1943,6 +1975,8 @@ export class Game {
     return {
       state: this.state,
       status,
+      paused: this.paused,
+      manualPaused: this.manualPaused,
       muted: this.audio.muted,
       grace: this.grace,
       graceLabel: this.graceLabel(),
@@ -2383,6 +2417,8 @@ export class Game {
   }
 
   resetFight() {
+    const wasManuallyPaused = this.manualPaused;
+    this.manualPaused = false;
     this.input.clearCombatActions();
     this.player = new Player();
     this.boss = new Boss();
@@ -2418,6 +2454,7 @@ export class Game {
       this.scorchCtx.clearRect(0, 0, this.scorchCanvas.width, this.scorchCanvas.height);
       this.scorchCtx.restore();
     }
+    if (wasManuallyPaused) this.syncPauseState();
   }
 
   // ------------------------------------------------------------ touch layout
@@ -2818,6 +2855,7 @@ export interface Game {
   drawDeath(ctx: CanvasRenderingContext2D): void;
   drawVictory(ctx: CanvasRenderingContext2D): void;
   drawTouchUI(ctx: CanvasRenderingContext2D): void;
+  drawPause(ctx: CanvasRenderingContext2D): void;
 }
 
 const serif = (size: number, weight = 700) => `${weight} ${size}px Cinzel, 'Times New Roman', serif`;
@@ -3070,6 +3108,7 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
   if (this.state === 'dead') this.drawDeath(ctx);
   if (this.state === 'victory') this.drawVictory(ctx);
   if (this.input.isTouch && this.state === 'fight') this.drawTouchUI(ctx);
+  if (this.manualPaused && this.state === 'fight') this.drawPause(ctx);
 };
 
 (Game.prototype as any).drawArena = function drawArena(this: Game, ctx: CanvasRenderingContext2D) {
@@ -3728,4 +3767,41 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
   ctx.fillStyle = PAL.goldBright;
   ctx.font = serif(13, 700);
   ctx.fillText(`×${this.player.flasks}`, fb.x, fb.y - fb.r - 8);
+};
+
+(Game.prototype as any).drawPause = function drawPause(this: Game, ctx: CanvasRenderingContext2D) {
+  ctx.save();
+  ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+  ctx.fillStyle = 'rgba(5,4,3,0.72)';
+  ctx.fillRect(0, 0, this.w, this.h);
+
+  const panelW = Math.min(this.w - 36, 460);
+  const panelH = this.input.isTouch ? 148 : 156;
+  const panelX = (this.w - panelW) / 2;
+  const panelY = (this.h - panelH) / 2;
+  const frame = ctx.createLinearGradient(panelX, panelY, panelX, panelY + panelH);
+  frame.addColorStop(0, 'rgba(28,23,16,0.97)');
+  frame.addColorStop(1, 'rgba(10,8,6,0.98)');
+  ctx.fillStyle = frame;
+  ctx.fillRect(panelX, panelY, panelW, panelH);
+  ctx.strokeStyle = 'rgba(201,169,89,0.82)';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(panelX + 0.75, panelY + 0.75, panelW - 1.5, panelH - 1.5);
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = PAL.gold;
+  ctx.font = serif(clamp(this.w * 0.06, 23, 32), 800);
+  ctx.fillText('COMBAT PAUSED', this.w / 2, panelY + 51);
+
+  ctx.fillStyle = PAL.parchment;
+  ctx.font = body(this.input.isTouch ? 17 : 18, 650);
+  ctx.fillText(
+    this.input.isTouch ? 'Tap RESUME when you are ready' : 'Press P or Esc to resume',
+    this.w / 2,
+    panelY + 91,
+  );
+  ctx.fillStyle = PAL.parchmentDim;
+  ctx.font = body(13, 550);
+  ctx.fillText('Time, attacks and inputs are held.', this.w / 2, panelY + 120);
+  ctx.restore();
 };

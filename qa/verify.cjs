@@ -182,6 +182,33 @@ async function installAudioSampleRate(context) {
       const st1 = await pg.evaluate(() => (window).__game && (window).__game.state);
       step.stateAfterStart = st1;
       if (st1 !== 'fight') out.errors.push(vp.name + ': did not reach fight state (' + st1 + ')');
+      const pauseControl = pg.locator('.game-pause-toggle');
+      await pauseControl.waitFor({ state: 'visible', timeout: 1500 }).catch(() => {});
+      step.pauseControl = await pauseControl.evaluate((button) => {
+        const box = button.getBoundingClientRect();
+        return {
+          label: button.textContent?.trim(),
+          width: box.width,
+          height: box.height,
+          left: box.left,
+          right: box.right,
+          top: box.top,
+          ariaPressed: button.getAttribute('aria-pressed'),
+          shortcuts: button.getAttribute('aria-keyshortcuts'),
+        };
+      }).catch(() => null);
+      if (!step.pauseControl
+        || step.pauseControl.label !== 'PAUSE'
+        || step.pauseControl.width < 44
+        || step.pauseControl.height < 44
+        || step.pauseControl.left < 0
+        || step.pauseControl.right > vp.w + 1
+        || step.pauseControl.top < 0
+        || step.pauseControl.ariaPressed !== 'false'
+        || !step.pauseControl.shortcuts?.includes('Escape')) {
+        out.errors.push(vp.name + ': pause control is missing, clipped, or too small: '
+          + JSON.stringify(step.pauseControl));
+      }
       if (vp.name === 'desktop') {
         const semanticStart = await pg.evaluate(() => ({
           paused: window.__game.paused,
@@ -192,6 +219,74 @@ async function installAudioSampleRate(context) {
         step.semanticStart = semanticStart;
         if (semanticStart.paused || semanticStart.uiFocused || !semanticStart.activeIsCanvas || !semanticStart.rafRunning) {
           out.errors.push('desktop: semantic Start fight did not return control to the canvas: ' + JSON.stringify(semanticStart));
+        }
+
+        // Player pause is distinct from focus/interruption pause: it must stop
+        // simulation + audio, survive time, clear paused combat input on
+        // resume, and leave the keyboard with the canvas.
+        const beforeManualPause = await pg.evaluate(() => ({
+          fightTime: window.__game.fightTime,
+          playerState: window.__game.player.state,
+          bossState: window.__game.boss.state,
+        }));
+        await pg.keyboard.press('KeyP');
+        await pg.waitForFunction(() => window.__game.manualPaused && window.__game.paused, null, { timeout: 1000 }).catch(() => {});
+        await pg.waitForFunction(() => window.__game.audio.debugState().contextState === 'suspended', null, { timeout: 1500 }).catch(() => {});
+        const pausedAt = await pg.evaluate(() => ({
+          fightTime: window.__game.fightTime,
+          playerState: window.__game.player.state,
+          bossState: window.__game.boss.state,
+        }));
+        await pg.keyboard.press('KeyJ');
+        await pg.waitForTimeout(280);
+        const duringManualPause = await pg.evaluate(() => ({
+          paused: window.__game.paused,
+          manualPaused: window.__game.manualPaused,
+          fightTime: window.__game.fightTime,
+          playerState: window.__game.player.state,
+          bossState: window.__game.boss.state,
+          rafRunning: window.__game.raf !== 0,
+          audioState: window.__game.audio.debugState().contextState,
+          status: window.__game.uiSnapshot().status,
+          button: document.querySelector('.game-pause-toggle')?.textContent?.trim(),
+          ariaPressed: document.querySelector('.game-pause-toggle')?.getAttribute('aria-pressed'),
+          lightBuffered: window.__game.input.hasBuffered('light'),
+        }));
+        step.manualPause = { before: beforeManualPause, pausedAt, during: duringManualPause };
+        await pg.screenshot({ path: path.join(ARTIFACT_DIR, 'desktop-paused.png') });
+        await pg.keyboard.press('Escape');
+        await pg.waitForFunction(() => !window.__game.paused && !window.__game.manualPaused, null, { timeout: 1500 }).catch(() => {});
+        await pg.waitForTimeout(80);
+        const afterManualResume = await pg.evaluate(() => ({
+          paused: window.__game.paused,
+          manualPaused: window.__game.manualPaused,
+          fightTime: window.__game.fightTime,
+          playerState: window.__game.player.state,
+          rafRunning: window.__game.raf !== 0,
+          activeIsCanvas: document.activeElement === document.querySelector('canvas'),
+          button: document.querySelector('.game-pause-toggle')?.textContent?.trim(),
+          ariaPressed: document.querySelector('.game-pause-toggle')?.getAttribute('aria-pressed'),
+          lightBuffered: window.__game.input.hasBuffered('light'),
+        }));
+        step.manualPause.after = afterManualResume;
+        if (!duringManualPause.paused || !duringManualPause.manualPaused
+          || Math.abs(duringManualPause.fightTime - pausedAt.fightTime) > 0.03
+          || duringManualPause.playerState !== pausedAt.playerState
+          || duringManualPause.bossState !== pausedAt.bossState
+          || duringManualPause.rafRunning
+          || duringManualPause.audioState !== 'suspended'
+          || duringManualPause.status !== 'Paused'
+          || duringManualPause.button !== 'RESUME'
+          || duringManualPause.ariaPressed !== 'true'
+          || afterManualResume.paused
+          || afterManualResume.manualPaused
+          || !afterManualResume.rafRunning
+          || !afterManualResume.activeIsCanvas
+          || afterManualResume.button !== 'PAUSE'
+          || afterManualResume.ariaPressed !== 'false'
+          || afterManualResume.lightBuffered
+          || afterManualResume.playerState === 'light') {
+          out.errors.push('desktop: player pause/resume contract failed: ' + JSON.stringify(step.manualPause));
         }
       }
 
@@ -1182,7 +1277,74 @@ async function installAudioSampleRate(context) {
       t.stateAfterTap = await pg.evaluate(() => window.__game.state);
       if (t.stateAfterTap !== 'fight') out.errors.push('touch: tap did not start the fight (' + t.stateAfterTap + ')');
 
-      // 5. +5 touch swipe timing and combo length must match what is drawn.
+      // 5. the persistent pause control must work through a real phone tap,
+      // stop simulation/audio, and resume without replaying paused input.
+      const touchPause = pg.locator('.game-pause-toggle');
+      const touchPauseBox = await touchPause.boundingBox();
+      const touchPauseBefore = await pg.evaluate(() => ({
+        fightTime: window.__game.fightTime,
+        playerState: window.__game.player.state,
+      }));
+      await touchPause.tap();
+      await pg.waitForFunction(() => window.__game.manualPaused && window.__game.paused, null, { timeout: 1000 }).catch(() => {});
+      await pg.waitForFunction(() => window.__game.audio.debugState().contextState === 'suspended', null, { timeout: 1500 }).catch(() => {});
+      const touchPausedAt = await pg.evaluate(() => ({
+        fightTime: window.__game.fightTime,
+        playerState: window.__game.player.state,
+      }));
+      await pg.waitForTimeout(280);
+      const touchPauseDuring = await pg.evaluate(() => ({
+        paused: window.__game.paused,
+        manualPaused: window.__game.manualPaused,
+        fightTime: window.__game.fightTime,
+        playerState: window.__game.player.state,
+        rafRunning: window.__game.raf !== 0,
+        audioState: window.__game.audio.debugState().contextState,
+        status: window.__game.uiSnapshot().status,
+        label: document.querySelector('.game-pause-toggle')?.textContent?.trim(),
+        activeIsCanvas: document.activeElement === document.querySelector('canvas'),
+      }));
+      await pg.screenshot({ path: path.join(ARTIFACT_DIR, 'touch-paused.png') });
+      await pg.getByRole('button', { name: 'RESUME' }).tap();
+      await pg.waitForFunction(() => !window.__game.manualPaused && !window.__game.paused, null, { timeout: 1500 }).catch(() => {});
+      await pg.waitForTimeout(80);
+      const touchPauseAfter = await pg.evaluate(() => ({
+        paused: window.__game.paused,
+        manualPaused: window.__game.manualPaused,
+        fightTime: window.__game.fightTime,
+        rafRunning: window.__game.raf !== 0,
+        label: document.querySelector('.game-pause-toggle')?.textContent?.trim(),
+        activeIsCanvas: document.activeElement === document.querySelector('canvas'),
+      }));
+      t.manualPause = {
+        box: touchPauseBox,
+        before: touchPauseBefore,
+        pausedAt: touchPausedAt,
+        during: touchPauseDuring,
+        after: touchPauseAfter,
+      };
+      if (!touchPauseBox
+        || touchPauseBox.width < 44
+        || touchPauseBox.height < 44
+        || !touchPauseDuring.paused
+        || !touchPauseDuring.manualPaused
+        || Math.abs(touchPauseDuring.fightTime - touchPausedAt.fightTime) > 0.03
+        || touchPauseDuring.playerState !== touchPausedAt.playerState
+        || touchPauseDuring.rafRunning
+        || touchPauseDuring.audioState !== 'suspended'
+        || touchPauseDuring.status !== 'Paused'
+        || touchPauseDuring.label !== 'RESUME'
+        || !touchPauseDuring.activeIsCanvas
+        || touchPauseAfter.paused
+        || touchPauseAfter.manualPaused
+        || !touchPauseAfter.rafRunning
+        || touchPauseAfter.label !== 'PAUSE'
+        || !touchPauseAfter.activeIsCanvas
+        || touchPauseAfter.fightTime <= touchPausedAt.fightTime) {
+        out.errors.push('touch: player pause/resume contract failed: ' + JSON.stringify(t.manualPause));
+      }
+
+      // 6. +5 touch swipe timing and combo length must match what is drawn.
       t.difficultyTelegraphs = await pg.evaluate(() => {
         const g = window.__game;
         const probe = (phase) => {

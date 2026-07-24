@@ -1,7 +1,7 @@
 # GRACEFELL project facts
 
-- Current package: `gracefell@2.12.1`
-- Gameplay release: `v2.12.1`
+- Current package: `gracefell@2.13.0`
+- Gameplay release: `v2.13`
 - Character release: Kite-Veil Penitent + Fallen Blade-Saint
 - Production: <https://gracefell.alyoechosys.dev>
 - Repository: <https://github.com/jonathanwxh-cell/gracefell>
@@ -29,8 +29,9 @@ npm run qa
 
 `npm run qa` is the acceptance gate. It builds the app, starts an isolated server on
 `127.0.0.1:8492`, and drives desktop, mobile, and real-touch Chromium paths. See
-[`docs/releases/v2.12.1.md`](docs/releases/v2.12.1.md) for the current input, balance, HUD,
-testing, and production record, [`docs/releases/v2.12.md`](docs/releases/v2.12.md) for the
+[`docs/releases/v2.13.md`](docs/releases/v2.13.md) for the current pause/resume, input-ownership,
+testing, and production record, [`docs/releases/v2.12.1.md`](docs/releases/v2.12.1.md) for the
+previous balance and HUD record, [`docs/releases/v2.12.md`](docs/releases/v2.12.md) for the
 original Journey/Oaths, teaching, death-recovery, visible-combo, and save-v4 design,
 [`docs/releases/v2.11.2.md`](docs/releases/v2.11.2.md) for the rapid-input fix,
 [`docs/releases/v2.11.1.md`](docs/releases/v2.11.1.md) for victory-score and result pacing,
@@ -45,6 +46,7 @@ original Journey/Oaths, teaching, death-recovery, visible-combo, and save-v4 des
 - [`PROVENANCE.md`](PROVENANCE.md) — contributor ledger and commit-trailer rules
 - [`public/audio/README.md`](public/audio/README.md) — generated music provenance
 - [`design-qa.md`](design-qa.md) — source-normalized mobile/desktop character comparisons
+- [`docs/releases/v2.13.md`](docs/releases/v2.13.md) — v2.13 pause/resume design, QA, and production evidence
 - [`docs/releases/v2.12.1.md`](docs/releases/v2.12.1.md) — v2.12.1 input, balance, visual-polish, QA, and production evidence
 - [`docs/releases/v2.12.md`](docs/releases/v2.12.md) — v2.12 research, design, QA, deployment, and production evidence
 - [`docs/releases/v2.11.2.md`](docs/releases/v2.11.2.md) — v2.11.2 rapid-combo acceptance record

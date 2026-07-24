@@ -1141,3 +1141,69 @@ in `docs/releases/v2.12.1.md`.
 - Record-heavy narrow titles gain dedicated spacing.
 - Save schema, music, SFX, boss phases/patterns, advanced Oaths, beginner paths, touch geometry,
   collision, scoring, and runtime asset footprint remain unchanged.
+
+## v2.13 — Codex (GPT-5), "hold the blade" (2026-07-24)
+
+GRACEFELL already paused safely when the browser lost focus or a player opened the semantic
+settings. That infrastructure stopped the animation loop, reset input, suspended Web Audio and the
+streamed score, then resumed with a fresh frame timestamp. The missing piece was ownership: players
+could not deliberately hold a fight while keeping the page open.
+
+### One freeze, three owners
+
+`manualPaused` is deliberately separate from `interruptionPaused` and the settings-focus flag.
+`syncPauseState()` pauses while any owner remains active. This prevents a common state bug where
+returning to the tab or moving focus out of a menu would resume a fight that the player had
+explicitly paused.
+
+P and Escape enter that same transition from the window-level input system. The persistent DOM
+button invokes it directly, so resume still works when RAF is stopped. On resume, `Input.reset()`
+discards actions pressed while the pause card was visible; they never become a delayed slash, roll,
+or flask on the first live frame. `lastTs` is refreshed before RAF restarts, so wall-clock pause
+duration cannot become one giant simulation step.
+
+The first keyboard regression found a subtle ordering problem: the generic first-gesture hook could
+initialize and resume Web Audio immediately after the pause transition suspended it. Pause keys now
+run first-gesture initialization before changing state. A second repeated run found a separate
+presentation race where the engine had resumed but React's 250ms poll still showed RESUME. The
+engine now notifies the semantic shell immediately whenever manual pause changes.
+
+### Mobile-first presentation
+
+The PAUSE/RESUME button is a semantic 76×44px DOM target placed to the left of the existing SOUND
+control, above the canvas and clear of the 390px player-health plate. It uses top/right safe-area
+insets, returns focus to the canvas after activation, exposes `aria-pressed` and the P/Escape
+shortcuts, and stays usable while the canvas loop is stopped.
+
+A restrained center card dims the live arena only while manual pause owns the fight. It states
+exactly how to resume and that time, attacks and input are held. The frozen fight remains visible
+underneath, preserving orientation without adding a menu tree, render surface, runtime asset,
+particle, or ongoing frame cost.
+
+### Local validation
+
+The final local `npm run qa` completed with zero errors on the production build at desktop
+1280×800, mobile 390×844, and a separate `hasTouch + isMobile` 390×844 context. New assertions
+cover:
+
+- visible, unclipped 76×44px control geometry on phone and desktop;
+- P-to-pause and Escape-to-resume ownership;
+- real touchscreen PAUSE and RESUME taps;
+- frozen fight time, player state, boss state, and stopped RAF across a 280ms hold;
+- suspended AudioContext while paused and a running loop after resume;
+- immediate label, `aria-pressed`, live status, and canvas-focus changes; and
+- disposal of an attack entered during pause before the first resumed frame.
+
+The accepted artifacts are under the named local QA folder
+`gracefell-qa-pause-local-4`; `desktop-paused.png` and `touch-paused.png` were visually inspected.
+The exact GitHub, deployment, and public replay record is kept in `docs/releases/v2.13.md`.
+
+### Changed from v2.12.1
+
+- Active fights gain an explicit pause/resume state and centered frozen-state card.
+- Phone/desktop gain one persistent semantic PAUSE/RESUME button; desktop also gains P/Escape.
+- Manual pause becomes an independent owner of the existing interruption-safe freeze.
+- Resuming clears inputs made during pause and updates the DOM state immediately.
+- Combat rules, difficulty, boss AI/patterns, player timing/damage, save schema, score, music,
+  procedural SFX identity, touch combat layout, collision, assets, and frame-time work remain
+  unchanged.
