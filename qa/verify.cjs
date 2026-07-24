@@ -53,6 +53,24 @@ async function installAudioSampleRate(context) {
       if (sh.nosniff !== 'nosniff') out.errors.push('v2.16 (#45): missing X-Content-Type-Options: nosniff (' + JSON.stringify(sh) + ')');
       if (!sh.referrer) out.errors.push('v2.16 (#45): missing Referrer-Policy header');
       if (!/immutable/.test(sh.audioCache)) out.errors.push('v2.16 (#46): /audio/ not served immutable (' + sh.audioCache + ')');
+
+      // v2.17 (#39/#40): self-hosted fonts (no third-party CDN) + manifest/icons/meta.
+      const html = await (await fetch(URL)).text();
+      const favicon = await fetch(new globalThis.URL('/favicon.svg', URL), { method: 'HEAD' });
+      const manifest = await fetch(new globalThis.URL('/manifest.webmanifest', URL), { method: 'HEAD' });
+      out.steps.webPolish = {
+        googleFontRefs: (html.match(/googleapis|gstatic/g) || []).length,
+        hasManifestLink: /rel="manifest"/.test(html),
+        hasIconLink: /rel="icon"/.test(html),
+        hasDescription: /name="description"/.test(html),
+        favicon: favicon.status,
+        manifest: manifest.status,
+      };
+      const wp = out.steps.webPolish;
+      if (wp.googleFontRefs !== 0) out.errors.push('v2.17 (#39): third-party font CDN still referenced (' + wp.googleFontRefs + ')');
+      if (!wp.hasManifestLink || wp.manifest !== 200) out.errors.push('v2.17 (#40): PWA manifest missing (' + JSON.stringify(wp) + ')');
+      if (!wp.hasIconLink || wp.favicon !== 200) out.errors.push('v2.17 (#40): favicon missing (' + JSON.stringify(wp) + ')');
+      if (!wp.hasDescription) out.errors.push('v2.17 (#40): meta description missing');
     }
     for (const vp of [{ name: 'desktop', w: 1280, h: 800 }, { name: 'mobile', w: 390, h: 844 }]) {
       const ctxB = await browser.newContext({ viewport: { width: vp.w, height: vp.h } });
