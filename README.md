@@ -8,12 +8,13 @@ rules are all decided by what works one-handed on a 390px screen.
 
 **Play it: [gracefell.alyoechosys.dev](https://gracefell.alyoechosys.dev)**
 
-Current gameplay release: **v2.12**. New players begin on a disclosed, forgiving Journey; experts
-can answer with authored Oath attack chains. The fight now teaches its perfect-dodge, poise, and
-stagger loop in play, gives attack-specific death advice, offers voluntary Grace after repeated
-deaths, and shows connected light-combo progress through the finisher. The complete research,
-balance, save-migration, test, deployment, and production record is preserved in
-[`docs/releases/v2.12.md`](docs/releases/v2.12.md).
+Current gameplay release: **v2.12.1**. New players begin on a disclosed, forgiving Journey;
+experts can answer with authored Oath attack chains. Receive Grace now requires a fresh
+post-defeat choice, Oath I/II introduce their chains with a smoother pressure ramp, and the
+phone HUD gives combat cues, overlapping silhouettes, queued attacks, and saved-run statistics
+clearer visual ownership. The complete test, deployment, and production record is preserved in
+[`docs/releases/v2.12.1.md`](docs/releases/v2.12.1.md); the original Journey/Oaths research and
+save-migration record remains in [`docs/releases/v2.12.md`](docs/releases/v2.12.md).
 The v2.11 character design record remains available in
 [`docs/releases/v2.11.md`](docs/releases/v2.11.md).
 
@@ -35,7 +36,7 @@ The sovereign has an audio language, not one generic warning: swipes whistle, ch
 
 **v2 — extended by Claude (Opus 4.8).** Combat depth, a third phase, a full rendering pass, persistence, and a headless verification gate. Details in [DESIGN.md](DESIGN.md).
 
-**v2.4–v2.12 — audio, responsiveness, combat integrity, character readability, progression, and victory persistence extended by
+**v2.4–v2.12.1 — audio, responsiveness, combat integrity, character readability, progression, and victory persistence extended by
 Codex (GPT-5).** Attack-specific procedural cues, spatial mix protection, the MiniMax-generated
 score, mobile/accessibility hardening, trustworthy combat and retry behavior, the verified
 Grace-to-Oaths mastery path, and the production Kite-Veil/Blade-Saint silhouettes. The v2.11 player
@@ -109,8 +110,8 @@ phase, and touch-telegraph floor.
 | −2 JOURNEY | 0.85× | 0.70× | 4 | 120 | recommended, named tells |
 | −1 | 0.93× | 0.85× | 3 | 120 | wider dodge |
 | 0 MEASURED | 1.00× | 1.00× | 3 | 120 | canonical timing |
-| +1 OATH I | 1.06× | 1.08× | 3 | 120 | two-beat packets |
-| +2 OATH II | 1.12× | 1.16× | 2 | 120 | two-beat packets |
+| +1 OATH I | 1.04× | 1.05× | 3 | 120 | two-beat packets, 0.99× recovery |
+| +2 OATH II | 1.10× | 1.13× | 2 | 120 | two-beat packets, 0.96× recovery |
 | +3 OATH III | 1.18× | 1.24× | 2 | 162 | more frequent packets, 1.45 s stagger |
 | +4 OATH IV | 1.24× | 1.32× | 2 | 204 | more frequent packets, 1.25 s stagger |
 | +5 OATH V | 1.30× | 1.40× | 1 | 204, IRONBOUND | three-beat packets, no stagger |
@@ -294,6 +295,31 @@ The complete local suite, GitHub Actions run, exact-SHA host deployment, public 
 full production replay all passed. See the
 [`v2.12 release record`](docs/releases/v2.12.md) for the rationale, rejected alternatives, authored
 routes, migration rules, measurements, evidence names, and known human-testing limits.
+
+## Fixed and polished by Codex — v2.12.1 consent and combat clarity
+
+Three live player lanes and a separate all-path production gate found one reproducible
+input-ownership defect: a left movement press buffered immediately before death could accept the
+new Receive Grace offer without a fresh choice. The death transition now discards that carried
+press. A regression proves the path stays at Measured across the first terminal frame and changes
+only after a new left press; touch acceptance and one-touch resurrection remain intact.
+
+The same review showed an experience cliff at the first Oath. Oath I/II keep their two-beat packet
+rules but begin with 1.04×/1.10× speed, 1.05×/1.13× damage, and 0.99×/0.96× recovery. Measured,
+Grace, and Oath III–V retain their accepted values.
+
+Performance-neutral presentation polish makes the rules easier to read:
+
+- one larger backed chip owns either a Journey `READ` tell or an `OATH CHAIN` counter;
+- two small spirit arcs separate the player from Malakar only when their silhouettes overlap;
+- the ATK circle shows accepted queued follow-ups while the arena counter remains connected-hit
+  truth;
+- record-heavy 390px titles give wins, best time, and last grade their own compact line.
+
+No runtime asset, particle system, save migration, boss phase, attack packet, collision rule,
+touch geometry, music, or SFX contract changed. The exact merged revision, CI run, host build,
+public metrics, screenshots, rejected false positives, and timing-variance reruns are recorded in
+[`docs/releases/v2.12.1.md`](docs/releases/v2.12.1.md).
 
 ## Running it
 
