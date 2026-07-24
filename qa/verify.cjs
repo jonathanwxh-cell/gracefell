@@ -447,6 +447,10 @@ async function installAudioSampleRate(context) {
         const decayPh3 = await pg.evaluate(() => (window).__game.phaseDecay ?? null);
         step.decayPh3 = decayPh3;
         if (decayPh3 === null || !(decayPh3 > (step.decayPh2 ?? 0))) out.errors.push('v2.14 (4): phase-3 arena decay did not deepen (decay=' + decayPh3 + ')');
+        // v2.15: phase 3 lifts the adaptive music through the existing buses.
+        const audioLift = await pg.evaluate(() => { const s = window.__game.audio.debugState(); return s.phaseLift ?? null; });
+        step.audioPhaseLift = audioLift;
+        if (audioLift === null || !(audioLift >= 0.2)) out.errors.push('v2.15: phase-3 audio lift not applied (phaseLift=' + audioLift + ')');
 
         // let phase-3 combat run — spiral etc.
         await pg.waitForTimeout(3500);
@@ -475,6 +479,51 @@ async function installAudioSampleRate(context) {
         step.staggerExecute = exec;
         if (exec.consumed !== true || !(exec.dExec > 84) || !(exec.dExec > exec.dNormal * 1.8)) {
           out.errors.push('v2.14 (2): stagger execution did not spike exactly once: ' + JSON.stringify(exec));
+        }
+
+        // v2.15: hold-to-charge heavy. Holding HVY through the wind-up roots the
+        // player and builds charge; a quick tap is the unchanged normal heavy.
+        await pg.evaluate(() => {
+          const g = window.__game, p = g.player;
+          g.projectiles.length = 0; g.rings.length = 0; g.meteors.length = 0;
+          p.state = 'move'; p.stam = 100; p.heavyChargeT = 0; p.iframes = 999; // isolate from interruption
+        });
+        await pg.keyboard.down('KeyK');
+        const built = await pg.waitForFunction(() => window.__game.player.heavyChargeT >= 0.4, null, { timeout: 3000 }).then(() => true).catch(() => false);
+        const chargeState = await pg.evaluate(() => ({ heavyChargeT: window.__game.player.heavyChargeT, heavyCharging: window.__game.player.heavyCharging }));
+        await pg.keyboard.up('KeyK');
+        step.holdCharge = { built, ...chargeState };
+        if (!built || !(chargeState.heavyChargeT >= 0.4)) {
+          out.errors.push('v2.15: holding heavy did not build charge: ' + JSON.stringify(step.holdCharge));
+        }
+        const chargeDmg = await pg.evaluate(() => {
+          const g = window.__game, p = g.player, b = g.boss;
+          b.x = 500; b.y = 400; b.hp = b.maxHp * 0.9; b.state = 'stalk'; b.executeConsumed = true;
+          p.x = b.x - 50; p.y = b.y; p.facing = 0; p.comboStep = 0; p.state = 'move';
+          p.charge01 = 0; const h0 = b.hp; g.playerStrike(true); const dNormal = h0 - b.hp;
+          p.charge01 = 1; const h1 = b.hp; g.playerStrike(true); const dCharged = h1 - b.hp;
+          return { dNormal, dCharged, hasApi: typeof g.heavyInputHeld === 'function' && typeof p.charge01 === 'number' };
+        });
+        step.chargeDmg = chargeDmg;
+        if (!chargeDmg.hasApi || !(chargeDmg.dCharged > chargeDmg.dNormal * 1.4)) {
+          out.errors.push('v2.15: charged heavy did not scale damage: ' + JSON.stringify(chargeDmg));
+        }
+        const touchHeld = await pg.evaluate(() => {
+          const g = window.__game;
+          const wasTouch = g.input.isTouch;
+          g.input.held.heavy = false; g.input.isTouch = true;
+          const hvy = g.touchLayout().btns.find((b) => b.id === 'heavy');
+          const held = () => (typeof g.heavyInputHeld === 'function' ? g.heavyInputHeld() : null);
+          g.input.touchPoints = [];
+          const before = held();
+          g.input.touchPoints = [{ id: 99, x: hvy.x, y: hvy.y }];
+          const during = held();
+          g.input.touchPoints = []; g.input.isTouch = wasTouch;
+          return { before, during };
+        });
+        step.touchHeld = touchHeld;
+        if (touchHeld.before !== false || touchHeld.during !== true) {
+          out.errors.push('v2.15: touch heavy-held detection wrong: ' + JSON.stringify(touchHeld));
         }
 
         // Victory score must persist synchronously with boss death, before the

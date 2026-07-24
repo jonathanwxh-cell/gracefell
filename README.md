@@ -8,9 +8,10 @@ rules are all decided by what works one-handed on a 390px screen.
 
 **Play it: [gracefell.alyoechosys.dev](https://gracefell.alyoechosys.dev)**
 
-Current gameplay release: **v2.14** — a feel & spectacle pass: the camera tightens for a clean duel
-and widens for a storm, a staggered Malakar can be *executed* with a heavy riposte, and the arena
-visibly burns down as his phases fall. New players begin on a disclosed, forgiving Journey;
+Current gameplay release: **v2.15** — an offense pass: hold HVY to charge a poise-breaking smash, and
+phase three's music now lifts to match its fire. It builds on v2.14's feel & spectacle work — a
+camera that tightens for a duel and widens for a storm, a staggered Malakar you can *execute*, and an
+arena that burns down as his phases fall. New players begin on a disclosed, forgiving Journey;
 experts can answer with authored Oath attack chains, and every fight can now be paused and resumed
 without advancing combat or audio. Phone players have a persistent 44px control beside SOUND;
 desktop players can use P or Escape. The complete test, deployment, and production record is
@@ -362,6 +363,21 @@ reserved-hue contract:
 Two further ideas from the same review — a hold-to-charge heavy and a phase-three musical lift — are
 deliberately held for a later offense pass, because they need touch-input and audio-bus work that
 deserve their own QA lane. Full rationale and evidence: [`docs/releases/v2.14.md`](docs/releases/v2.14.md).
+
+## Added by Claude — v2.15 offense
+
+The offense half of the same review, split out because it reaches into touch input and the audio bus
+graph — both fragile enough to want their own QA lane:
+
+- **Hold to charge.** Tap HVY for the heavy you already know; *hold* it and the knight roots and
+  winds up — release for a smash that hits up to 1.75× harder and breaks poise hard enough to set up
+  a stagger execution. The cost is the wind-up: you stand exposed while a gold ring tightens. A quick
+  tap is byte-for-byte the old heavy, so nothing you've learned changes.
+- **Phase three finds its voice.** The final phase's music now lifts — more drums, an open filter —
+  through the existing procedural buses, so "GRACE ABANDONS HIM" sounds like it looks. No new audio
+  nodes, no new track.
+
+Full rationale and evidence: [`docs/releases/v2.15.md`](docs/releases/v2.15.md).
 
 ## Running it
 
