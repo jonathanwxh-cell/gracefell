@@ -4,6 +4,8 @@ import { Game, type GameUiSnapshot } from '@/game/engine';
 const INITIAL_UI: GameUiSnapshot = {
   state: 'title',
   status: 'Title screen',
+  paused: false,
+  manualPaused: false,
   muted: false,
   grace: -2,
   graceLabel: 'JOURNEY -2',
@@ -33,10 +35,12 @@ export default function Home() {
         setUi(next);
       }
     };
+    game.uiChanged = sync;
     sync();
     const timer = window.setInterval(sync, 250);
     return () => {
       window.clearInterval(timer);
+      game.uiChanged = null;
       gameRef.current = null;
       game.destroy();
     };
@@ -60,6 +64,13 @@ export default function Home() {
     canvasRef.current?.focus({ preventScroll: true });
   };
 
+  const togglePauseFromUi = () => {
+    act((game) => game.togglePause());
+    // Keep keyboard control with the game after a mouse/touch activation so
+    // combat input and the pause shortcuts work immediately after resuming.
+    canvasRef.current?.focus({ preventScroll: true });
+  };
+
   const confirmLabel = ui.state === 'dead' ? 'Retry fight'
     : ui.state === 'victory' ? 'Fight again'
     : ui.state === 'intro' ? 'Skip introduction'
@@ -77,6 +88,18 @@ export default function Home() {
         onPointerDown={(event) => event.currentTarget.focus({ preventScroll: true })}
       />
 
+      {ui.state === 'fight' && (
+        <button
+          type="button"
+          className={`game-pause-toggle${ui.manualPaused ? ' is-paused' : ''}`}
+          aria-pressed={ui.manualPaused}
+          aria-keyshortcuts="P Escape"
+          onClick={togglePauseFromUi}
+        >
+          {ui.manualPaused ? 'RESUME' : 'PAUSE'}
+        </button>
+      )}
+
       <section
         className="game-accessibility"
         aria-label="Gracefell controls and accessibility settings"
@@ -90,7 +113,7 @@ export default function Home() {
         <h1>Gracefell</h1>
         <p id="game-instructions">
           Move with WASD or arrow keys, roll with Space, attack with J, use a heavy attack with K,
-          and drink a flask with F. Roll through an attack for a perfect dodge; perfect dodges,
+          drink a flask with F, and pause or resume with P or Escape. Roll through an attack for a perfect dodge; perfect dodges,
           heavy attacks, and combo finishers break poise so a staggered Malakar takes extra damage.
           On touch screens, steer on the left and use the action buttons on the right.
         </p>

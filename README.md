@@ -8,12 +8,13 @@ rules are all decided by what works one-handed on a 390px screen.
 
 **Play it: [gracefell.alyoechosys.dev](https://gracefell.alyoechosys.dev)**
 
-Current gameplay release: **v2.12.1**. New players begin on a disclosed, forgiving Journey;
-experts can answer with authored Oath attack chains. Receive Grace now requires a fresh
-post-defeat choice, Oath I/II introduce their chains with a smoother pressure ramp, and the
-phone HUD gives combat cues, overlapping silhouettes, queued attacks, and saved-run statistics
-clearer visual ownership. The complete test, deployment, and production record is preserved in
-[`docs/releases/v2.12.1.md`](docs/releases/v2.12.1.md); the original Journey/Oaths research and
+Current gameplay release: **v2.13**. New players begin on a disclosed, forgiving Journey;
+experts can answer with authored Oath attack chains, and every fight can now be paused and resumed
+without advancing combat or audio. Phone players have a persistent 44px control beside SOUND;
+desktop players can use P or Escape. The complete test, deployment, and production record is
+preserved in [`docs/releases/v2.13.md`](docs/releases/v2.13.md); the previous combat-clarity record
+remains in [`docs/releases/v2.12.1.md`](docs/releases/v2.12.1.md), and the original Journey/Oaths
+research and
 save-migration record remains in [`docs/releases/v2.12.md`](docs/releases/v2.12.md).
 The v2.11 character design record remains available in
 [`docs/releases/v2.11.md`](docs/releases/v2.11.md).
@@ -36,7 +37,7 @@ The sovereign has an audio language, not one generic warning: swipes whistle, ch
 
 **v2 — extended by Claude (Opus 4.8).** Combat depth, a third phase, a full rendering pass, persistence, and a headless verification gate. Details in [DESIGN.md](DESIGN.md).
 
-**v2.4–v2.12.1 — audio, responsiveness, combat integrity, character readability, progression, and victory persistence extended by
+**v2.4–v2.13 — audio, responsiveness, combat integrity, character readability, progression, victory persistence, and player-controlled pause extended by
 Codex (GPT-5).** Attack-specific procedural cues, spatial mix protection, the MiniMax-generated
 score, mobile/accessibility hardening, trustworthy combat and retry behavior, the verified
 Grace-to-Oaths mastery path, and the production Kite-Veil/Blade-Saint silhouettes. The v2.11 player
@@ -64,12 +65,13 @@ who did which pass, and the rules any future agent follows before touching the c
 | **ROLL** | invincible — roll *into* a swing for a perfect dodge |
 | **HVY** | heavy, slow, big poise damage |
 | **FLASK** | heal (Journey starts with four; the selected path is shown before the fight) |
+| **PAUSE / RESUME** | freezes the fight and audio; no time, attack, or input advances |
 
 The buttons scale with your screen and sit clear of the home indicator. Haptics fire on hits and
 perfect dodges, and can be switched off on the title screen.
 
 **On a desktop**, if that's what you have: WASD/arrows move, Space or Shift rolls, J or left-click
-slashes, K or right-click is heavy, F drinks, M mutes.
+slashes, K or right-click is heavy, F drinks, M mutes, and P or Escape pauses/resumes.
 
 ## The fight
 
@@ -177,6 +179,8 @@ attack responsive while preserving the same spatial mix, ducking, and limiter pa
 
 If the tab loses focus or a phone interruption hides the page, simulation and audio pause together.
 Returning resumes from the same fight frame rather than letting Malakar attack an absent player.
+An explicit PAUSE/RESUME control now uses the same safe freeze while keeping its own ownership:
+returning to the tab cannot cancel a pause the player chose.
 
 ## Fixed by Codex — v2.9–v2.9.1 combat polish
 
@@ -321,6 +325,22 @@ touch geometry, music, or SFX contract changed. The exact merged revision, CI ru
 public metrics, screenshots, rejected false positives, and timing-variance reruns are recorded in
 [`docs/releases/v2.12.1.md`](docs/releases/v2.12.1.md).
 
+## Added by Codex — v2.13 pause and resume
+
+Every active fight now exposes one persistent **PAUSE / RESUME** control. It sits beside SOUND on
+the phone, meets the 44px fingertip target, respects top/right safe areas, and remains a semantic
+DOM button above the canvas. Desktop players can use the same control or press **P / Escape**.
+
+Pausing stops the RAF loop, combat clock, player, boss, hazards, streamed score, and Web Audio
+context on the same frame. The centered card explains the frozen state. Manual pause is stored
+separately from settings-focus and browser-interruption pause, so returning focus cannot resume a
+fight the player deliberately held. Inputs made while paused are cleared on resume instead of
+becoming a surprise attack or dodge.
+
+The QA gate now exercises keyboard and true-touch pause end to end, asserts a frozen combat clock,
+suspended audio, stopped RAF, 76×44px on-screen geometry, immediate label/ARIA changes, retained
+canvas focus, and a clean first resumed frame. See [`docs/releases/v2.13.md`](docs/releases/v2.13.md).
+
 ## Running it
 
 ```bash
@@ -356,7 +376,7 @@ served at `http://127.0.0.1:8491/` when `node server.mjs` is running.
 
 Nothing here ships on a claim. `npm run qa` drives real Chromium at 1280×800 and 390×844,
 plus an emulated real-touch phone. It checks canvas output, console health, streamed audio, cold
-first-tap cost, accessibility focus/pause, intro and terminal isolation, expanded touch targeting,
+first-tap cost, explicit keyboard/touch pause, accessibility focus/pause, intro and terminal isolation, expanded touch targeting,
 hit-stop buffering, 30/60/120 Hz combat motion, meteor cadence, heavy impulse, phase cleanup,
 victory/grade/persistence, touch and pointer-only resurrection, and genuine perfect-dodge behavior.
 It also enumerates the Journey/Oath curve, forces a complete expert boss packet, performs the
