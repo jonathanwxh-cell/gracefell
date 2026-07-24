@@ -389,6 +389,35 @@ async function installAudioSampleRate(context) {
 
       if (vp.name === 'desktop') {
         // simulate combat: move, roll, attack; force phase transitions via damage
+
+        // v2.14 (1): dynamic combat camera. Intent is numeric, like menuGeom —
+        // a clean 1v1 tightens the frame; active area-denial widens it back
+        // toward the viewport-fit floor so a phone never zooms into a storm.
+        const camClean = await pg.evaluate(() => {
+          const g = window.__game;
+          g.projectiles.length = 0; g.rings.length = 0; g.meteors.length = 0;
+          return {
+            base: g.baseZoom ?? null,
+            target: typeof g.combatZoomTarget === 'function' ? g.combatZoomTarget() : null,
+            phase: g.boss.phase,
+          };
+        });
+        step.camClean = camClean;
+        if (camClean.base === null || camClean.target === null || !(camClean.target > camClean.base * 1.04)) {
+          out.errors.push('v2.14 (1): camera did not tighten in clean melee: ' + JSON.stringify(camClean));
+        }
+        const camBusy = await pg.evaluate(() => {
+          const g = window.__game;
+          for (let i = 0; i < 8; i++) g.projectiles.push({ x: 0, y: 0, vx: 0, vy: 0, r: 7, dmg: 0, life: 0.001, hostile: true, hue: '#ffffff' });
+          const target = typeof g.combatZoomTarget === 'function' ? g.combatZoomTarget() : null;
+          g.projectiles.length = 0;
+          return { base: g.baseZoom ?? null, target };
+        });
+        step.camBusy = camBusy;
+        if (camBusy.base === null || camBusy.target === null || !(camBusy.target <= camBusy.base * 1.02)) {
+          out.errors.push('v2.14 (1): camera did not widen under area-denial load: ' + JSON.stringify(camBusy));
+        }
+
         await pg.keyboard.down('KeyW');
         await pg.waitForTimeout(300);
         await pg.keyboard.up('KeyW');
@@ -403,6 +432,10 @@ async function installAudioSampleRate(context) {
         const ph2 = await pg.evaluate(() => (window).__game.boss.phase);
         step.phase2 = ph2;
         if (ph2 !== 2) out.errors.push('phase 2 did not trigger (phase=' + ph2 + ')');
+        // v2.14 (4): the arena visibly deteriorates as the sovereign burns.
+        const decayPh2 = await pg.evaluate(() => (window).__game.phaseDecay ?? null);
+        step.decayPh2 = decayPh2;
+        if (decayPh2 === null || !(decayPh2 >= 1)) out.errors.push('v2.14 (4): phase-2 arena decay not applied (decay=' + decayPh2 + ')');
 
         // phase 3
         await pg.evaluate(() => { const g = (window).__game; g.boss.takeDamage(g.boss.maxHp * 0.35, g, g.player.x, g.player.y); });
@@ -410,11 +443,39 @@ async function installAudioSampleRate(context) {
         const ph3 = await pg.evaluate(() => (window).__game.boss.phase);
         step.phase3 = ph3;
         if (ph3 !== 3) out.errors.push('phase 3 did not trigger (phase=' + ph3 + ')');
+        // v2.14 (4): phase 3 deepens the decay further.
+        const decayPh3 = await pg.evaluate(() => (window).__game.phaseDecay ?? null);
+        step.decayPh3 = decayPh3;
+        if (decayPh3 === null || !(decayPh3 > (step.decayPh2 ?? 0))) out.errors.push('v2.14 (4): phase-3 arena decay did not deepen (decay=' + decayPh3 + ')');
 
         // let phase-3 combat run — spiral etc.
         await pg.waitForTimeout(3500);
         const alive = await pg.evaluate(() => { const g = (window).__game; return { st: g.state, projs: g.projectiles.length, parts: g.particles.length, scorch: !!g.scorchCanvas }; });
         step.phase3Run = alive;
+
+        // v2.14 (2): stagger execution. The first heavy into a staggered
+        // Malakar is a riposte that spikes damage exactly once, then reverts to
+        // the normal staggered multiplier until poise is broken again.
+        const exec = await pg.evaluate(() => {
+          const g = window.__game;
+          const b = g.boss, p = g.player;
+          b.hp = b.maxHp * 0.85;
+          b.state = 'staggered'; b.t = 2; b.executeConsumed = false;
+          p.x = b.x - 50; p.y = b.y; p.facing = 0; p.comboStep = 0; p.state = 'move';
+          const hp0 = b.hp;
+          g.playerStrike(true);
+          const dExec = hp0 - b.hp;
+          const consumed = b.executeConsumed ?? null;
+          b.state = 'staggered';
+          const hp1 = b.hp;
+          g.playerStrike(true);
+          const dNormal = hp1 - b.hp;
+          return { dExec, dNormal, consumed };
+        });
+        step.staggerExecute = exec;
+        if (exec.consumed !== true || !(exec.dExec > 84) || !(exec.dExec > exec.dNormal * 1.8)) {
+          out.errors.push('v2.14 (2): stagger execution did not spike exactly once: ' + JSON.stringify(exec));
+        }
 
         // Victory score must persist synchronously with boss death, before the
         // reveal or any follow-up input can replace the terminal state.

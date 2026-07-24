@@ -42,6 +42,7 @@ Newest last. One row per pass. A "pass" = one continuous working session by one 
 | v2.12 | 2026-07-23 | Codex | GPT-5 / Codex Desktop | @jonathanwxh-cell | Added the disclosed first-run Journey, contextual combat rite, lethal-source hints, voluntary repeated-death Grace, authored expert Oath packets, visible player combo progress, v4 execution scores, and complete local/CI/production acceptance |
 | v2.12.1 | 2026-07-24 | Codex | GPT-5 / Codex Desktop | @jonathanwxh-cell | Fixed pre-death movement accepting Grace without consent, eased Oath I/II raw pressure, strengthened boss-cue and close-contact readability, surfaced queued touch attacks, and decluttered record-heavy phone titles |
 | v2.13 | 2026-07-24 | Codex | GPT-5 / Codex Desktop | @jonathanwxh-cell | Added explicit PAUSE/RESUME for phone and desktop with a 44px touch control, P/Escape shortcuts, a frozen-state overlay, audio suspension, interruption-safe ownership, and ghost-input clearing |
+| v2.14 | 2026-07-24 | Claude | Opus 4.8 / Hetzner MCP | @jonathanwxh-cell | Feel & spectacle from a gamer's-eye polish review: dynamic combat camera (tightens a clean 1v1, widens for area-denial), stagger execution (once-per-break heavy riposte, ~109 vs 42), and phase-2/3 arena deterioration via the offscreen scorch canvas — each guarded by a numeric QA assertion; no save-schema, layout, audio-contract, or reserved-hue change |
 
 ---
 

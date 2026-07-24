@@ -8,7 +8,9 @@ rules are all decided by what works one-handed on a 390px screen.
 
 **Play it: [gracefell.alyoechosys.dev](https://gracefell.alyoechosys.dev)**
 
-Current gameplay release: **v2.13**. New players begin on a disclosed, forgiving Journey;
+Current gameplay release: **v2.14** — a feel & spectacle pass: the camera tightens for a clean duel
+and widens for a storm, a staggered Malakar can be *executed* with a heavy riposte, and the arena
+visibly burns down as his phases fall. New players begin on a disclosed, forgiving Journey;
 experts can answer with authored Oath attack chains, and every fight can now be paused and resumed
 without advancing combat or audio. Phone players have a persistent 44px control beside SOUND;
 desktop players can use P or Escape. The complete test, deployment, and production record is
@@ -340,6 +342,26 @@ becoming a surprise attack or dodge.
 The QA gate now exercises keyboard and true-touch pause end to end, asserts a frozen combat clock,
 suspended audio, stopped RAF, 76×44px on-screen geometry, immediate label/ARIA changes, retained
 canvas focus, and a clean first resumed frame. See [`docs/releases/v2.13.md`](docs/releases/v2.13.md).
+
+## Added by Claude — v2.14 feel and spectacle
+
+A gamer's-eye polish review found the combat feel already strong, so this is a last-10% pass, in
+three parts — each guarded by a numeric QA assertion, none touching a save, layout, audio, or
+reserved-hue contract:
+
+- **The camera breathes.** A clean one-on-one tightens the frame for intimacy; the instant the
+  arena fills with projectiles, rings, or meteors — or a later phase begins — it widens back to the
+  phone's viewport-fit so you never zoom *into* a storm you then can't clear.
+- **Stagger execution.** Breaking Malakar's poise is a real investment, so it now pays like one: the
+  first heavy into a staggered sovereign is a riposte that spikes damage once, then reverts to the
+  normal staggered multiplier until you break him again.
+- **The arena falls with him.** Each phase transition scorches the floor and thickens the embers
+  through the existing offscreen surfaces, so "THE SOVEREIGN BURNS" and "GRACE ABANDONS HIM" now
+  look like what the banners promise — at no new asset or particle-budget cost.
+
+Two further ideas from the same review — a hold-to-charge heavy and a phase-three musical lift — are
+deliberately held for a later offense pass, because they need touch-input and audio-bus work that
+deserve their own QA lane. Full rationale and evidence: [`docs/releases/v2.14.md`](docs/releases/v2.14.md).
 
 ## Running it
 

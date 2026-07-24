@@ -1207,3 +1207,57 @@ The exact GitHub, deployment, and public replay record is kept in `docs/releases
 - Combat rules, difficulty, boss AI/patterns, player timing/damage, save schema, score, music,
   procedural SFX identity, touch combat layout, collision, assets, and frame-time work remain
   unchanged.
+
+## v2.14 — Claude (Opus 4.8), "feel & spectacle" (2026-07-24)
+
+Directed follow-up to a read-only, gamer's-eye polish review. The review's finding: the combat
+*feel* is already strong (hit-stop that freezes the sim but keeps rendering, perfect-dodge
+slow-motion, a look-ahead follow-camera, layered reward juice), so this is a last-10% pass. Three
+items shipped; two the review raised (hold-to-charge heavy, phase-three audio lift) were split into
+a later "offense" pass because they need touch-input surgery and audio-bus work that deserve their
+own QA lane.
+
+### 1. Dynamic combat camera
+The follow-cam already leads the player and weights toward the player/boss midpoint, but `camZoom`
+was a static viewport-fit — and on a 390px phone that fit is pinned to the 0.55 floor, i.e. the most
+zoomed-*out* the game ever is, on the smallest screen, exactly where reading is hardest.
+`combatZoomTarget()` now eases the zoom between a calm ceiling (1.16× the fit) and the fit floor by
+a combat-intensity signal `clamp(threats/5 + (phase-1)*0.5, 0, 1)`. A clean 1v1 tightens for
+intimacy; the moment area-denial (projectiles/rings/meteors) or a later phase fills the arena it
+widens back so the player never zooms *into* a storm they then can't clear. Exposed like
+`menuGeom()` so QA reads the intent numerically: clean melee target > fit×1.04, eight live
+projectiles ≤ fit×1.02.
+
+### 2. Stagger execution
+Breaking poise is a real investment (~7–8 openings) that paid only 1.4× — a soft reward for the
+loop's climax. The first *heavy* into a staggered Malakar is now a riposte: `30 × 2.6` base, and
+since `Boss.takeDamage` still applies the ×1.4 staggered multiplier the execution lands ~109 vs a
+normal staggered heavy's 42. Fires exactly once per poise break (`executeConsumed`, reset in
+`triggerStagger`), then reverts — a punish spike, not a stagger-lock. Juice stays inside the
+existing gates: `shake(14,0.4)` (photosensitivity), a spirit-hued `EXECUTE`, gold flash,
+`zoomPunch`, extra hit-stop, existing `audio.stagger()`. No new Web Audio nodes; reserved danger
+hue untouched. +5 IRONBOUND never staggers, so it never executes — consistent with its contract.
+
+### 3. Arena deterioration
+Phase transitions call `deepenArena(phase)`, which stamps scorch cracks into the *offscreen scorch
+canvas* (accumulation surface, never per-frame `drawArena` — the baked-floor invariant) and raises
+ambient ember density (`emberDensityMul`, a spawn-rate divisor). `phaseDecay` (1 at phase 2, 2 at
+phase 3, reset in `resetFight`) makes it assertable. "The sovereign burns" and "grace abandons him"
+now *look* like the banners say, at zero new render surface/sprite/particle-budget cost.
+
+### Changed from earlier passes
+- **Camera (was: static viewport-fit).** `Game.baseZoom` is stored and `camZoom` eases toward
+  `combatZoomTarget()` while `state === 'fight'`; every non-fight state still eases to the plain fit,
+  so intro/title/terminal framing is unchanged.
+- **Staggered heavy (was: flat 1.4×, v2.0/v2.10).** The *first* heavy per stagger now executes for
+  more; subsequent staggered hits are unchanged.
+
+### QA / verification
+Three desktop-lane assertions added to `qa/verify.cjs` first (TDD), written defensively (a missing
+API fails cleanly): camera intent in clean vs. loaded states, once-only execution spike, deepening
+`phaseDecay`. All failed on pristine code (RED: `base:null`, `decay:null`, `dExec:42==dNormal:42`)
+and pass after implementation; lint and build clean. The only local failures are the load-sensitive
+audio-init budgets (20/25 ms) — the shared box runs 40+ services; they pass on the clean CI runner
+and are untouched here (no `audio.ts` change). Final visual/feel tuning (zoom ceiling, scorch
+density, execution damage) is left for an owner playtest, per the standing "screenshots aren't
+always agent-reviewable" note.
