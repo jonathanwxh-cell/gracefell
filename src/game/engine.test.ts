@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   clamp, lerp, dist, angTo, angDiff, TAU, seededRandom,
-  difficultyForGrace, isVictoryScore,
+  difficultyForGrace, isScoreHistoryEntry, isVictoryScore,
 } from './engine';
 
 describe('math helpers', () => {
@@ -92,5 +92,27 @@ describe('isVictoryScore — save-schema v4 validator', () => {
     expect(isVictoryScore({ ...valid, trial: 9 })).toBe(false);
     expect(isVictoryScore({ ...valid, attempt: 0 })).toBe(false);
     expect(isVictoryScore({ ...valid, oathRank: 9 })).toBe(false);
+  });
+});
+
+describe('isScoreHistoryEntry — save-schema v6 history validator', () => {
+  const valid = {
+    grade: 'A',
+    time: 73.2,
+    trial: -2,
+    attempt: 3,
+    damageDealt: 1250,
+    woundsTaken: 2,
+  };
+
+  it('accepts new ISO timestamps and honest legacy null dates', () => {
+    expect(isScoreHistoryEntry({ ...valid, completedAt: '2026-07-24T02:15:00.000Z' })).toBe(true);
+    expect(isScoreHistoryEntry({ ...valid, completedAt: null })).toBe(true);
+  });
+
+  it('rejects missing, empty, and invalid completion dates', () => {
+    expect(isScoreHistoryEntry(valid)).toBe(false);
+    expect(isScoreHistoryEntry({ ...valid, completedAt: '' })).toBe(false);
+    expect(isScoreHistoryEntry({ ...valid, completedAt: 'after the battle' })).toBe(false);
   });
 });

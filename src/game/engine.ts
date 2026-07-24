@@ -774,6 +774,15 @@ export class Player {
 
 // ------------------------------------------------------------------ boss
 type BossAttack = 'swipe' | 'slam' | 'charge' | 'volley' | 'meteor' | 'ring' | 'spiral';
+const BOSS_ATTACK_LABELS: Record<BossAttack, string> = {
+  swipe: 'BLADE',
+  slam: 'GROUND BREAK',
+  charge: 'CHARGE',
+  volley: 'HALO VOLLEY',
+  meteor: 'METEORS',
+  ring: 'RING',
+  spiral: 'SPIRAL',
+};
 
 export class Boss {
   x = 0; y = -220; vx = 0; vy = 0; r = 34;
@@ -1560,6 +1569,21 @@ export interface GameUiSnapshot {
   flashReduced: boolean;
   hapticsEnabled: boolean;
   touch: boolean;
+  wins: number;
+  attempts: number;
+  scoreHistory: ScoreHistoryEntry[];
+  combat: {
+    playerHpPercent: number;
+    playerStaminaPercent: number;
+    playerFlasks: number;
+    bossHpPercent: number;
+    bossPhase: number;
+    bossPoisePercent: number;
+    bossState: string;
+    telegraph: string;
+    comboHits: number;
+    queuedLights: number;
+  };
 }
 
 export interface VictoryScore {
@@ -1574,6 +1598,10 @@ export interface VictoryScore {
   oathRank?: number;
 }
 
+export interface ScoreHistoryEntry extends VictoryScore {
+  completedAt: string | null;
+}
+
 export function isVictoryScore(value: unknown): value is VictoryScore {
   if (!value || typeof value !== 'object') return false;
   const score = value as Partial<VictoryScore>;
@@ -1586,6 +1614,13 @@ export function isVictoryScore(value: unknown): value is VictoryScore {
     && (score.perfectDodges === undefined || (typeof score.perfectDodges === 'number' && score.perfectDodges >= 0))
     && (score.flasksUsed === undefined || (typeof score.flasksUsed === 'number' && score.flasksUsed >= 0))
     && (score.oathRank === undefined || (typeof score.oathRank === 'number' && score.oathRank >= 0 && score.oathRank <= 5));
+}
+
+export function isScoreHistoryEntry(value: unknown): value is ScoreHistoryEntry {
+  if (!isVictoryScore(value)) return false;
+  const completedAt = (value as Partial<ScoreHistoryEntry>).completedAt;
+  return completedAt === null
+    || (typeof completedAt === 'string' && completedAt.length > 0 && Number.isFinite(Date.parse(completedAt)));
 }
 
 export function reducedMotionPreferred(): boolean {
@@ -1694,13 +1729,15 @@ export class Game {
   bests: Record<string, number> = {};
   lastScore: VictoryScore | null = null;
   bestScores: Record<string, VictoryScore> = {};
+  scoreHistory: ScoreHistoryEntry[] = [];
   // accessibility / difficulty — one dial, -3 (aided) .. +5 (vowed)
   grace = -2;
   shakeEnabled = !reducedMotionPreferred();
   flashReduced = reducedMotionPreferred();
   hapticsEnabled = true;
   safeBottom = 0; safeRight = 0;
-  static SAVE_VERSION = 5;
+  static SAVE_VERSION = 6;
+  static SCORE_HISTORY_LIMIT = 20;
   static VICTORY_INPUT_DELAY = 4.5;
   private previousTouchBridge?: (event: TouchEvent, phase: string) => void;
   private previousGame?: Game;
@@ -1763,6 +1800,15 @@ export class Game {
         this.bestScores = Object.fromEntries(
           Object.entries(sv.bestScores).filter((entry): entry is [string, VictoryScore] => isVictoryScore(entry[1])),
         );
+      }
+      if (Array.isArray(sv.scoreHistory)) {
+        this.scoreHistory = sv.scoreHistory
+          .filter((entry: unknown): entry is ScoreHistoryEntry => isScoreHistoryEntry(entry))
+          .slice(0, Game.SCORE_HISTORY_LIMIT);
+      } else if (this.lastScore) {
+        // Older saves did not record a completion timestamp. Preserve their
+        // latest score honestly instead of inventing a date during migration.
+        this.scoreHistory = [{ ...this.lastScore, completedAt: null }];
       }
       if (typeof sv.bestTime === 'number' && sv.bestTime > 0) {
         this.bestTime = sv.bestTime;
@@ -2019,7 +2065,7 @@ export class Game {
       localStorage.setItem('gracefell', JSON.stringify({
         v: Game.SAVE_VERSION,
         bestTime: this.bestTime, bests: this.bests, wins: this.wins,
-        lastScore: this.lastScore, bestScores: this.bestScores,
+        lastScore: this.lastScore, bestScores: this.bestScores, scoreHistory: this.scoreHistory,
         attempts: this.attempts, muted: this.audio.muted,
         musicVolume: this.audio.musicVolume, sfxVolume: this.audio.sfxVolume,
         grace: this.grace, shakeEnabled: this.shakeEnabled, flashReduced: this.flashReduced,
@@ -2074,10 +2120,31 @@ export class Game {
     this.input.bufferPress('confirm');
   }
 
+  returnToTitle() {
+    if (this.state === 'title') return;
+    this.manualPaused = false;
+    this.uiFocused = false;
+    this.uiAudioPreview = false;
+    this.input.reset();
+    this.resetFight();
+    this.trialMods = null;
+    this.state = 'title';
+    this.stateT = 0;
+    this.terminalConfirmSequence = this.input.confirmSequence;
+    this.syncPauseState();
+    this.uiChanged?.();
+  }
+
   uiSnapshot(): GameUiSnapshot {
+    const telegraph = this.state === 'fight' && this.boss.state === 'windup'
+      ? BOSS_ATTACK_LABELS[this.boss.attack]
+      : this.state === 'fight' && this.boss.state === 'staggered'
+        ? 'MALAKAR STAGGERED'
+        : '';
     const status = this.paused ? 'Paused' : this.state === 'title' ? 'Title screen'
       : this.state === 'intro' ? 'Malakar enters the arena'
-      : this.state === 'fight' ? 'Battle in progress'
+      : this.state === 'fight'
+        ? `Battle in progress, phase ${this.boss.phase}${telegraph ? `. ${telegraph}` : ''}`
       : this.state === 'dead' ? `Defeated. Malakar has ${Math.max(0, Math.ceil((this.boss.hp / this.boss.maxHp) * 100))}% health remaining`
       : `Victory. Grade ${this.grade}. Score saved`;
     return {
@@ -2096,6 +2163,21 @@ export class Game {
       flashReduced: this.flashReduced,
       hapticsEnabled: this.hapticsEnabled,
       touch: this.input.isTouch,
+      wins: this.wins,
+      attempts: this.attempts,
+      scoreHistory: this.scoreHistory,
+      combat: {
+        playerHpPercent: Math.round(clamp(this.player.hp / this.player.maxHp, 0, 1) * 100),
+        playerStaminaPercent: Math.round(clamp(this.player.stam / this.player.maxStam, 0, 1) * 100),
+        playerFlasks: this.player.flasks,
+        bossHpPercent: Math.round(clamp(this.boss.hp / this.boss.maxHp, 0, 1) * 100),
+        bossPhase: this.boss.phase,
+        bossPoisePercent: Math.round(clamp(this.boss.poise / this.boss.maxPoise, 0, 1) * 100),
+        bossState: this.boss.state,
+        telegraph,
+        comboHits: this.playerChainHits,
+        queuedLights: this.player.queuedLightAttacks,
+      },
     };
   }
 
@@ -2536,6 +2618,10 @@ export class Game {
     };
     this.lastScore = score;
     if (this.newRecord || !this.bestScores[key]) this.bestScores[key] = score;
+    this.scoreHistory = [
+      { ...score, completedAt: new Date().toISOString() },
+      ...this.scoreHistory,
+    ].slice(0, Game.SCORE_HISTORY_LIMIT);
     this.tutorialStage = 'done';
     this.tutorialT = 0;
     this.persist();
@@ -2635,7 +2721,8 @@ export class Game {
   menuRows(): { id: string; y: number; label: string; value: string }[] {
     const rowCount = this.input.isTouch ? 4 : 3;
     const gap = this.input.isTouch ? 44 : Math.max(30, Math.min(38, this.h * 0.045));
-    const baseY = this.h * (this.input.isTouch ? 0.72 : 0.70) - (rowCount - 3) * gap * 0.5;
+    const baseScale = this.input.isTouch ? 0.72 : this.w < 520 ? 0.735 : 0.70;
+    const baseY = this.h * baseScale - (rowCount - 3) * gap * 0.5;
     const rows = [
       { id: 'grace', y: baseY, label: 'PATH', value: this.graceLabel() },
       { id: 'shake', y: baseY + gap, label: 'SCREEN SHAKE', value: this.shakeEnabled ? 'on' : 'off' },
@@ -3320,6 +3407,15 @@ Game.prototype.drawHUD = function drawHUD(this: Game, ctx: CanvasRenderingContex
   ctx.fillStyle = hpg;
   ctx.fillRect(0, 0, hpw, 14);
   if (p.hurtFlash > 0) { ctx.fillStyle = `rgba(255,120,100,${p.hurtFlash})`; ctx.fillRect(0, 0, hpw, 14); }
+  ctx.save();
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.font = body(9, 800);
+  ctx.fillStyle = 'rgba(255,244,220,0.92)';
+  ctx.shadowColor = 'rgba(0,0,0,0.9)';
+  ctx.shadowBlur = 3;
+  ctx.fillText('HP', 5, 7);
+  ctx.restore();
 
   // stamina
   ctx.translate(0, 22);
@@ -3328,6 +3424,15 @@ Game.prototype.drawHUD = function drawHUD(this: Game, ctx: CanvasRenderingContex
   ctx.fillRect(0, 0, barW * 0.82, 8);
   ctx.fillStyle = PAL.stamina;
   ctx.fillRect(0, 0, (p.stam / p.maxStam) * barW * 0.82, 8);
+  ctx.save();
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.font = body(7, 800);
+  ctx.fillStyle = 'rgba(245,248,224,0.9)';
+  ctx.shadowColor = 'rgba(0,0,0,0.9)';
+  ctx.shadowBlur = 2;
+  ctx.fillText('STAM', 4, 4);
+  ctx.restore();
 
   // flasks
   ctx.translate(0, 20);
@@ -3342,6 +3447,10 @@ Game.prototype.drawHUD = function drawHUD(this: Game, ctx: CanvasRenderingContex
     ctx.strokeRect(-5, -5, 10, 10);
     ctx.restore();
   }
+  ctx.textAlign = 'left';
+  ctx.font = body(9, 750);
+  ctx.fillStyle = 'rgba(226,208,164,0.86)';
+  ctx.fillText('FLASKS', p.maxFlasks * 26 + 2, 10);
   ctx.restore();
 
   // Transient teaching and player-chain feedback stay above the combat
@@ -3360,18 +3469,22 @@ Game.prototype.drawHUD = function drawHUD(this: Game, ctx: CanvasRenderingContex
     ctx.fillText(rite, this.w / 2, y + 2);
   }
 
-  if (this.playerChainHits > 0 && this.playerChainT > 0) {
+  const queuedLights = this.player.queuedLightAttacks;
+  if ((this.playerChainHits > 0 && this.playerChainT > 0) || queuedLights > 0) {
     const y = this.input.isTouch ? 158 : 120;
     const filled = '\u25c6'.repeat(this.playerChainHits);
     const empty = '\u25c7'.repeat(Math.max(0, 3 - this.playerChainHits));
-    ctx.globalAlpha = clamp(this.playerChainT / 0.28, 0, 1);
+    const queued = '\u25c6'.repeat(queuedLights);
+    ctx.globalAlpha = this.playerChainHits > 0 ? clamp(this.playerChainT / 0.28, 0, 1) : 1;
     ctx.textAlign = 'center';
     ctx.font = serif(this.playerChainFinished ? 17 : 14, 750);
     ctx.fillStyle = this.playerChainFinished ? PAL.spirit : PAL.parchment;
     ctx.shadowColor = this.playerChainFinished ? 'rgba(188,215,255,0.7)' : 'rgba(0,0,0,0.8)';
     ctx.shadowBlur = this.playerChainFinished ? 14 : 6;
     ctx.fillText(
-      `${this.playerChainFinished ? 'LIGHT FINISHER' : `CHAIN ${this.playerChainHits}/3`}  ${filled}${empty}`,
+      this.playerChainHits > 0
+        ? `${this.playerChainFinished ? 'LIGHT FINISHER' : `CHAIN ${this.playerChainHits}/3`}  ${filled}${empty}${queued ? `  ·  NEXT ${queued}` : ''}`
+        : `INPUT QUEUED  ${queued}`,
       this.w / 2,
       y,
     );
@@ -3384,14 +3497,10 @@ Game.prototype.drawHUD = function drawHUD(this: Game, ctx: CanvasRenderingContex
     const bw = clamp(this.w * 0.62, 280, 760);
     const bx = (this.w - bw) / 2;
     const by = this.h - (this.input.isTouch ? 248 : 64);
-    const attackLabels: Record<BossAttack, string> = {
-      swipe: 'BLADE', slam: 'GROUND BREAK', charge: 'CHARGE',
-      volley: 'HALO VOLLEY', meteor: 'METEORS', ring: 'RING', spiral: 'SPIRAL',
-    };
     let combatCue = '';
     let combatCueColor = PAL.spirit;
     if (this.mods.clearTells && this.boss.state === 'windup') {
-      combatCue = `READ \u00b7 ${attackLabels[this.boss.attack]}`;
+      combatCue = `READ \u00b7 ${BOSS_ATTACK_LABELS[this.boss.attack]}`;
     } else if (this.boss.chainTotal > 1 && this.boss.chainStep > 0 && this.boss.state !== 'staggered') {
       combatCue = `OATH CHAIN  ${this.boss.chainStep}/${this.boss.chainTotal}`;
       combatCueColor = PAL.ember;
@@ -3473,11 +3582,13 @@ Game.prototype.drawHUD = function drawHUD(this: Game, ctx: CanvasRenderingContex
     const hintAlpha = clamp(this.hintT / 2, 0, 1);
     ctx.globalAlpha = hintAlpha;
     ctx.textAlign = 'center';
-    ctx.font = body(this.input.isTouch ? 13 : 15, 500);
+    const narrowKeyboard = !this.input.isTouch && this.w < 620;
+    ctx.font = body(this.input.isTouch ? 13 : narrowKeyboard ? 12 : 15, 500);
     const hint = this.input.isTouch
       ? 'drag anywhere on the left to move · ROLL is invincible'
-      : 'WASD move · SPACE roll · J / LMB attack · K heavy · F flask · M mute';
-    const hintY = this.input.isTouch ? this.h - 208 : this.h - 18;
+      : narrowKeyboard ? 'WASD MOVE · SPACE ROLL · J ATK'
+        : 'WASD move · SPACE roll · J / LMB attack · K heavy · F flask · M mute';
+    const hintY = this.input.isTouch ? this.h - 208 : narrowKeyboard ? this.h - 34 : this.h - 24;
     if (this.input.isTouch) {
       ctx.fillStyle = 'rgba(8,6,4,0.82)';
       ctx.fillRect(16, hintY - 18, this.w - 32, 28);
@@ -3486,6 +3597,7 @@ Game.prototype.drawHUD = function drawHUD(this: Game, ctx: CanvasRenderingContex
     }
     ctx.fillStyle = this.input.isTouch ? PAL.parchment : PAL.parchmentDim;
     ctx.fillText(hint, this.w / 2, hintY);
+    if (narrowKeyboard) ctx.fillText('K HVY · F FLASK · M MUTE', this.w / 2, this.h - 16);
     ctx.globalAlpha = 1;
   }
 
@@ -3665,20 +3777,26 @@ Game.prototype.drawTitle = function drawTitle(this: Game, ctx: CanvasRenderingCo
     );
   }
 
-  ctx.font = body(this.input.isTouch && this.w < 520 ? 14 : 15, 500);
+  const compactKeyboard = !this.input.isTouch && this.w < 520;
+  ctx.font = body(this.input.isTouch && this.w < 520 ? 14 : compactKeyboard ? 13 : 15, 500);
   ctx.fillStyle = 'rgba(184,170,138,0.92)';
-  ctx.fillText(
-    this.input.isTouch
-      ? 'left thumb steers \u00b7 right thumb strikes, rolls, drinks'
-      : 'WASD move \u00b7 SPACE roll \u00b7 J slash \u00b7 K heavy \u00b7 F flask',
-    cx, this.h * (this.input.isTouch ? 0.64 : 0.655),
-  );
+  if (compactKeyboard) {
+    ctx.fillText('WASD / arrows move \u00b7 SPACE rolls', cx, this.h * 0.64);
+    ctx.fillText('J attack \u00b7 K heavy \u00b7 F flask', cx, this.h * 0.662);
+  } else {
+    ctx.fillText(
+      this.input.isTouch
+        ? 'left thumb steers \u00b7 right thumb strikes, rolls, drinks'
+        : 'WASD move \u00b7 SPACE roll \u00b7 J slash \u00b7 K heavy \u00b7 F flask',
+      cx, this.h * 0.64,
+    );
+  }
   ctx.font = body(11, 650);
   ctx.fillStyle = this.grace < 0 ? PAL.spirit : this.grace > 0 ? PAL.ember : PAL.goldBright;
-  ctx.fillText(this.graceSummary(), cx, this.h * (this.input.isTouch ? 0.668 : 0.68));
+  ctx.fillText(this.graceSummary(), cx, this.h * (this.input.isTouch ? 0.655 : compactKeyboard ? 0.688 : 0.666));
   const selectedBest = this.trialBest();
   if (this.wins > 0 || selectedBest > 0) {
-    const compactStats = this.input.isTouch && this.w < 520;
+    const compactStats = this.w < 520;
     ctx.font = body(compactStats ? 12 : 15, 500);
     ctx.fillStyle = 'rgba(201,169,89,0.75)';
     const bm = Math.floor(selectedBest / 60), bs2 = Math.floor(selectedBest % 60);

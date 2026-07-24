@@ -1487,3 +1487,119 @@ slashes before the `/audio/` and `/assets/` test, so those files were served wit
 `no-cache` locally. Cache classification now uses the untouched URL path, while
 filesystem normalization remains responsible for safe file resolution. The QA header
 probe targets the shipped Phase 1 master rather than the removed single-score file.
+
+## v2.19 — Codex, battle navigation and readable records (2026-07-24)
+
+Three read-only player lanes approached the deployed v2.18 game as a mobile
+beginner, a veteran desktop player, and an audio/accessibility player. The
+consistent findings were not that Malakar needed another system. They were that
+existing state was sometimes too implicit: rapid taps could feel discarded,
+resource bars required genre knowledge, a narrow keyboard viewport clipped its
+instruction line, and the semantic layer could start combat without exposing
+enough information to play it. The owner also asked for an in-battle route back
+to the main menu and a dated score view on that menu.
+
+### Navigation is a temporary layer, not a second game screen
+
+The permanent playfield remains the canvas. MENU and SCORES are small semantic
+DOM entry points; their larger surfaces exist only while opened. MENU appears
+after the title across intro, fight, defeat, and victory. In a live fight it
+reuses the established `uiFocused` pause owner, suspends Web Audio, traps focus,
+removes canvas/background controls from the tab order, and clears combat input
+on dismissal. The confirmation names the cost before acting: the current battle
+is abandoned, while previously earned victories and settings remain.
+
+`Game.returnToTitle()` centralizes the transition. It clears all pause owners and
+input, resets the transient fight, restores the title state, and does not award
+or consume an attempt. A React-only state change would have left engine/audio
+ownership split across two worlds; a canvas-only menu would have lost keyboard
+focus, screen-reader semantics, and reliable 44 px touch geometry.
+
+### The chronicle records facts and admits what it does not know
+
+Save schema v6 adds `scoreHistory`, newest first and capped at 20. A new
+victory copies the existing scorecard and adds `completedAt` as an ISO timestamp
+at the same synchronous point where the win is saved. The title SCORES dialog
+shows grade, fight time, path, completion date/time, damage, wounds, flask use,
+perfect dodges, and attempt number.
+
+v5 knew only the most recent score, not when it happened. Migration preserves
+that score with `completedAt: null`, shown as “Date unavailable.” Inventing the
+current migration date would look complete while being false. Invalid history
+entries are rejected by the exported `isScoreHistoryEntry()` validator; both
+fresh ISO timestamps and honest legacy null dates are unit-tested.
+
+The list is local-device history, not an online leaderboard. Twenty entries keep
+the saved payload and phone dialog bounded without hiding the best-per-path
+records already owned by `bestScores`.
+
+### Press feedback and hit feedback stay different
+
+The three-diamond chain continues to count connected light hits. v2.19 also
+draws queued presses as `INPUT QUEUED` or `NEXT` diamonds during an active light
+animation. This addresses the beginner report without giving a missed swing
+credit, extending the combo window, or making light attacks behave like HVY.
+The queue remains capped at two and all existing roll priority/clear rules stay
+unchanged.
+
+HP, STAM, and FLASKS are now named directly on the canvas. Desktop help sits
+farther from the bottom edge; narrow non-touch help wraps into two short lines;
+title copy reflows without colliding with the Path plate. These changes add only
+text draws—no asset, particle, surface, or per-frame allocation system.
+
+### Semantic state is inspectable, not noisy
+
+`Game.uiSnapshot()` now carries player resources, boss resources/phase/action,
+combo hits, and queued lights. React exposes them in a labelled definition list
+without `aria-live`, so a screen reader can inspect current state without
+hearing changing health percentages every 250 ms. The polite live status is
+reserved for the broader battle state, phase, and named telegraph.
+
+The earlier report that focused semantic controls stayed clipped did not
+reproduce against the source contract: `:focus-within` expands the panel.
+Instead of changing it speculatively, the QA gate now measures the focused panel
+at 620 px wide with `clip-path: none`. The reported pause-card delay was also a
+capture-timing artifact; engine pause rendering and the current DOM label change
+on the same owner transition and remain covered by the pause regression.
+
+### Audio ownership must converge after asynchronous transitions
+
+Rapid MENU close followed by manual pause exposed a real edge case that older
+tests did not create. `AudioContext.resume()` is asynchronous; a later pause
+could see the context still suspended and skip its own `suspend()`, after which
+the older resume promise made audio run under the paused game.
+
+`GameAudio.queueContextState()` now serializes reconciliation. Each task checks
+the newest requested state after an awaited browser transition and converges
+again if ownership changed mid-flight. Immediate media-element pause remains,
+and soundtrack restart happens only when the reconciled context is running and
+no pause owner remains.
+
+### Verification
+
+The release expands the repository contract rather than relying on screenshots
+alone:
+
+- 16 Vitest checks include v6 history timestamps and legacy null dates;
+- desktop and 390×844 lanes measure MENU/SCORES geometry, empty/populated score
+  dialogs, focus restoration, semantic combat state, safe fight freeze/resume,
+  return-to-title invariants, v6 persistence, and v5 score migration;
+- true-touch taps MENU, proves frozen simulation/audio, resumes without input
+  leakage, renders rapid queued-light acknowledgement, and persists a timestamped
+  victory;
+- the existing combat, difficulty, death/retry, music, mix, crossfade,
+  performance, accessibility, and responsive gates remain green;
+- final `npm run qa`: `ok=true`, `nErrors=0`;
+- the in-app browser inspected 1280×800 and 390×844 title, score, fight,
+  confirmation, and return states with no browser warning or error.
+
+### Changed from v2.18
+
+- Save schema moves from v5 to v6 by adding bounded dated score history.
+- A battle can return to the title through a confirmed engine-owned transition.
+- HUD and semantic layers expose existing combat state more clearly.
+- Web Audio state changes are serialized to protect rapid pause-owner handoffs.
+- No difficulty value, boss pattern, player timing/damage, grade formula,
+  soundtrack asset/mix ceiling, render budget, or touch-combat geometry changed.
+- This record covers the completed local candidate only; it does not claim a
+  GitHub push, merge, or production deployment.

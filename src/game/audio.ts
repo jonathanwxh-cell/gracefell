@@ -129,6 +129,7 @@ export class GameAudio {
   private soundtrackLoadToken = 0;
   private soundtrackState: 'idle' | 'loading' | 'playing' | 'fallback' = 'idle';
   private suspended = false;
+  private contextStateTask: Promise<void> = Promise.resolve();
   private schedulerTimer: number | null = null;
   private nextBeatAt = 0;
   private beat = 0;
@@ -174,7 +175,7 @@ export class GameAudio {
 
   init() {
     if (this.ctx) {
-      if (this.ctx.state === 'suspended') void this.ctx.resume();
+      this.queueContextState();
       return;
     }
     const audioWindow = window as Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext };
@@ -324,7 +325,38 @@ export class GameAudio {
     this.preparedImpulse = null;
     this.activeVoices = 0;
     this.suspended = false;
+    this.contextStateTask = Promise.resolve();
     if (ctx && ctx.state !== 'closed') void ctx.close().catch(() => {});
+  }
+
+  private queueContextState() {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    this.contextStateTask = this.contextStateTask.catch(() => {}).then(async () => {
+      if (this.ctx !== ctx || ctx.state === 'closed') return;
+
+      // AudioContext state changes are asynchronous. Reconcile twice so a
+      // newer pause owner can overtake an in-flight resume (and vice versa)
+      // without the older promise restoring the wrong final state.
+      for (let pass = 0; pass < 2; pass++) {
+        const requestedSuspended = this.suspended;
+        try {
+          if (requestedSuspended && ctx.state === 'running') await ctx.suspend();
+          else if (!requestedSuspended && ctx.state === 'suspended') await ctx.resume();
+        } catch { /* browsers can reject state changes during teardown */ }
+        if (requestedSuspended === this.suspended) break;
+      }
+
+      if (this.ctx !== ctx || this.suspended) return;
+      if (this.soundtrackState !== 'playing') return;
+      if (this.soundtrackTransition) {
+        void this.resumeSoundtrackTransition(this.soundtrackTransition);
+      } else {
+        void this.soundtrackDecks[this.activeSoundtrackDeck]?.element.play()
+          .catch(() => this.useProceduralFallback());
+        if (this.pendingSoundtrackPhase) this.queueSoundtrackPhase(this.pendingSoundtrackPhase);
+      }
+    });
   }
 
   suspend() {
@@ -338,25 +370,12 @@ export class GameAudio {
       this.soundtrackRetryTimer = null;
     }
     for (const deck of this.soundtrackDecks) deck?.element.pause();
-    if (this.ctx?.state === 'running') void this.ctx.suspend().catch(() => {});
+    this.queueContextState();
   }
 
   resume() {
     this.suspended = false;
-    if (!this.ctx) return;
-    const resumed = this.ctx.state === 'suspended'
-      ? this.ctx.resume().catch(() => {})
-      : Promise.resolve();
-    void resumed.then(() => {
-      if (this.suspended || this.soundtrackState !== 'playing') return;
-      if (this.soundtrackTransition) {
-        void this.resumeSoundtrackTransition(this.soundtrackTransition);
-      } else {
-        void this.soundtrackDecks[this.activeSoundtrackDeck]?.element.play()
-          .catch(() => this.useProceduralFallback());
-        if (this.pendingSoundtrackPhase) this.queueSoundtrackPhase(this.pendingSoundtrackPhase);
-      }
-    });
+    this.queueContextState();
   }
 
   setMuted(m: boolean) {

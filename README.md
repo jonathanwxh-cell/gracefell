@@ -8,16 +8,16 @@ rules are all decided by what works one-handed on a 390px screen.
 
 **Play it: [gracefell.alyoechosys.dev](https://gracefell.alyoechosys.dev)**
 
-Current gameplay release: **v2.18** — each boss phase now has its own restrained
-MiniMax Music 3.0 cue. The three loop-safe masters are loudness-matched, streamed
-through two permanent decks, and moved between phases in under one second. Combat
-still owns the foreground: overlapping warnings use strongest-wins ducking, and
-players can independently set Music and Combat effects from a safe in-fight MIX
-dialog that pauses the fight while leaving the score audible. v2.18 retains the
-charged heavy, duel camera, stagger execution, burning arena, Journey onboarding,
-authored Oath chains, score persistence, and explicit pause/resume from earlier
-passes. The complete local implementation and verification record is in
-[`docs/releases/v2.18.md`](docs/releases/v2.18.md).
+Current gameplay release: **v2.19** — every active battle now has a safe **MENU**
+route back to the title, and the title has a **SCORES** chronicle for the latest
+20 victories with grade, time, trial, completion date, and execution details.
+Rapid light taps acknowledge queued follow-ups, the combat HUD labels HP, stamina,
+and flasks, and assistive technology receives current player, boss, telegraph, and
+combo state without turning changing percentages into live-announcement spam.
+Save schema v6 migrates an older last score honestly as “Date unavailable.”
+The adaptive MiniMax phase score, MIX controls, Journey/Oath curve, retry behavior,
+and combat timing are unchanged. The complete local implementation and verification
+record is in [`docs/releases/v2.19.md`](docs/releases/v2.19.md).
 
 Zero runtime art assets, three generated music tracks. Every character silhouette, sword, halo blade,
 stone in the floor, ember, cape, and combat cue is generated at runtime from code — canvas 2D for
@@ -37,7 +37,7 @@ The sovereign has an audio language, not one generic warning: swipes whistle, ch
 
 **v2 — extended by Claude (Opus 4.8).** Combat depth, a third phase, a full rendering pass, persistence, and a headless verification gate. Details in [DESIGN.md](DESIGN.md).
 
-**v2.4–v2.18 — audio, responsiveness, combat integrity, character readability, progression, victory persistence, player-controlled pause, and adaptive phase scoring extended by
+**v2.4–v2.19 — audio, responsiveness, combat integrity, character readability, progression, victory persistence, player-controlled pause, adaptive phase scoring, and navigation/accessibility polish extended by
 Codex (GPT-5).** Attack-specific procedural cues, spatial mix protection, the MiniMax-generated
 score family, mobile/accessibility hardening, trustworthy combat and retry behavior, the verified
 Grace-to-Oaths mastery path, and the production Kite-Veil/Blade-Saint silhouettes. The v2.11 player
@@ -67,12 +67,14 @@ who did which pass, and the rules any future agent follows before touching the c
 | **FLASK** | heal (Journey starts with four; the selected path is shown before the fight) |
 | **MIX** | freezes combat while the score remains audible; set Music/Combat effects, test SFX, then Done |
 | **PAUSE / RESUME** | freezes the fight and audio; no time, attack, or input advances |
+| **MENU** | opens a safe confirmation; resume the same frame or abandon this battle and return to the title |
 
 The buttons scale with your screen and sit clear of the home indicator. Haptics fire on hits and
 perfect dodges, and can be switched off on the title screen.
 
 **On a desktop**, if that's what you have: WASD/arrows move, Space or Shift rolls, J or left-click
-slashes, K or right-click is heavy, F drinks, M mutes, and P or Escape pauses/resumes.
+slashes, K or right-click is heavy, F drinks, M mutes, and P or Escape pauses/resumes. MENU is
+also available as a visible button after a battle begins.
 
 ## The fight
 
@@ -89,7 +91,10 @@ packets.
 
 Break his poise to stagger him; staggered hits do 1.4×. Land a roll *into* an incoming attack for a perfect dodge — slow-motion, stamina back, and poise damage. Defense is how you win.
 
-Victory is graded S through C on time and wounds taken. Your best time and win count persist locally. A no-hit run is an S.
+Victory is graded S through C on time and wounds taken. Your best time and win count persist locally.
+The title-screen **SCORES** chronicle keeps the latest 20 victories on this device with their grade,
+fight time, path, attempt, damage, wounds, flask use, perfect dodges, and local completion date.
+A no-hit run is an S.
 
 ## Grace, Measured, and Oaths
 
@@ -411,6 +416,32 @@ Full rationale, measurements, and evidence:
 [`docs/releases/v2.18.md`](docs/releases/v2.18.md) and
 [`public/audio/README.md`](public/audio/README.md).
 
+## Fixed by Codex — v2.19 battle navigation, score chronicle, and combat clarity
+
+- **Leave safely.** MENU is available during intro, combat, defeat, and victory.
+  It opens a focus-trapped confirmation and pauses both simulation and audio
+  during a live fight. Resume returns control to the canvas with no ghost
+  action; Return to main menu abandons only the current battle.
+- **Review real results.** SCORES opens a responsive title-screen chronicle.
+  New victories receive an ISO completion timestamp; the latest 20 are retained.
+  Old v5 saves migrate their last score with “Date unavailable” rather than a
+  fabricated date.
+- **Read the fight sooner.** HP, STAM, and FLASKS are named directly on the HUD.
+  Rapid taps show queued light attacks before they connect, narrow keyboard copy
+  wraps instead of clipping, and desktop help text sits clear of the viewport edge.
+- **Assistive combat state.** The semantic companion now exposes health,
+  stamina, flasks, boss health/phase/poise/action, combo hits, and queued attacks.
+  Only meaningful state/telegraph changes use the polite live status.
+- **One audio race removed.** Web Audio suspend/resume requests are serialized,
+  so quickly moving between MENU, manual pause, focus loss, and gameplay cannot
+  let an older asynchronous transition restore the wrong final state.
+- **Verified locally.** Sixteen unit tests, lint, production build, and the full
+  desktop/mobile/true-touch Playwright gate pass. In-app browser checks at
+  1280×800 and 390×844 covered the title, empty and populated score views,
+  battle confirmation, return flow, focus restoration, and an empty error log.
+
+Full rationale and evidence: [`docs/releases/v2.19.md`](docs/releases/v2.19.md).
+
 ## Running it
 
 ```bash
@@ -446,12 +477,13 @@ served at `http://127.0.0.1:8491/` when `node server.mjs` is running.
 
 Nothing here ships on a claim. `npm run qa` drives real Chromium at 1280×800 and 390×844,
 plus an emulated real-touch phone. It checks canvas output, console health, streamed audio, cold
-first-tap cost, explicit keyboard/touch pause, accessibility focus/pause, intro and terminal isolation, expanded touch targeting,
+first-tap cost, explicit keyboard/touch pause, battle-menu ownership, title score history,
+save-v6 migration, semantic combat state, accessibility focus/pause, intro and terminal isolation, expanded touch targeting,
 hit-stop buffering, 30/60/120 Hz combat motion, meteor cadence, heavy impulse, phase cleanup,
 victory/grade/persistence, touch and pointer-only resurrection, and genuine perfect-dodge behavior.
 It also enumerates the Journey/Oath curve, forces a complete expert boss packet, performs the
 contextual rite, verifies lethal-source advice and Receive Grace ownership, and requires visible
-1/3 → 2/3 → finisher feedback from a real three-tap touch chain. Green, or it isn't done.
+queued-input plus 1/3 → 2/3 → finisher feedback from a real three-tap touch chain. Green, or it isn't done.
 
 ## License
 
