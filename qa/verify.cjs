@@ -767,14 +767,25 @@ async function installAudioSampleRate(context) {
         await pg.waitForFunction(() => window.__game.audio.debugState().soundtrackTransitioning,
           null, { timeout: 1500 }).catch(() => {});
         const phase2TransitionStarted = await pg.evaluate(() => window.__game.audio.debugState().soundtrackTransitioning);
+        let phase2WeatherPause = null;
         if (phase2TransitionStarted) {
+          const beforePause = await pg.evaluate(() => window.__game.weatherSnapshot());
           await pg.keyboard.press('KeyP');
           await pg.waitForFunction(() => window.__game.audio.debugState().contextState === 'suspended',
             null, { timeout: 1200 }).catch(() => {});
+          const pausedAt = await pg.evaluate(() => window.__game.weatherSnapshot());
           await pg.waitForTimeout(160);
+          const held = await pg.evaluate(() => window.__game.weatherSnapshot());
+          phase2WeatherPause = { beforePause, pausedAt, held };
           await pg.keyboard.press('Escape');
           await pg.waitForFunction(() => window.__game.audio.debugState().contextState === 'running',
             null, { timeout: 1200 }).catch(() => {});
+        }
+        step.weatherPause = phase2WeatherPause;
+        if (!phase2WeatherPause
+          || phase2WeatherPause.pausedAt.phase !== 2
+          || Math.abs(phase2WeatherPause.held.blend - phase2WeatherPause.pausedAt.blend) > 0.000001) {
+          out.errors.push('v2.20: phase weather advanced under pause: ' + JSON.stringify(phase2WeatherPause));
         }
         // The score waits at most 250ms for the next nominal 78 BPM beat,
         // then completes its 720ms equal-power crossfade.
@@ -797,6 +808,22 @@ async function installAudioSampleRate(context) {
         const decayPh2 = await pg.evaluate(() => (window).__game.phaseDecay ?? null);
         step.decayPh2 = decayPh2;
         if (decayPh2 === null || !(decayPh2 >= 1)) out.errors.push('v2.14 (4): phase-2 arena decay not applied (decay=' + decayPh2 + ')');
+        await pg.waitForFunction(() => window.__game.weatherSnapshot().blend >= 0.99,
+          null, { timeout: 3500 }).catch(() => {});
+        const weatherPh2 = await pg.evaluate(() => window.__game.weatherSnapshot());
+        step.weatherPhase2 = weatherPh2;
+        if (weatherPh2.phase !== 2
+          || weatherPh2.label !== 'Ember Gale'
+          || weatherPh2.blend < 0.99
+          || weatherPh2.moteCount !== 64
+          || weatherPh2.backgroundMotes !== 48
+          || weatherPh2.foregroundMotes !== 16
+          || weatherPh2.windX <= 0
+          || weatherPh2.streak < 5) {
+          out.errors.push('v2.20: phase-2 fixed-pool Ember Gale contract failed: '
+            + JSON.stringify(weatherPh2));
+        }
+        await pg.screenshot({ path: path.join(ARTIFACT_DIR, 'desktop-weather-phase2.png') });
 
         // The first incoming phase-3 play is rejected deliberately. The
         // controller must retain the phase request, retry the same permanent
@@ -841,6 +868,75 @@ async function installAudioSampleRate(context) {
         const decayPh3 = await pg.evaluate(() => (window).__game.phaseDecay ?? null);
         step.decayPh3 = decayPh3;
         if (decayPh3 === null || !(decayPh3 > (step.decayPh2 ?? 0))) out.errors.push('v2.14 (4): phase-3 arena decay did not deepen (decay=' + decayPh3 + ')');
+        await pg.waitForFunction(() => window.__game.weatherSnapshot().blend >= 0.99,
+          null, { timeout: 3500 }).catch(() => {});
+        const weatherPh3 = await pg.evaluate(() => {
+          const g = window.__game;
+          const normal = g.weatherSnapshot();
+          const oldFlash = g.flashReduced;
+          g.flashReduced = true;
+          const reduced = g.weatherSnapshot();
+          g.flashReduced = oldFlash;
+          return { normal, reduced };
+        });
+        step.weatherPhase3 = weatherPh3;
+        if (weatherPh3.normal.phase !== 3
+          || weatherPh3.normal.label !== 'Gracefall Storm'
+          || weatherPh3.normal.blend < 0.99
+          || weatherPh3.normal.moteCount !== 64
+          || weatherPh3.normal.windX >= 0
+          || weatherPh3.normal.streak < 8
+          || !weatherPh3.reduced.reducedMotion
+          || weatherPh3.reduced.motionScale !== 0.45
+          || weatherPh3.reduced.streak >= weatherPh3.normal.streak
+          || Math.abs(weatherPh3.reduced.windX) >= Math.abs(weatherPh3.normal.windX)) {
+          out.errors.push('v2.20: phase-3 Gracefall/reduced-motion contract failed: '
+            + JSON.stringify(weatherPh3));
+        }
+        const weatherPerf = await pg.evaluate(() => {
+          const g = window.__game;
+          const saved = {
+            from: g.weatherFromPhase,
+            phase: g.weatherPhase,
+            blend: g.weatherBlend,
+          };
+          const sample = (phase) => {
+            g.weatherFromPhase = phase;
+            g.weatherPhase = phase;
+            g.weatherBlend = 1;
+            for (let i = 0; i < 20; i++) g.render();
+            const costs = [];
+            for (let i = 0; i < 120; i++) {
+              const started = performance.now();
+              g.render();
+              costs.push(performance.now() - started);
+            }
+            costs.sort((a, b) => a - b);
+            return {
+              median: costs[Math.floor(costs.length * 0.5)],
+              p95: costs[Math.floor(costs.length * 0.95)],
+            };
+          };
+          const phase1 = sample(1);
+          const phase2 = sample(2);
+          const phase3 = sample(3);
+          g.weatherFromPhase = saved.from;
+          g.weatherPhase = saved.phase;
+          g.weatherBlend = saved.blend;
+          g.render();
+          return {
+            phase1,
+            phase2,
+            phase3,
+            phase3MedianDelta: phase3.median - phase1.median,
+            phase3P95Delta: phase3.p95 - phase1.p95,
+          };
+        });
+        step.weatherPerformance = weatherPerf;
+        if (weatherPerf.phase3MedianDelta > 0.5 || weatherPerf.phase3P95Delta > 1) {
+          out.errors.push('v2.20: Gracefall weather exceeded its relative render budget: '
+            + JSON.stringify(weatherPerf));
+        }
         // v2.15: phase 3 lifts the adaptive music through the existing buses.
         const audioLift = await pg.evaluate(() => { const s = window.__game.audio.debugState(); return s.phaseLift ?? null; });
         step.audioPhaseLift = audioLift;
@@ -850,6 +946,7 @@ async function installAudioSampleRate(context) {
         await pg.waitForTimeout(3500);
         const alive = await pg.evaluate(() => { const g = (window).__game; return { st: g.state, projs: g.projectiles.length, parts: g.particles.length, scorch: !!g.scorchCanvas }; });
         step.phase3Run = alive;
+        await pg.screenshot({ path: path.join(ARTIFACT_DIR, 'desktop-weather-phase3.png') });
 
         // v2.14 (2): stagger execution. The first heavy into a staggered
         // Malakar is a riposte that spikes damage exactly once, then reverts to
@@ -2466,10 +2563,18 @@ async function installAudioSampleRate(context) {
       t.consoleErrors = cerr;
       out.steps.touch = t;
       await pg.screenshot({ path: path.join(ARTIFACT_DIR, 'touch-combat.png') });
-      await pg.evaluate(() => {
+      t.weatherPhase2 = await pg.evaluate(() => {
         const g = window.__game; g.state = 'fight'; g.boss.phase = 2;
+        g.deepenArena(2); g.weatherBlend = 1;
         g.banner('THE SOVEREIGN BURNS', 'phase'); g.render();
+        return g.weatherSnapshot();
       });
+      if (t.weatherPhase2.phase !== 2
+        || t.weatherPhase2.moteCount !== 64
+        || t.weatherPhase2.backgroundMotes !== 48
+        || t.weatherPhase2.foregroundMotes !== 16) {
+        out.errors.push('touch: fixed-pool Ember Gale did not render: ' + JSON.stringify(t.weatherPhase2));
+      }
       await pg.screenshot({ path: path.join(ARTIFACT_DIR, 'touch-phase2.png') });
 
       t.journeyTell = await pg.evaluate(() => {

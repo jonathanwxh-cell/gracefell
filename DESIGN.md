@@ -1607,3 +1607,101 @@ alone:
 - The complete public desktop/mobile/true-touch gate passed against
   `https://gracefell.alyoechosys.dev/` with `ok=true`, zero console errors, and
   the established performance thresholds unchanged.
+
+## v2.20 — Codex, "the fixed-pool Ash Gale" (2026-07-24)
+
+The weather request arrived after v2.19 was already live. The constraint was not
+simply “add particles”; it was to make the room change visibly during the fight
+without masking the increasingly dense boss patterns or spending the phone
+render budget that those patterns need.
+
+Browser guidance pointed toward reuse rather than another effect stack:
+pre-render repeated static work, batch Canvas state changes, avoid full-screen
+blur, and measure frame cost rather than assuming it. Gracefell already had the
+right raw material—64 screen-space ash/grace motes, three god rays, an ember
+emitter, a cached floor/scorch surface, phase flashes, and three phase scores.
+The implementation changes those existing systems instead of adding weather
+assets, a shader, a second canvas, or a second simulation.
+
+### Three authored states, one procedural motion field
+
+`weatherForPhase()` is the renderer's single profile table:
+
+- **Quiet Ash** keeps the original near-still vertical drift, warm grace points,
+  steady rays, and neutral ash-black room.
+- **Ember Gale** moves warm ash diagonally left-to-right, lengthens it into
+  streaks, leans the existing world-space embers, warms the backdrop, and gives
+  the rays more sway.
+- **Gracefall Storm** reverses the wind right-to-left, lengthens pale ash again,
+  darkens/cools the backdrop, and weakens the rays.
+
+Two deterministic sine waves supply gust variation. Weather therefore moves
+organically without `Math.random()` flicker, a separate timer, or gameplay
+state. Phase changes crossfade with a smoothstep over 2.4 seconds. Because the
+blend and gust use `Game.time`, hit-stop, MENU, manual pause, and browser
+interruption freeze the room with the fight.
+
+### Depth ordering preserves combat truth
+
+The pool remains exactly 64 motes. Forty-eight are batched into two Canvas stroke
+paths and drawn above the cached floor but below telegraphs, entities, hazards,
+and world effects. Sixteen existing motes become a higher-alpha foreground
+slice, but only outside the central 42% band and still below the HUD and touch
+controls.
+
+The first visual capture exposed an important ordering mistake: drawing the
+background motes before `drawArena()` let the opaque cached floor erase most of
+the effect, especially on a 390×844 phone where the arena fills the viewport.
+The final ordering draws the floor, restores to screen space for low-alpha ash,
+then reapplies the same camera transform for combat. This costs one save/restore
+and transform pair, not another surface or render pass.
+
+### Comfort is part of the weather contract
+
+If either flash reduction is enabled or screen shake is disabled, non-essential
+weather motion uses a 0.45 scale and streak length falls to 55%. The system does
+not add lightning, full-screen opacity pulses, camera movement, or continuous
+wind audio. The existing phase roar and gated flash remain the transition cue,
+so action sounds and the phase score keep their established mix priority.
+
+### What was rejected
+
+- **Rain:** more visible strokes, weaker thematic fit, and unnecessary screen
+  competition.
+- **Full-screen fog or blur:** fill-rate cost and obscured telegraphs.
+- **Lightning:** redundant with phase flashes and unsafe as ambient decoration.
+- **A WebGL weather shader:** disproportionate architecture and regression cost
+  for a Canvas 2D game.
+- **An OffscreenCanvas worker:** useful for heavy independent renderers, but
+  needless coordination for 64 batched primitives.
+- **Adaptive particle spawning:** a second quality system would add complexity
+  when the existing fixed pool already meets the budget.
+
+### Verification
+
+- Vitest now has 18 checks, including ordered weather profiles, clamped phase
+  lookup, and the reduced-motion scale.
+- Desktop QA proves the 2.4-second Phase 2 and Phase 3 crossfades, exact
+  48-background/16-foreground split, opposite gale directions, pause-frozen
+  blend, reduced-motion wind/streak reduction, and zero console errors.
+- Across two green full runs, the same-scene render probe held every phase at
+  0.4–0.5 ms median and 0.6–1.0 ms p95. The worst observed Phase 3 versus
+  Phase 1 regression was 0 ms median / 0.4 ms p95, below the 0.5/1.0 ms
+  feature budgets.
+- True-touch QA renders the real Ember Gale at 390×844 and retains all existing
+  control geometry, combat, difficulty, retry, audio, and persistence gates.
+- Desktop Phase 2/3 and touch Phase 2 screenshots were inspected. Ash reads
+  across the arena while the player, boss, ring tell, health bars, MENU, and
+  action controls remain visually dominant.
+- Final `npm test`, `npm run lint`, `npm run build`, and `npm run qa` pass;
+  Playwright reports `ok=true` with zero errors.
+
+### Changed from v2.19
+
+- Phase changes now alter atmospheric motion, colour, backdrop, ray behaviour,
+  and ember direction.
+- The 64-mote count, existing particle cap, runtime asset set, audio graph,
+  difficulty, boss patterns, player timing/damage, saves, layout, and controls
+  are unchanged.
+- This is a completed local candidate. No GitHub push, production service
+  restart, or public verification is claimed by this pass.

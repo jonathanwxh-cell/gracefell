@@ -57,6 +57,72 @@ export const PAL = {
   spirit: '#bcd7ff',
 };
 
+export type WeatherPhase = 1 | 2 | 3;
+
+export interface WeatherProfile {
+  phase: WeatherPhase;
+  label: 'Quiet Ash' | 'Ember Gale' | 'Gracefall Storm';
+  windX: number;
+  gust: number;
+  rise: number;
+  drift: number;
+  streak: number;
+  alpha: number;
+  foregroundAlpha: number;
+  raySway: number;
+  rayAlpha: number;
+  bgR: number;
+  bgG: number;
+  bgB: number;
+  ashR: number;
+  ashG: number;
+  ashB: number;
+  ashLightR: number;
+  ashLightG: number;
+  ashLightB: number;
+  rayR: number;
+  rayG: number;
+  rayB: number;
+}
+
+const WEATHER_PROFILES: readonly WeatherProfile[] = [
+  {
+    phase: 1, label: 'Quiet Ash',
+    windX: 0, gust: 2, rise: 0.68, drift: 0.72, streak: 0.6,
+    alpha: 0.24, foregroundAlpha: 0.16, raySway: 0.72, rayAlpha: 1,
+    bgR: 22, bgG: 18, bgB: 12,
+    ashR: 138, ashG: 122, ashB: 92,
+    ashLightR: 201, ashLightG: 169, ashLightB: 89,
+    rayR: 240, rayG: 215, rayB: 140,
+  },
+  {
+    phase: 2, label: 'Ember Gale',
+    windX: 30, gust: 14, rise: 1.02, drift: 1.35, streak: 5.5,
+    alpha: 0.32, foregroundAlpha: 0.58, raySway: 1.18, rayAlpha: 0.74,
+    bgR: 27, bgG: 15, bgB: 8,
+    ashR: 151, ashG: 105, ashB: 58,
+    ashLightR: 216, ashLightG: 158, ashLightB: 71,
+    rayR: 232, rayG: 161, rayB: 60,
+  },
+  {
+    phase: 3, label: 'Gracefall Storm',
+    windX: -48, gust: 26, rise: 1.2, drift: 1.78, streak: 9,
+    alpha: 0.4, foregroundAlpha: 0.84, raySway: 1.6, rayAlpha: 0.46,
+    bgR: 16, bgG: 11, bgB: 10,
+    ashR: 154, ashG: 142, ashB: 119,
+    ashLightR: 218, ashLightG: 203, ashLightB: 157,
+    rayR: 216, rayG: 203, rayB: 164,
+  },
+] as const;
+
+export function weatherForPhase(phase: number): WeatherProfile {
+  return WEATHER_PROFILES[Math.round(clamp(phase, 1, 3)) - 1];
+}
+
+export function weatherMotionScale(reduced: boolean): number {
+  return reduced ? 0.45 : 1;
+}
+
 // ------------------------------------------------------------------ types
 interface Particle {
   x: number; y: number; vx: number; vy: number;
@@ -70,6 +136,21 @@ interface RingWave { x: number; y: number; r: number; speed: number; thickness: 
 interface Meteor { x: number; y: number; fuse: number; maxFuse: number; r: number; dmg: number; }
 type PlayerImpact = 'light' | 'finisher' | 'heavy';
 type DamageSource = BossAttack | 'unknown';
+
+export interface WeatherSnapshot {
+  fromPhase: WeatherPhase;
+  phase: WeatherPhase;
+  label: WeatherProfile['label'];
+  blend: number;
+  reducedMotion: boolean;
+  motionScale: number;
+  windX: number;
+  rise: number;
+  streak: number;
+  moteCount: number;
+  backgroundMotes: number;
+  foregroundMotes: number;
+}
 
 // ------------------------------------------------------------------ input
 const KEYMAP: Record<string, string> = {
@@ -1691,6 +1772,9 @@ export class Game {
   hitstop = 0; timeScale = 1; slowT = 0;
   redFlash = 0; goldFlash = 0;
   phaseDecay = 0; emberDensityMul = 1; // v2.14: escalating arena deterioration
+  weatherFromPhase: WeatherPhase = 1;
+  weatherPhase: WeatherPhase = 1;
+  weatherBlend = 1;
   bannerText = ''; bannerSub = ''; bannerT = 0; bannerKind = '';
   raf = 0; lastTs = 0;
   dpr = 1; w = 0; h = 0;
@@ -1739,6 +1823,9 @@ export class Game {
   static SAVE_VERSION = 6;
   static SCORE_HISTORY_LIMIT = 20;
   static VICTORY_INPUT_DELAY = 4.5;
+  static WEATHER_TRANSITION_S = 2.4;
+  static WEATHER_MOTE_COUNT = 64;
+  static WEATHER_FOREGROUND_MOTES = 16;
   private previousTouchBridge?: (event: TouchEvent, phase: string) => void;
   private previousGame?: Game;
   private readonly touchBridge = (event: TouchEvent, phase: string) => this.handleTouch(event, phase);
@@ -1775,7 +1862,7 @@ export class Game {
       });
     }
     // parallax ash field (screen space)
-    for (let i = 0; i < 64; i++) {
+    for (let i = 0; i < Game.WEATHER_MOTE_COUNT; i++) {
       this.motes.push({
         x: Math.random(), y: Math.random(), spd: rand(7, 26), drift: rand(-5, 5),
         size: rand(0.7, 2.2), par: rand(0.02, 0.09), kind: i < 8 ? 'grace' : 'ash',
@@ -1964,11 +2051,134 @@ export class Game {
     return this.input.touchPoints.some((p) => Math.hypot(p.x - hvy.x, p.y - hvy.y) < hvy.r * 1.6);
   }
 
+  beginWeatherPhase(phase: number) {
+    const next = weatherForPhase(phase).phase;
+    if (next === this.weatherPhase) return;
+    this.weatherFromPhase = this.weatherPhase;
+    this.weatherPhase = next;
+    this.weatherBlend = 0;
+  }
+
+  weatherSnapshot(): WeatherSnapshot {
+    const from = weatherForPhase(this.weatherFromPhase);
+    const to = weatherForPhase(this.weatherPhase);
+    const blend = this.weatherBlend * this.weatherBlend * (3 - 2 * this.weatherBlend);
+    const reducedMotion = this.flashReduced || !this.shakeEnabled;
+    const motionScale = weatherMotionScale(reducedMotion);
+    const gustWave = Math.sin(this.time * 0.63) * 0.72 + Math.sin(this.time * 1.73 + 0.8) * 0.28;
+    const windX = (lerp(from.windX, to.windX, blend) + lerp(from.gust, to.gust, blend) * gustWave)
+      * motionScale;
+    return {
+      fromPhase: from.phase,
+      phase: to.phase,
+      label: to.label,
+      blend,
+      reducedMotion,
+      motionScale,
+      windX,
+      rise: lerp(from.rise, to.rise, blend) * motionScale,
+      streak: lerp(from.streak, to.streak, blend) * (reducedMotion ? 0.55 : 1),
+      moteCount: this.motes.length,
+      backgroundMotes: Math.max(0, this.motes.length - Game.WEATHER_FOREGROUND_MOTES),
+      foregroundMotes: Math.min(this.motes.length, Game.WEATHER_FOREGROUND_MOTES),
+    };
+  }
+
+  drawWeatherMotes(
+    ctx: CanvasRenderingContext2D,
+    start: number,
+    end: number,
+    foreground: boolean,
+    from: WeatherProfile,
+    to: WeatherProfile,
+    blend: number,
+  ) {
+    const reducedMotion = this.flashReduced || !this.shakeEnabled;
+    const motionScale = weatherMotionScale(reducedMotion);
+    const gustWave = Math.sin(this.time * 0.63) * 0.72 + Math.sin(this.time * 1.73 + 0.8) * 0.28;
+    const windX = (lerp(from.windX, to.windX, blend) + lerp(from.gust, to.gust, blend) * gustWave)
+      * motionScale;
+    const rise = lerp(from.rise, to.rise, blend) * motionScale;
+    const drift = lerp(from.drift, to.drift, blend) * motionScale;
+    const streak = lerp(from.streak, to.streak, blend) * (reducedMotion ? 0.55 : 1);
+    const alpha = lerp(
+      foreground ? from.foregroundAlpha : from.alpha,
+      foreground ? to.foregroundAlpha : to.alpha,
+      blend,
+    );
+    const dirX = windX * 0.8;
+    const dirY = -20 * Math.max(0.2, rise);
+    const dirLength = Math.max(1, Math.hypot(dirX, dirY));
+    const ux = dirX / dirLength;
+    const uy = dirY / dirLength;
+    const time = this.time;
+    const first = clamp(start, 0, this.motes.length);
+    const last = clamp(end, first, this.motes.length);
+    const ashR = Math.round(lerp(from.ashR, to.ashR, blend));
+    const ashG = Math.round(lerp(from.ashG, to.ashG, blend));
+    const ashB = Math.round(lerp(from.ashB, to.ashB, blend));
+    const lightR = Math.round(lerp(from.ashLightR, to.ashLightR, blend));
+    const lightG = Math.round(lerp(from.ashLightG, to.ashLightG, blend));
+    const lightB = Math.round(lerp(from.ashLightB, to.ashLightB, blend));
+
+    ctx.save();
+    ctx.lineCap = 'round';
+    for (let group = 0; group < 2; group++) {
+      ctx.beginPath();
+      for (let i = first; i < last; i++) {
+        const mote = this.motes[i];
+        if (mote.kind !== 'ash' || Number(mote.size > 1.6) !== group) continue;
+        const px = ((mote.x * this.w
+          + time * (mote.drift * drift + windX * (0.45 + mote.par * 5))
+          - this.camX * mote.par * 10) % this.w + this.w) % this.w;
+        const py = ((mote.y * this.h - time * mote.spd * rise
+          - this.camY * mote.par * 10) % this.h + this.h) % this.h;
+        if (foreground) {
+          const edgeX = Math.abs(px - this.w / 2) / Math.max(1, this.w / 2);
+          const edgeY = Math.abs(py - this.h / 2) / Math.max(1, this.h / 2);
+          if (Math.max(edgeX, edgeY) < 0.42) continue;
+        }
+        const length = Math.max(0.5, streak * mote.size * (0.72 + mote.par * 4));
+        const x = Math.round(px);
+        const y = Math.round(py);
+        ctx.moveTo(x - ux * length * 0.5, y - uy * length * 0.5);
+        ctx.lineTo(x + ux * length * 0.5, y + uy * length * 0.5);
+      }
+      ctx.globalAlpha = clamp(alpha * (group ? 0.88 : 0.62), 0, 0.92);
+      ctx.strokeStyle = group
+        ? `rgb(${lightR},${lightG},${lightB})`
+        : `rgb(${ashR},${ashG},${ashB})`;
+      ctx.lineWidth = group ? 1.45 : 0.85;
+      ctx.stroke();
+    }
+
+    if (!foreground) {
+      ctx.globalAlpha = clamp(alpha * 0.58, 0, 0.72);
+      ctx.fillStyle = `rgb(${lightR},${lightG},${lightB})`;
+      for (let i = first; i < last; i++) {
+        const mote = this.motes[i];
+        if (mote.kind !== 'grace') continue;
+        const px = ((mote.x * this.w
+          + time * (mote.drift * drift + windX * (0.3 + mote.par * 3))
+          - this.camX * mote.par * 10) % this.w + this.w) % this.w;
+        const py = ((mote.y * this.h - time * mote.spd * rise
+          - this.camY * mote.par * 10) % this.h + this.h) % this.h;
+        const twinkle = reducedMotion ? 0.82 : 0.75 + Math.sin(time * 1.7 + mote.x * 11) * 0.25;
+        const x = Math.round(px);
+        const y = Math.round(py);
+        ctx.fillRect(x - 0.6, y - mote.size * 2.1 * twinkle, 1.2, mote.size * 4.2 * twinkle);
+        ctx.fillRect(x - mote.size * 1.35, y - 0.5, mote.size * 2.7, 1);
+      }
+    }
+    ctx.restore();
+  }
+
   deepenArena(phase: number) {
     // Phase spectacle through the existing accumulation surfaces only: the
     // offscreen scorch canvas and ambient embers, never per-frame drawArena
     // detail (baked-floor invariant). Dark scorch + amber embers; the reserved
     // hazard hue is never touched.
+    this.beginWeatherPhase(phase);
     this.phaseDecay = phase - 1;
     this.emberDensityMul = phase >= 3 ? 2 : 1.5;
     const stamps = phase >= 3 ? 10 : 6;
@@ -2658,6 +2868,7 @@ export class Game {
     this.particles = []; this.dmgNums = [];
     this.fightTime = 0; this.damageDealt = 0; this.hitsTaken = 0;
     this.phaseDecay = 0; this.emberDensityMul = 1;
+    this.weatherFromPhase = 1; this.weatherPhase = 1; this.weatherBlend = 1;
     this.perfectDodges = 0; this.flasksUsed = 0;
     this.breakPlayerChain();
     this.lastDamageSource = 'unknown';
@@ -2858,6 +3069,9 @@ export class Game {
 
     this.time += dt;
     this.stateT += dt;
+    if (this.weatherBlend < 1) {
+      this.weatherBlend = Math.min(1, this.weatherBlend + dt / Game.WEATHER_TRANSITION_S);
+    }
     this.playerChainT = Math.max(0, this.playerChainT - dt);
     if (this.playerChainT <= 0 && this.playerChainHits > 0) this.breakPlayerChain();
     this.tutorialT = Math.max(0, this.tutorialT - dt);
@@ -2987,8 +3201,18 @@ export class Game {
     if (this.ambientT <= 0) {
       this.ambientT = 0.12 / this.emberDensityMul;
       const a = rand(0, TAU), r = Math.sqrt(Math.random()) * this.arenaR;
+      const weatherFrom = weatherForPhase(this.weatherFromPhase);
+      const weatherTo = weatherForPhase(this.weatherPhase);
+      const weatherBlend = this.weatherBlend * this.weatherBlend * (3 - 2 * this.weatherBlend);
+      const weatherMotion = weatherMotionScale(this.flashReduced || !this.shakeEnabled);
+      const gustWave = Math.sin(this.time * 0.63) * 0.72 + Math.sin(this.time * 1.73 + 0.8) * 0.28;
+      const windX = (lerp(weatherFrom.windX, weatherTo.windX, weatherBlend)
+        + lerp(weatherFrom.gust, weatherTo.gust, weatherBlend) * gustWave) * weatherMotion;
+      const rise = lerp(weatherFrom.rise, weatherTo.rise, weatherBlend) * weatherMotion;
       this.addParticle({
-        x: Math.cos(a) * r, y: Math.sin(a) * r, vx: rand(-8, 8), vy: rand(-26, -10),
+        x: Math.cos(a) * r, y: Math.sin(a) * r,
+        vx: rand(-8, 8) + windX * 0.34,
+        vy: rand(-26, -10) * rise,
         life: rand(1.5, 3), maxLife: 3, size: rand(0.8, 2), sizeEnd: 0,
         color: Math.random() < 0.6 ? '#7a5a30' : PAL.gold, glow: true, drag: 0.2, grav: -6, shape: 'wisp',
       });
@@ -3087,12 +3311,22 @@ const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Gar
 
 Game.prototype.render = function render(this: Game) {
   const ctx = this.ctx;
+  const weatherFrom = weatherForPhase(this.weatherFromPhase);
+  const weatherTo = weatherForPhase(this.weatherPhase);
+  const weatherBlend = this.weatherBlend * this.weatherBlend * (3 - 2 * this.weatherBlend);
+  const reducedWeather = this.flashReduced || !this.shakeEnabled;
+  const weatherMotion = weatherMotionScale(reducedWeather);
+  const gustWave = Math.sin(this.time * 0.63) * 0.72 + Math.sin(this.time * 1.73 + 0.8) * 0.28;
+  const weatherWind = (lerp(weatherFrom.windX, weatherTo.windX, weatherBlend)
+    + lerp(weatherFrom.gust, weatherTo.gust, weatherBlend) * gustWave) * weatherMotion;
   ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
   ctx.clearRect(0, 0, this.w, this.h);
 
   // ---- backdrop
   const bgGrad = ctx.createRadialGradient(this.w / 2, this.h / 2, 10, this.w / 2, this.h / 2, Math.max(this.w, this.h) * 0.75);
-  bgGrad.addColorStop(0, '#16120c');
+  bgGrad.addColorStop(0, `rgb(${Math.round(lerp(weatherFrom.bgR, weatherTo.bgR, weatherBlend))},${
+    Math.round(lerp(weatherFrom.bgG, weatherTo.bgG, weatherBlend))},${
+    Math.round(lerp(weatherFrom.bgB, weatherTo.bgB, weatherBlend))})`);
   bgGrad.addColorStop(0.6, PAL.bg);
   bgGrad.addColorStop(1, '#050403');
   ctx.fillStyle = bgGrad;
@@ -3101,13 +3335,19 @@ Game.prototype.render = function render(this: Game) {
   // ---- god rays — faint shafts of grace from above
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
+  const raySway = lerp(weatherFrom.raySway, weatherTo.raySway, weatherBlend) * weatherMotion;
+  const rayAlpha = lerp(weatherFrom.rayAlpha, weatherTo.rayAlpha, weatherBlend);
+  const rayR = Math.round(lerp(weatherFrom.rayR, weatherTo.rayR, weatherBlend));
+  const rayG = Math.round(lerp(weatherFrom.rayG, weatherTo.rayG, weatherBlend));
+  const rayB = Math.round(lerp(weatherFrom.rayB, weatherTo.rayB, weatherBlend));
   for (let i = 0; i < 3; i++) {
-    const sway = Math.sin(this.time * 0.12 + i * 2.1) * this.w * 0.06;
+    const sway = Math.sin(this.time * 0.12 * weatherMotion + i * 2.1) * this.w * 0.06 * raySway
+      + weatherWind * (i - 1) * 0.55;
     const bx = this.w * (0.3 + i * 0.2) + sway;
     const spread = this.w * 0.10;
     const rg2 = ctx.createLinearGradient(0, 0, 0, this.h);
-    rg2.addColorStop(0, 'rgba(240,215,140,0.05)');
-    rg2.addColorStop(0.75, 'rgba(240,215,140,0.008)');
+    rg2.addColorStop(0, `rgba(${rayR},${rayG},${rayB},${0.05 * rayAlpha})`);
+    rg2.addColorStop(0.75, `rgba(${rayR},${rayG},${rayB},${0.008 * rayAlpha})`);
     rg2.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = rg2;
     ctx.beginPath();
@@ -3119,37 +3359,32 @@ Game.prototype.render = function render(this: Game) {
   }
   ctx.restore();
 
-  // ---- drifting ash (parallax, screen space)
-  ctx.save();
-  for (const m of this.motes) {
-    const px = ((m.x * this.w + this.time * m.drift - this.camX * m.par * 10) % this.w + this.w) % this.w;
-    const py = ((m.y * this.h - this.time * m.spd - this.camY * m.par * 10) % this.h + this.h) % this.h;
-    ctx.globalAlpha = 0.10 + m.par * 2.2;
-    ctx.fillStyle = m.kind === 'grace' ? '#e2c978' : (m.size > 1.6 ? '#c9a959' : '#8a7a5c');
-    if (m.kind === 'grace') {
-      const twinkle = 0.75 + Math.sin(this.time * 1.7 + m.x * 11) * 0.25;
-      ctx.fillRect(px - 0.6, py - m.size * 2.1 * twinkle, 1.2, m.size * 4.2 * twinkle);
-      ctx.fillRect(px - m.size * 1.35, py - 0.5, m.size * 2.7, 1);
-    } else {
-      ctx.beginPath(); ctx.arc(px, py, m.size, 0, TAU); ctx.fill();
-    }
-  }
-  ctx.restore();
+  const foregroundStart = Math.max(0, this.motes.length - Game.WEATHER_FOREGROUND_MOTES);
 
-  // ---- camera transform
   let shX = 0, shY = 0;
   if (this.shakeAmp > 0.1) {
     const decay = 1 - this.shakeT / Math.max(0.001, this.shakeDur);
     shX = rand(-1, 1) * this.shakeAmp * decay;
     shY = rand(-1, 1) * this.shakeAmp * decay;
   }
+  const zp = this.camZoom * (1 + this.zoomPunch);
+
+  // Draw the arena first, then the low-alpha screen-space ash, so the cached
+  // floor cannot erase weather that still belongs behind every combat signal.
   ctx.save();
   ctx.translate(this.w / 2 + shX, this.h / 2 + shY);
-  const zp = this.camZoom * (1 + this.zoomPunch);
   ctx.scale(zp, zp);
   ctx.translate(-this.camX, -this.camY);
-
   this.drawArena(ctx);
+  ctx.restore();
+
+  this.drawWeatherMotes(ctx, 0, foregroundStart, false, weatherFrom, weatherTo, weatherBlend);
+
+  // ---- camera transform for telegraphs, entities, hazards, and world FX
+  ctx.save();
+  ctx.translate(this.w / 2 + shX, this.h / 2 + shY);
+  ctx.scale(zp, zp);
+  ctx.translate(-this.camX, -this.camY);
 
   // telegraphs under entities
   if (this.boss.hp > 0) this.boss.drawTelegraph(ctx);
@@ -3291,6 +3526,12 @@ Game.prototype.render = function render(this: Game) {
   ctx.globalAlpha = 1;
 
   ctx.restore(); // end world transform
+
+  // Edge-only foreground ash creates depth without crossing the central
+  // player/boss/telegraph band. HUD and touch controls remain above it.
+  this.drawWeatherMotes(
+    ctx, foregroundStart, this.motes.length, true, weatherFrom, weatherTo, weatherBlend,
+  );
 
   // ---- vignette + flashes
   const vg = ctx.createRadialGradient(this.w / 2, this.h / 2, Math.min(this.w, this.h) * 0.42, this.w / 2, this.h / 2, Math.max(this.w, this.h) * 0.72);

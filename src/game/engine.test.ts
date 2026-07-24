@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   clamp, lerp, dist, angTo, angDiff, TAU, seededRandom,
   difficultyForGrace, isScoreHistoryEntry, isVictoryScore,
+  weatherForPhase, weatherMotionScale,
 } from './engine';
 
 describe('math helpers', () => {
@@ -28,6 +29,30 @@ describe('math helpers', () => {
     expect(angDiff(0, Math.PI / 2)).toBeCloseTo(Math.PI / 2);
     expect(angDiff(0, TAU)).toBeCloseTo(0);
     expect(Math.abs(angDiff(0, Math.PI + 0.1))).toBeLessThanOrEqual(Math.PI + 1e-9);
+  });
+});
+
+describe('phase weather profiles', () => {
+  it('progresses from quiet ash to an ember gale and the Gracefall storm', () => {
+    const quiet = weatherForPhase(1);
+    const gale = weatherForPhase(2);
+    const storm = weatherForPhase(3);
+    expect([quiet.label, gale.label, storm.label]).toEqual([
+      'Quiet Ash', 'Ember Gale', 'Gracefall Storm',
+    ]);
+    expect(gale.streak).toBeGreaterThan(quiet.streak);
+    expect(storm.streak).toBeGreaterThan(gale.streak);
+    expect(gale.foregroundAlpha).toBeGreaterThan(quiet.foregroundAlpha);
+    expect(storm.foregroundAlpha).toBeGreaterThan(gale.foregroundAlpha);
+    expect(gale.windX).toBeGreaterThan(0);
+    expect(storm.windX).toBeLessThan(0);
+  });
+
+  it('clamps phases and softens all non-essential motion', () => {
+    expect(weatherForPhase(-99)).toBe(weatherForPhase(1));
+    expect(weatherForPhase(99)).toBe(weatherForPhase(3));
+    expect(weatherMotionScale(true)).toBeLessThan(weatherMotionScale(false));
+    expect(weatherMotionScale(false)).toBe(1);
   });
 });
 
