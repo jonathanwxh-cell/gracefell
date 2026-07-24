@@ -41,7 +41,10 @@ const server = http.createServer((req, res) => {
     file = join(DIST, 'index.html'); // SPA fallback
   }
   const ext = extname(file);
-  const immutable = path.startsWith('/assets/') || path.startsWith('/audio/');
+  // Classify caching from the URL path, not the platform-normalized filesystem path.
+  // On Windows, path.normalize() changes "/" to "\", which previously made
+  // real /assets/ and /audio/ requests fall through to no-cache.
+  const immutable = url.startsWith('/assets/') || url.startsWith('/audio/');
   try {
     const body = readFileSync(file);
     res.writeHead(200, {

@@ -1387,3 +1387,103 @@ render-extraction refactor was deliberately not done (high risk / low benefit on
 ### Verification
 `npm test` 14/14; lint/build clean (build typechecks the test too); full gate green apart from the
 load-sensitive audio-init budgets. Closes out all ten repo-audit issues (v2.16 → v2.17.1).
+
+## v2.18 — Codex + MiniMax Music 3.0, adaptive phase score (2026-07-24)
+
+The phase-three bus lift in v2.15 could change intensity, but all three boss
+phases still shared one recording. v2.18 gives each phase its own composition
+without turning the game into a soundtrack showcase. The score remains
+subordinate to telegraphs, player verbs, hit confirmation, and phone-speaker
+clarity.
+
+### Three related cues, one restrained mix
+
+MiniMax Music 3.0 generated one accepted Phase 1 cue and replacement takes for
+Phases 2 and 3 at 78 BPM in the same D-minor / Phrygian chamber palette. The
+falling D–C-sharp–B-flat–A motif changes orchestration rather than loudness:
+low strings and empty stone in Quiet Ash, bowed iron and dry pulse in The
+Sovereign Burns, exposed viola/harmonics in Gracefall.
+
+Generated takes were not shipped directly. Independent music-direction review
+found a Phase 2 opening dropout plus fade-shaped Phase 2/3 loop resets. Codex
+re-cut each accepted source into an exact bar form and created a permanent
+one-second wrap crossfade:
+
+- Phase 1: source 2.175 s, 10 bars / 30.769229 s.
+- Phase 2: source 24.275 s, 12 bars / 36.923061 s; the dropout is excluded,
+  low bass is reduced, and 2.15 kHz receives additional space.
+- Phase 3: source 17.800 s, 16 bars / 49.230771 s; the quiet introduction,
+  later surge, and generated outro are excluded.
+
+The MP3 masters measure -21.26 / -21.27 / -21.26 LUFS-I with safe true peaks
+and no sustained edge silence. First-to-last 250 ms level differences remain
+1.19 / 1.64 / 1.33 dB. The three files total 2.81 MB, below the deleted
+4.82 MB single score. Full prompts, trace IDs, mastering cuts, filters, hashes,
+and measurements live in `public/audio/README.md`.
+
+### Permanent two-deck controller
+
+Two permanent `HTMLAudioElement` + `MediaElementAudioSourceNode` decks stream
+through the established presence-dip, filter, soundtrack, music, and master
+buses. Replacing a phase changes the inactive element's `src`; it never creates
+another retained source/gain pair. This matters on repeated attempts and after
+playback failures, where the first implementation leaked nodes.
+
+Phase changes inspect the active deck's 78 BPM position. They wait no more than
+250 ms for a nearby beat, then apply a 720 ms equal-power crossfade. The
+sub-second ceiling lets the new phase identity arrive inside the boss's opening
+read instead of several seconds later. Resetting a fight requests Phase 1
+immediately.
+
+An incoming playback rejection keeps the requested phase pending, restores the
+outgoing deck, and retries twice. Persistent failure returns to the immediate
+procedural score. Pause during a crossfade suspends the audio clock; resume
+must successfully restart both decks before the incoming deck can become
+active. The procedural beat scheduler now derives its interval from the same
+78 BPM constant.
+
+### Combat remains the foreground
+
+The existing full-gain SFX / 0.24 music / 0.56 soundtrack ceiling and -6 dB
+presence dip stay intact. Ducking is now a set of expiring requests rather than
+one cancelable automation: the strongest active request owns the music gain,
+so a weaker swing cannot raise the score while a boss warning is still
+speaking. A 15 ms attack protects the transient; 120 ms recovery avoids pumping.
+
+Music and Combat effects receive separate 0–100% controls. Defaults are 85%
+and 100%; save schema v5 persists both and older saves migrate to those values.
+The in-fight MIX control opens a focused dialog that freezes simulation but
+deliberately keeps the score clock audible. TEST SFX auditions a real combat
+crack. Done, Escape, and the backdrop all consume their closing input, clear
+combat buffers, return focus to the canvas, and resume without a surprise
+attack. Focus is trapped inside the modal, background canvas/pause controls
+leave the tab order, and MIX is disabled while a manual pause owns the fight.
+
+### Verification
+
+The desktop, 390×844 mobile, and true-touch lanes retain every earlier combat,
+difficulty, retry, score, and performance check. v2.18 adds:
+
+- two prepared streaming decks, unlock-to-playing timing, fixed node count,
+  and Phase 1/2/3 handoff assertions;
+- pause during crossfade, one-shot playback rejection/retry, active-deck
+  playback safety, immediate Phase 1 reset, and procedural fallback coverage;
+- strongest-duck overlap, expiry, full recovery, and volume-change-during-duck;
+- live MIX audio while simulation is frozen, unique Test/Done controls,
+  Escape/Done dismissal, focus return, and no buffered light attack;
+- save-v5 volume round-trip plus legacy default migration;
+- media loudness, true-peak, silence, loop-edge, duration, and hash records.
+
+Final visual browser checks at 1280×800 and 390×844 confirmed that the MIX
+dialog stays within the viewport, the top MIX/PAUSE/SOUND controls preserve
+44 px targets, and no console warning or error is introduced.
+
+### Changed after the parallel v2.16–v2.17.1 stream
+
+The adaptive-score pass was rebased after the server-hardening, dependency-pruning,
+web-polish, and unit-test work landed. Both histories remain intact. The integration
+also exposed one Windows-only cache-policy defect: `path.normalize()` converted URL
+slashes before the `/audio/` and `/assets/` test, so those files were served with
+`no-cache` locally. Cache classification now uses the untouched URL path, while
+filesystem normalization remains responsible for safe file resolution. The QA header
+probe targets the shipped Phase 1 master rather than the removed single-score file.

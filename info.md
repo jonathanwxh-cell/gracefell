@@ -1,14 +1,14 @@
 # GRACEFELL project facts
 
-- Current package: `gracefell@2.17.1`
-- Gameplay release: `v2.15` (v2.16–v2.17.1 are server/build/dependency/web/code-quality hygiene, no gameplay change)
+- Current package: `gracefell@2.18.0`
+- Gameplay release: `v2.18`
 - Character release: Kite-Veil Penitent + Fallen Blade-Saint
 - Production: <https://gracefell.alyoechosys.dev>
 - Repository: <https://github.com/jonathanwxh-cell/gracefell>
 
 GRACEFELL is a mobile-first, single-arena boss game rendered in Canvas 2D. React mounts the
 canvas and provides focus-revealed semantic controls; the combat engine lives in
-`src/game/engine.ts`, procedural sound and the streamed MiniMax score are managed by
+`src/game/engine.ts`, procedural sound and the three streamed MiniMax phase cues are managed by
 `src/game/audio.ts`, and `server.mjs` serves the production build.
 
 ## Runtime and commands
@@ -29,8 +29,10 @@ npm run qa
 
 `npm run qa` is the acceptance gate. It builds the app, starts an isolated server on
 `127.0.0.1:8492`, and drives desktop, mobile, and real-touch Chromium paths. See
-[`docs/releases/v2.13.md`](docs/releases/v2.13.md) for the current pause/resume, input-ownership,
-testing, and production record, [`docs/releases/v2.12.1.md`](docs/releases/v2.12.1.md) for the
+[`docs/releases/v2.18.md`](docs/releases/v2.18.md) for the current adaptive-score, live MIX,
+save-v5, resilient-streaming, and local acceptance record,
+[`docs/releases/v2.13.md`](docs/releases/v2.13.md) for the original pause/resume and input-ownership
+record, [`docs/releases/v2.12.1.md`](docs/releases/v2.12.1.md) for the
 previous balance and HUD record, [`docs/releases/v2.12.md`](docs/releases/v2.12.md) for the
 original Journey/Oaths, teaching, death-recovery, visible-combo, and save-v4 design,
 [`docs/releases/v2.11.2.md`](docs/releases/v2.11.2.md) for the rapid-input fix,
@@ -46,6 +48,9 @@ original Journey/Oaths, teaching, death-recovery, visible-combo, and save-v4 des
 - [`PROVENANCE.md`](PROVENANCE.md) — contributor ledger and commit-trailer rules
 - [`public/audio/README.md`](public/audio/README.md) — generated music provenance
 - [`design-qa.md`](design-qa.md) — source-normalized mobile/desktop character comparisons
+- [`docs/releases/v2.18.md`](docs/releases/v2.18.md) — v2.18 phase score, MIX controls, save v5, and local acceptance
+- [`docs/releases/v2.17.1.md`](docs/releases/v2.17.1.md) — v2.17.1 unit-test and engine-typing quality pass
+- [`docs/releases/v2.17.md`](docs/releases/v2.17.md) — v2.17 self-hosted fonts, icons, manifest, and metadata
 - [`docs/releases/v2.16.1.md`](docs/releases/v2.16.1.md) — v2.16.1 hygiene B: pruned the unreachable shadcn tree + 43 prod deps
 - [`docs/releases/v2.16.md`](docs/releases/v2.16.md) — v2.16 hygiene A: server headers + immutable audio, kimi-plugin removal, npm ci, LICENSE
 - [`docs/releases/v2.15.md`](docs/releases/v2.15.md) — v2.15 offense: hold-to-charge heavy, phase-3 musical lift

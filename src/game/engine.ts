@@ -1550,6 +1550,8 @@ export interface GameUiSnapshot {
   paused: boolean;
   manualPaused: boolean;
   muted: boolean;
+  musicVolume: number;
+  sfxVolume: number;
   grace: number;
   graceLabel: string;
   graceSummary: string;
@@ -1674,6 +1676,8 @@ export class Game {
   uiChanged: (() => void) | null = null;
   private interruptionPaused = false;
   private uiFocused = false;
+  private uiAudioPreview = false;
+  private audioSuspended = false;
   private terminalConfirmSequence = 0;
   // rendering layers
   floorCanvas: HTMLCanvasElement | null = null;
@@ -1696,7 +1700,7 @@ export class Game {
   flashReduced = reducedMotionPreferred();
   hapticsEnabled = true;
   safeBottom = 0; safeRight = 0;
-  static SAVE_VERSION = 4;
+  static SAVE_VERSION = 5;
   static VICTORY_INPUT_DELAY = 4.5;
   private previousTouchBridge?: (event: TouchEvent, phase: string) => void;
   private previousGame?: Game;
@@ -1751,6 +1755,8 @@ export class Game {
       if (typeof sv.wins === 'number') this.wins = sv.wins;
       if (typeof sv.attempts === 'number') this.attempts = Math.max(1, sv.attempts);
       if (sv.muted) this.audio.muted = true;
+      if (typeof sv.musicVolume === 'number') this.audio.setMusicVolume(sv.musicVolume);
+      if (typeof sv.sfxVolume === 'number') this.audio.setSfxVolume(sv.sfxVolume);
       if (sv.bests && typeof sv.bests === 'object') this.bests = sv.bests;
       if (isVictoryScore(sv.lastScore)) this.lastScore = sv.lastScore;
       if (sv.bestScores && typeof sv.bestScores === 'object') {
@@ -1806,22 +1812,29 @@ export class Game {
     const shouldPause = this.interruptionPaused
       || this.manualPaused
       || (this.uiFocused && this.state === 'fight');
+    const shouldSuspendAudio = this.interruptionPaused
+      || this.manualPaused
+      || (this.uiFocused && this.state === 'fight' && !this.uiAudioPreview);
+    if (shouldSuspendAudio !== this.audioSuspended) {
+      this.audioSuspended = shouldSuspendAudio;
+      if (shouldSuspendAudio) this.audio.suspend();
+      else this.audio.resume();
+    }
     if (shouldPause === this.paused) return;
     this.paused = shouldPause;
     if (shouldPause) {
       if (this.raf) cancelAnimationFrame(this.raf);
       this.raf = 0;
       this.input.reset();
-      this.audio.suspend();
       this.render();
     } else {
-      this.audio.resume();
       this.startLoop();
     }
   }
 
-  setUiFocused(focused: boolean) {
+  setUiFocused(focused: boolean, audioPreview = false) {
     this.uiFocused = focused;
+    this.uiAudioPreview = focused && audioPreview;
     this.syncPauseState();
   }
 
@@ -2008,6 +2021,7 @@ export class Game {
         bestTime: this.bestTime, bests: this.bests, wins: this.wins,
         lastScore: this.lastScore, bestScores: this.bestScores,
         attempts: this.attempts, muted: this.audio.muted,
+        musicVolume: this.audio.musicVolume, sfxVolume: this.audio.sfxVolume,
         grace: this.grace, shakeEnabled: this.shakeEnabled, flashReduced: this.flashReduced,
         hapticsEnabled: this.hapticsEnabled,
         tutorialComplete: this.tutorialStage === 'done',
@@ -2018,6 +2032,22 @@ export class Game {
   toggleMuted() {
     this.audio.setMuted(!this.audio.muted);
     this.persist();
+  }
+
+  setMusicVolume(value: number) {
+    this.audio.setMusicVolume(value);
+    this.persist();
+    this.uiChanged?.();
+  }
+
+  setSfxVolume(value: number) {
+    this.audio.setSfxVolume(value);
+    this.persist();
+    this.uiChanged?.();
+  }
+
+  previewSfx() {
+    this.audio.hit(false, { pan: 0, distance: 0 }, 1);
   }
 
   toggleShake() {
@@ -2056,6 +2086,8 @@ export class Game {
       paused: this.paused,
       manualPaused: this.manualPaused,
       muted: this.audio.muted,
+      musicVolume: this.audio.musicVolume,
+      sfxVolume: this.audio.sfxVolume,
       grace: this.grace,
       graceLabel: this.graceLabel(),
       graceSummary: this.graceSummary(),

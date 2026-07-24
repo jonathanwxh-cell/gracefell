@@ -13,7 +13,45 @@ type SpatialInput = SpatialAudio | number;
 // Preparing them at 24 kHz halves cold-start work and memory; they are smoothly
 // resampled into the device AudioContext when the graph is created.
 const PREPARED_SAMPLE_RATE = 24000;
-const SOUNDTRACK_VERSION = '2.8';
+const SOUNDTRACK_VERSION = '2.18';
+const SOUNDTRACK_BPM = 78;
+const SOUNDTRACK_BEAT_SECONDS = 60 / SOUNDTRACK_BPM;
+const SOUNDTRACK_MAX_QUANTIZE_WAIT = 0.25;
+const SOUNDTRACK_CROSSFADE_SECONDS = 0.72;
+const SOUNDTRACK_BED_LEVEL = 0.07;
+const SOUNDTRACK_PHASES = {
+  1: 'gracefell-phase-1-quiet-ash.mp3',
+  2: 'gracefell-phase-2-sovereign-burns.mp3',
+  3: 'gracefell-phase-3-gracefall.mp3',
+} as const;
+
+type SoundtrackPhase = keyof typeof SOUNDTRACK_PHASES;
+
+interface SoundtrackDeck {
+  phase: SoundtrackPhase;
+  element: HTMLAudioElement;
+  source: MediaElementAudioSourceNode | null;
+  gain: GainNode | null;
+}
+
+interface SoundtrackTransition {
+  from: number;
+  to: number;
+  phase: SoundtrackPhase;
+  endAt: number;
+}
+
+interface MusicDuck {
+  amount: number;
+  endAt: number;
+}
+
+const CROSSFADE_IN = Float32Array.from({ length: 32 }, (_, index) => (
+  Math.max(0.0001, Math.sin((index / 31) * Math.PI * 0.5))
+));
+const CROSSFADE_OUT = Float32Array.from({ length: 32 }, (_, index) => (
+  Math.max(0.0001, Math.cos((index / 31) * Math.PI * 0.5))
+));
 
 interface VoiceVariation {
   pitch: number;
@@ -78,8 +116,16 @@ export class GameAudio {
   private prepareUsesIdleCallback = false;
   private reverbBuildHandle: number | null = null;
   private musicNodes: AudioNode[] = [];
-  private soundtrackElement: HTMLAudioElement | null = null;
-  private soundtrackSource: MediaElementAudioSourceNode | null = null;
+  private soundtrackDecks: [SoundtrackDeck | null, SoundtrackDeck | null] = [null, null];
+  private activeSoundtrackDeck = 0;
+  private soundtrackPhase: SoundtrackPhase = 1;
+  private pendingSoundtrackPhase: SoundtrackPhase | null = null;
+  private queuedSoundtrackPhase: SoundtrackPhase | null = null;
+  private soundtrackTransition: SoundtrackTransition | null = null;
+  private soundtrackTransitionTimer: number | null = null;
+  private soundtrackRetryTimer: number | null = null;
+  private soundtrackRetryCount = 0;
+  private soundtrackTransitionToken = 0;
   private soundtrackLoadToken = 0;
   private soundtrackState: 'idle' | 'loading' | 'playing' | 'fallback' = 'idle';
   private suspended = false;
@@ -92,14 +138,19 @@ export class GameAudio {
   private readonly musicLevel = 0.24;
   private readonly soundtrackBaseLevel = 0.56;
   private readonly soundtrackPresenceDipDb = -6;
+  musicVolume = 0.85;
+  sfxVolume = 1;
   private duckCount = 0;
   private minDuckAmount = 1;
+  private musicDucks: MusicDuck[] = [];
+  private currentDuckAmount = 1;
   private lastCue = new Map<string, number>();
   private variations = new Map<string, { index: number; at: number; streak: number }>();
   private variationCount = 0;
   private subGateUntil = 0;
   private maxObservedDistance = 0;
   private initCostMs = 0;
+  private soundtrackStartCostMs = 0;
   private irBuildCostMs = 0;
   private adaptive = { tension: 0, intensity: 0, staggered: false };
   muted = false;
@@ -109,7 +160,7 @@ export class GameAudio {
 
   prepare() {
     if (this.preparedNoise || this.prepareHandle !== null) return;
-    this.prepareSoundtrackElement();
+    this.prepareSoundtrackDeck(0, 1);
     const run = () => {
       this.prepareHandle = null;
       this.prepareUsesIdleCallback = false;
@@ -149,11 +200,11 @@ export class GameAudio {
     this.master.connect(this.limiter).connect(this.peakLimiter).connect(this.ctx.destination);
 
     this.sfx = this.ctx.createGain();
-    this.sfx.gain.value = this.sfxLevel;
+    this.sfx.gain.value = this.sfxLevel * this.sfxVolume;
     this.sfx.connect(this.master);
 
     this.music = this.ctx.createGain();
-    this.music.gain.value = this.musicLevel;
+    this.music.gain.value = this.musicBaseLevel();
     this.music.connect(this.master);
 
     // Keep the procedural bed alive while the MP3 downloads/decodes. Once the
@@ -221,6 +272,14 @@ export class GameAudio {
       window.clearInterval(this.schedulerTimer);
       this.schedulerTimer = null;
     }
+    if (this.soundtrackTransitionTimer !== null) {
+      window.clearTimeout(this.soundtrackTransitionTimer);
+      this.soundtrackTransitionTimer = null;
+    }
+    if (this.soundtrackRetryTimer !== null) {
+      window.clearTimeout(this.soundtrackRetryTimer);
+      this.soundtrackRetryTimer = null;
+    }
     for (const node of this.musicNodes) {
       try {
         const stoppable = node as AudioNode & { stop?: () => void };
@@ -229,13 +288,20 @@ export class GameAudio {
       } catch { /* already stopped or disconnected */ }
     }
     this.soundtrackLoadToken++;
-    if (this.soundtrackElement) {
-      this.soundtrackElement.pause();
-      this.soundtrackElement.removeAttribute('src');
-      this.soundtrackElement.load();
+    this.soundtrackTransitionToken++;
+    for (const deck of this.soundtrackDecks) {
+      if (!deck) continue;
+      deck.element.pause();
+      deck.element.removeAttribute('src');
+      deck.element.load();
     }
-    this.soundtrackElement = null;
-    this.soundtrackSource = null;
+    this.soundtrackDecks = [null, null];
+    this.activeSoundtrackDeck = 0;
+    this.soundtrackPhase = 1;
+    this.pendingSoundtrackPhase = null;
+    this.queuedSoundtrackPhase = null;
+    this.soundtrackTransition = null;
+    this.soundtrackRetryCount = 0;
     this.soundtrackState = 'idle';
     this.musicNodes = [];
     this.lastCue.clear();
@@ -244,9 +310,12 @@ export class GameAudio {
     this.subGateUntil = 0;
     this.maxObservedDistance = 0;
     this.initCostMs = 0;
+    this.soundtrackStartCostMs = 0;
     this.irBuildCostMs = 0;
     this.duckCount = 0;
     this.minDuckAmount = 1;
+    this.musicDucks = [];
+    this.currentDuckAmount = 1;
     this.adaptive = { tension: 0, intensity: 0, staggered: false };
     const ctx = this.ctx;
     this.ctx = null;
@@ -260,22 +329,51 @@ export class GameAudio {
 
   suspend() {
     this.suspended = true;
-    this.soundtrackElement?.pause();
+    if (this.soundtrackTransitionTimer !== null) {
+      window.clearTimeout(this.soundtrackTransitionTimer);
+      this.soundtrackTransitionTimer = null;
+    }
+    if (this.soundtrackRetryTimer !== null) {
+      window.clearTimeout(this.soundtrackRetryTimer);
+      this.soundtrackRetryTimer = null;
+    }
+    for (const deck of this.soundtrackDecks) deck?.element.pause();
     if (this.ctx?.state === 'running') void this.ctx.suspend().catch(() => {});
   }
 
   resume() {
     this.suspended = false;
     if (!this.ctx) return;
-    if (this.ctx.state === 'suspended') void this.ctx.resume().catch(() => {});
-    if (this.soundtrackState === 'playing' && this.soundtrackElement) {
-      void this.soundtrackElement.play().catch(() => this.useProceduralFallback());
-    }
+    const resumed = this.ctx.state === 'suspended'
+      ? this.ctx.resume().catch(() => {})
+      : Promise.resolve();
+    void resumed.then(() => {
+      if (this.suspended || this.soundtrackState !== 'playing') return;
+      if (this.soundtrackTransition) {
+        void this.resumeSoundtrackTransition(this.soundtrackTransition);
+      } else {
+        void this.soundtrackDecks[this.activeSoundtrackDeck]?.element.play()
+          .catch(() => this.useProceduralFallback());
+        if (this.pendingSoundtrackPhase) this.queueSoundtrackPhase(this.pendingSoundtrackPhase);
+      }
+    });
   }
 
   setMuted(m: boolean) {
     this.muted = m;
     if (this.ctx) this.master.gain.setTargetAtTime(m ? 0 : 0.78, this.ctx.currentTime, 0.035);
+  }
+
+  setMusicVolume(value: number) {
+    this.musicVolume = Math.max(0, Math.min(1, value));
+    this.refreshDuckEnvelope(true);
+  }
+
+  setSfxVolume(value: number) {
+    this.sfxVolume = Math.max(0, Math.min(1, value));
+    if (this.ctx) {
+      this.sfx.gain.setTargetAtTime(this.sfxLevel * this.sfxVolume, this.ctx.currentTime, 0.025);
+    }
   }
 
   debugState() {
@@ -294,13 +392,21 @@ export class GameAudio {
       variationKinds: this.variations.size,
       maxObservedDistance: this.maxObservedDistance,
       initCostMs: this.initCostMs,
+      soundtrackStartCostMs: this.soundtrackStartCostMs,
       irBuildCostMs: this.irBuildCostMs,
       adaptive: { ...this.adaptive },
       phase: this.phase,
       phaseLift: this.phaseLift,
       soundtrackState: this.soundtrackState,
-      soundtrackMode: this.soundtrackSource ? 'stream' : 'fallback',
+      soundtrackMode: this.soundtrackDecks.some((deck) => Boolean(deck?.source)) ? 'stream' : 'fallback',
       soundtrackVersion: SOUNDTRACK_VERSION,
+      soundtrackPhase: this.soundtrackPhase,
+      pendingSoundtrackPhase: this.pendingSoundtrackPhase,
+      soundtrackDeckCount: this.soundtrackDecks.filter(Boolean).length,
+      soundtrackTransitioning: Boolean(this.soundtrackTransition),
+      soundtrackRetryCount: this.soundtrackRetryCount,
+      soundtrackDecksPaused: this.soundtrackDecks.map((deck) => deck?.element.paused ?? true),
+      musicNodeCount: this.musicNodes.length,
       waveDataPrepared: Boolean(this.preparedNoise && this.preparedImpulse),
       mix: {
         sfxLevel: this.sfxLevel,
@@ -308,8 +414,12 @@ export class GameAudio {
         soundtrackBaseLevel: this.soundtrackBaseLevel,
         soundtrackPresenceDipDb: this.soundtrackPresenceDipDb,
         soundtrackCutoffHz: this.soundtrackFilter?.frequency.value ?? 0,
+        musicVolume: this.musicVolume,
+        sfxVolume: this.sfxVolume,
         duckCount: this.duckCount,
         minDuckAmount: this.minDuckAmount,
+        activeDuckCount: this.musicDucks.length,
+        currentDuckAmount: this.currentDuckAmount,
       },
     };
   }
@@ -379,15 +489,41 @@ export class GameAudio {
     };
   }
 
-  private prepareSoundtrackElement() {
-    if (this.soundtrackElement) return this.soundtrackElement;
+  private prepareSoundtrackDeck(index: number, phase: SoundtrackPhase) {
+    const existing = this.soundtrackDecks[index];
+    if (existing?.phase === phase) {
+      if (this.ctx && !existing.source) this.connectSoundtrackDeck(existing);
+      return existing;
+    }
     const base = import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL : `${import.meta.env.BASE_URL}/`;
-    const element = new Audio(`${base}audio/gracefell-sovereigns-fall.mp3?v=${SOUNDTRACK_VERSION}`);
+    const sourceUrl = `${base}audio/${SOUNDTRACK_PHASES[phase]}?v=${SOUNDTRACK_VERSION}`;
+    if (existing) {
+      existing.element.pause();
+      existing.phase = phase;
+      existing.element.src = sourceUrl;
+      existing.element.preload = phase === 1 ? 'auto' : 'metadata';
+      if (existing.gain) existing.gain.gain.value = 0.0001;
+      existing.element.load();
+      if (this.ctx && !existing.source) this.connectSoundtrackDeck(existing);
+      return existing;
+    }
+    const element = new Audio(sourceUrl);
     element.loop = true;
-    element.preload = 'auto';
-    this.soundtrackElement = element;
+    element.preload = phase === 1 ? 'auto' : 'metadata';
+    const deck: SoundtrackDeck = { phase, element, source: null, gain: null };
+    this.soundtrackDecks[index] = deck;
     element.load();
-    return element;
+    if (this.ctx) this.connectSoundtrackDeck(deck);
+    return deck;
+  }
+
+  private connectSoundtrackDeck(deck: SoundtrackDeck) {
+    if (!this.ctx || deck.source || !this.soundtrackPresenceDip) return;
+    deck.source = this.ctx.createMediaElementSource(deck.element);
+    deck.gain = this.ctx.createGain();
+    deck.gain.gain.value = 0.0001;
+    deck.source.connect(deck.gain).connect(this.soundtrackPresenceDip);
+    this.musicNodes.push(deck.source, deck.gain);
   }
 
   private cancelPreparation() {
@@ -576,16 +712,54 @@ export class GameAudio {
     src.start(t0, Math.random() * maxOffset, dur);
   }
 
+  private musicBaseLevel() {
+    return this.musicLevel * this.musicVolume;
+  }
+
+  private holdAudioParam(param: AudioParam, at: number) {
+    const compatible = param as AudioParam & {
+      cancelAndHoldAtTime?: (cancelTime: number) => AudioParam;
+    };
+    if (compatible.cancelAndHoldAtTime) {
+      compatible.cancelAndHoldAtTime(at);
+      return;
+    }
+    const value = param.value;
+    param.cancelScheduledValues(at);
+    param.setValueAtTime(value, at);
+  }
+
+  private refreshDuckEnvelope(force = false) {
+    if (!this.ctx || !this.music) return;
+    const now = this.ctx.currentTime;
+    this.musicDucks = this.musicDucks.filter((duck) => duck.endAt > now);
+    const amount = this.musicDucks.reduce((lowest, duck) => Math.min(lowest, duck.amount), 1);
+    if (!force && Math.abs(amount - this.currentDuckAmount) < 0.0001) return;
+
+    const was = this.currentDuckAmount;
+    this.currentDuckAmount = amount;
+    const target = this.musicBaseLevel() * amount;
+    this.holdAudioParam(this.music.gain, now);
+    if (target <= 0) {
+      this.music.gain.linearRampToValueAtTime(0, now + (amount < was ? 0.015 : 0.12));
+    } else {
+      this.music.gain.exponentialRampToValueAtTime(
+        Math.max(0.0001, target),
+        now + (amount < was ? 0.015 : 0.12),
+      );
+    }
+  }
+
   private duckMusic(amount = 0.45, duration = 0.32) {
     if (!this.ctx) return;
     this.duckCount++;
-    this.minDuckAmount = Math.min(this.minDuckAmount, amount);
-    const t0 = this.ctx.currentTime;
-    const gain = this.music.gain;
-    gain.cancelScheduledValues(t0);
-    gain.setValueAtTime(Math.max(0.0001, Math.min(this.musicLevel, gain.value)), t0);
-    gain.exponentialRampToValueAtTime(Math.max(0.0001, this.musicLevel * amount), t0 + 0.015);
-    gain.exponentialRampToValueAtTime(this.musicLevel, t0 + duration);
+    const safeAmount = Math.max(0.08, Math.min(1, amount));
+    this.minDuckAmount = Math.min(this.minDuckAmount, safeAmount);
+    this.musicDucks.push({
+      amount: safeAmount,
+      endAt: this.ctx.currentTime + Math.max(0.05, duration),
+    });
+    this.refreshDuckEnvelope();
   }
 
   // ---- player and impact SFX ------------------------------------------
@@ -905,18 +1079,21 @@ export class GameAudio {
 
   // ---- ambient music --------------------------------------------------
   private async loadSoundtrack(ctx: AudioContext) {
+    const startedAt = performance.now();
     const token = ++this.soundtrackLoadToken;
     this.soundtrackState = 'loading';
     try {
-      const element = this.prepareSoundtrackElement();
-      const source = ctx.createMediaElementSource(element);
-      source.connect(this.soundtrackPresenceDip);
-      this.soundtrackSource = source;
-      this.musicNodes.push(source);
-      await element.play();
+      const deck = this.prepareSoundtrackDeck(0, 1);
+      this.connectSoundtrackDeck(deck);
+      if (!deck.gain) throw new Error('Phase 1 soundtrack deck did not connect');
+      deck.gain.gain.value = 1;
+      await deck.element.play();
       if (this.ctx !== ctx || token !== this.soundtrackLoadToken) return;
-      if (this.suspended) element.pause();
+      if (this.suspended) deck.element.pause();
       this.soundtrackState = 'playing';
+      this.activeSoundtrackDeck = 0;
+      this.soundtrackPhase = 1;
+      this.soundtrackRetryCount = 0;
 
       const now = ctx.currentTime;
       this.soundtrackMusic.gain.cancelScheduledValues(now);
@@ -924,7 +1101,12 @@ export class GameAudio {
       this.soundtrackMusic.gain.exponentialRampToValueAtTime(this.soundtrackBaseLevel, now + 1.8);
       this.proceduralMusic.gain.cancelScheduledValues(now);
       this.proceduralMusic.gain.setValueAtTime(Math.max(0.0001, this.proceduralMusic.gain.value), now);
-      this.proceduralMusic.gain.exponentialRampToValueAtTime(0.1, now + 1.8);
+      this.proceduralMusic.gain.exponentialRampToValueAtTime(SOUNDTRACK_BED_LEVEL, now + 1.8);
+      this.prepareSoundtrackDeck(1, 2);
+      this.soundtrackStartCostMs = performance.now() - startedAt;
+      if (this.pendingSoundtrackPhase && this.pendingSoundtrackPhase !== 1) {
+        this.queueSoundtrackPhase(this.pendingSoundtrackPhase);
+      }
     } catch {
       if (this.ctx === ctx && token === this.soundtrackLoadToken) this.useProceduralFallback();
     }
@@ -932,11 +1114,173 @@ export class GameAudio {
 
   private useProceduralFallback() {
     this.soundtrackState = 'fallback';
-    this.soundtrackElement?.pause();
+    this.soundtrackTransitionToken++;
+    if (this.soundtrackTransitionTimer !== null) {
+      window.clearTimeout(this.soundtrackTransitionTimer);
+      this.soundtrackTransitionTimer = null;
+    }
+    if (this.soundtrackRetryTimer !== null) {
+      window.clearTimeout(this.soundtrackRetryTimer);
+      this.soundtrackRetryTimer = null;
+    }
+    for (const deck of this.soundtrackDecks) deck?.element.pause();
+    this.pendingSoundtrackPhase = null;
+    this.queuedSoundtrackPhase = null;
+    this.soundtrackTransition = null;
+    this.soundtrackRetryCount = 0;
     if (!this.ctx) return;
     const now = this.ctx.currentTime;
+    this.soundtrackMusic.gain.cancelScheduledValues(now);
+    this.soundtrackMusic.gain.setTargetAtTime(0.0001, now, 0.08);
     this.proceduralMusic.gain.cancelScheduledValues(now);
     this.proceduralMusic.gain.setTargetAtTime(1, now, 0.3);
+  }
+
+  private queueSoundtrackPhase(phase: SoundtrackPhase, immediate = false) {
+    this.pendingSoundtrackPhase = phase;
+    if (this.soundtrackState !== 'playing' || this.suspended) return;
+    if (phase === this.soundtrackPhase && !this.soundtrackTransition) {
+      this.pendingSoundtrackPhase = null;
+      return;
+    }
+    if (this.soundtrackTransition) {
+      this.queuedSoundtrackPhase = phase;
+      return;
+    }
+    if (this.soundtrackTransitionTimer !== null) {
+      window.clearTimeout(this.soundtrackTransitionTimer);
+      this.soundtrackTransitionTimer = null;
+    }
+    if (this.soundtrackRetryTimer !== null) {
+      window.clearTimeout(this.soundtrackRetryTimer);
+      this.soundtrackRetryTimer = null;
+    }
+
+    const from = this.soundtrackDecks[this.activeSoundtrackDeck];
+    if (!from) return;
+    const toIndex = this.activeSoundtrackDeck === 0 ? 1 : 0;
+    this.prepareSoundtrackDeck(toIndex, phase);
+    const position = Number.isFinite(from.element.currentTime) ? from.element.currentTime : 0;
+    const remainder = SOUNDTRACK_BEAT_SECONDS - (position % SOUNDTRACK_BEAT_SECONDS);
+    const delaySeconds = immediate || remainder > SOUNDTRACK_MAX_QUANTIZE_WAIT ? 0 : remainder;
+    const token = ++this.soundtrackTransitionToken;
+    this.soundtrackTransitionTimer = window.setTimeout(() => {
+      this.soundtrackTransitionTimer = null;
+      void this.beginSoundtrackTransition(this.activeSoundtrackDeck, toIndex, phase, token);
+    }, delaySeconds * 1000);
+  }
+
+  private scheduleSoundtrackRetry(phase: SoundtrackPhase) {
+    this.pendingSoundtrackPhase = phase;
+    if (this.suspended || this.soundtrackState !== 'playing') return;
+    this.soundtrackRetryCount++;
+    if (this.soundtrackRetryCount >= 3) {
+      this.useProceduralFallback();
+      return;
+    }
+    if (this.soundtrackRetryTimer !== null) window.clearTimeout(this.soundtrackRetryTimer);
+    const delay = 260 * this.soundtrackRetryCount;
+    this.soundtrackRetryTimer = window.setTimeout(() => {
+      this.soundtrackRetryTimer = null;
+      this.queueSoundtrackPhase(phase, true);
+    }, delay);
+  }
+
+  private restoreOutgoingSoundtrack(transition: SoundtrackTransition) {
+    if (!this.ctx) return;
+    const from = this.soundtrackDecks[transition.from];
+    const to = this.soundtrackDecks[transition.to];
+    to?.element.pause();
+    const now = this.ctx.currentTime;
+    if (from?.gain) {
+      this.holdAudioParam(from.gain.gain, now);
+      from.gain.gain.setTargetAtTime(1, now, 0.035);
+    }
+    if (to?.gain) {
+      this.holdAudioParam(to.gain.gain, now);
+      to.gain.gain.setTargetAtTime(0.0001, now, 0.02);
+    }
+    this.activeSoundtrackDeck = transition.from;
+    this.soundtrackTransition = null;
+    void from?.element.play().catch(() => this.useProceduralFallback());
+    this.scheduleSoundtrackRetry(transition.phase);
+  }
+
+  private async resumeSoundtrackTransition(transition: SoundtrackTransition) {
+    const from = this.soundtrackDecks[transition.from];
+    const to = this.soundtrackDecks[transition.to];
+    try {
+      await from?.element.play();
+      await to?.element.play();
+    } catch {
+      if (this.soundtrackTransition === transition) this.restoreOutgoingSoundtrack(transition);
+    }
+  }
+
+  private async beginSoundtrackTransition(
+    fromIndex: number,
+    toIndex: number,
+    phase: SoundtrackPhase,
+    token: number,
+  ) {
+    if (!this.ctx || this.suspended || token !== this.soundtrackTransitionToken) return;
+    const from = this.soundtrackDecks[fromIndex];
+    const to = this.prepareSoundtrackDeck(toIndex, phase);
+    this.connectSoundtrackDeck(to);
+    if (!from?.gain || !to.gain) return;
+    try {
+      to.element.currentTime = 0;
+      await to.element.play();
+    } catch {
+      this.scheduleSoundtrackRetry(phase);
+      return;
+    }
+    if (!this.ctx || this.suspended || token !== this.soundtrackTransitionToken) {
+      to.element.pause();
+      return;
+    }
+
+    const now = this.ctx.currentTime;
+    this.duckMusic(0.5, SOUNDTRACK_CROSSFADE_SECONDS + 0.18);
+    this.holdAudioParam(from.gain.gain, now);
+    this.holdAudioParam(to.gain.gain, now);
+    from.gain.gain.setValueCurveAtTime(CROSSFADE_OUT, now, SOUNDTRACK_CROSSFADE_SECONDS);
+    to.gain.gain.setValueCurveAtTime(CROSSFADE_IN, now, SOUNDTRACK_CROSSFADE_SECONDS);
+    this.soundtrackTransition = {
+      from: fromIndex,
+      to: toIndex,
+      phase,
+      endAt: now + SOUNDTRACK_CROSSFADE_SECONDS,
+    };
+    this.soundtrackRetryCount = 0;
+  }
+
+  private finishSoundtrackTransition() {
+    if (!this.ctx || !this.soundtrackTransition
+      || this.ctx.currentTime < this.soundtrackTransition.endAt) return;
+    const transition = this.soundtrackTransition;
+    const from = this.soundtrackDecks[transition.from];
+    const to = this.soundtrackDecks[transition.to];
+    if (!to || to.element.paused) {
+      this.restoreOutgoingSoundtrack(transition);
+      return;
+    }
+    from?.element.pause();
+    if (from) {
+      try { from.element.currentTime = 0; } catch { /* media may not be seekable yet */ }
+      if (from.gain) from.gain.gain.value = 0.0001;
+    }
+    if (to?.gain) to.gain.gain.value = 1;
+    this.activeSoundtrackDeck = transition.to;
+    this.soundtrackPhase = transition.phase;
+    this.pendingSoundtrackPhase = null;
+    this.soundtrackTransition = null;
+
+    const next = transition.phase < 3 ? (transition.phase + 1) as SoundtrackPhase : null;
+    if (next) this.prepareSoundtrackDeck(transition.from, next);
+    const queued = this.queuedSoundtrackPhase;
+    this.queuedSoundtrackPhase = null;
+    if (queued && queued !== this.soundtrackPhase) this.queueSoundtrackPhase(queued);
   }
 
   private startDrone() {
@@ -1009,10 +1353,12 @@ export class GameAudio {
 
   private scheduleAhead() {
     if (!this.ctx) return;
+    this.refreshDuckEnvelope();
+    this.finishSoundtrackTransition();
     const horizon = this.ctx.currentTime + 0.18;
     while (this.nextBeatAt < horizon) {
       this.scheduleBeat(this.beat++ % 8, this.nextBeatAt);
-      this.nextBeatAt += 0.64;
+      this.nextBeatAt += SOUNDTRACK_BEAT_SECONDS;
     }
   }
 
@@ -1063,7 +1409,9 @@ export class GameAudio {
   }
 
   setPhase(phase: number) {
-    if (phase !== this.phase) this.phaseDirty = true;
-    this.phase = phase;
+    const next = Math.max(1, Math.min(3, Math.round(phase))) as SoundtrackPhase;
+    if (next !== this.phase) this.phaseDirty = true;
+    this.phase = next;
+    this.queueSoundtrackPhase(next, next === 1 && this.soundtrackPhase !== 1);
   }
 }
