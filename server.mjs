@@ -21,10 +21,16 @@ const MIME = {
   '.woff2': 'font/woff2',
 };
 
+const SECURITY = {
+  'x-content-type-options': 'nosniff',
+  'referrer-policy': 'no-referrer',
+  'x-frame-options': 'DENY',
+};
+
 const server = http.createServer((req, res) => {
   const url = (req.url || '/').split('?')[0];
   if (url === '/health') {
-    res.writeHead(200, { 'content-type': 'application/json' });
+    res.writeHead(200, { 'content-type': 'application/json', ...SECURITY });
     res.end(JSON.stringify({ ok: true, app: 'gracefell' }));
     return;
   }
@@ -35,12 +41,13 @@ const server = http.createServer((req, res) => {
     file = join(DIST, 'index.html'); // SPA fallback
   }
   const ext = extname(file);
-  const immutable = path.startsWith('/assets/');
+  const immutable = path.startsWith('/assets/') || path.startsWith('/audio/');
   try {
     const body = readFileSync(file);
     res.writeHead(200, {
       'content-type': MIME[ext] || 'application/octet-stream',
       'cache-control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache',
+      ...SECURITY,
     });
     res.end(body);
   } catch {

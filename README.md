@@ -382,7 +382,7 @@ Full rationale and evidence: [`docs/releases/v2.15.md`](docs/releases/v2.15.md).
 ## Running it
 
 ```bash
-npm install     # npm ci fails on this lockfile — use install
+npm ci          # deterministic install from the committed lockfile
 npm run build   # tsc -b && vite build
 npm run dev     # or just: vite on :3000
 npm run qa      # build + portable desktop/mobile/touch Playwright gate

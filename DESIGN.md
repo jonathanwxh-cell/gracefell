@@ -1299,3 +1299,24 @@ hold (`heavyChargeT ≥ 0.4`, sim-gated), charged heavy `> 1.4×` normal (via `c
 touch held-detection over the HVY zone, and `debugState().phaseLift ≥ 0.2` at phase 3. Lint/build
 clean. Real touch-and-hold is covered by the detection unit test + an owner playtest (Playwright
 touch has no hold primitive). Only the load-sensitive audio-init budgets fail locally (green in CI).
+
+## v2.16 — Claude (Opus 4.8), "hygiene A: server + build" (2026-07-24)
+
+First pass over the ten repo-audit issues filed 2026-07-24. Five contained server/build fixes; the
+dead-dependency prune (#37) is deferred to its own pass. No gameplay change.
+
+- **#45 security headers.** `server.mjs` sends `nosniff` / `Referrer-Policy: no-referrer` /
+  `X-Frame-Options: DENY` via a shared `SECURITY` object. Full CSP deferred until fonts are
+  self-hosted (#39), since a CSP now would have to whitelist the Google Fonts CDN.
+- **#46 immutable audio.** `/audio/` joins `/assets/` in the immutable branch; the MP3 URL is
+  already `?v=`-versioned so a year-long cache is safe. Was `no-cache` → 4.6 MB revalidated per load.
+- **#38 removed `kimi-plugin-inspect-react`.** Opaque dev Babel plugin gone from `vite.config.ts` +
+  `package.json`; lockfile regenerated; build ~0.85 KB smaller, unaffected otherwise.
+- **#41 `npm ci` adopted.** The "npm ci fails on this lockfile" note was stale — reproduction shows
+  `npm ci` exits 0. Flipped README/AGENTS/info/CI to `npm ci` for determinism (what #41 wanted).
+- **#44 LICENSE.** Added an all-rights-reserved `LICENSE` + `package.json "license": "UNLICENSED"`.
+
+### QA / verification
+New `qa/verify.cjs` header assertion (node `fetch` against the QA server): root has `nosniff` +
+`Referrer-Policy`; `/audio/` MP3 is `immutable`. Direct-curl confirmed. lint/build clean; `npm ci`
+verified clean. Only the load-sensitive audio-init budgets fail locally (green on CI).
