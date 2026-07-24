@@ -126,11 +126,60 @@ async function installAudioSampleRate(context) {
         || step.semantics.semanticControls < 6 || step.semantics.audioSliders !== 2) {
         out.errors.push(vp.name + ': semantic companion controls missing: ' + JSON.stringify(step.semantics));
       }
+      const scoresButton = pg.locator('.game-scores-toggle');
+      const scoresButtonBox = await scoresButton.boundingBox();
+      await scoresButton.click();
+      await pg.waitForFunction(() => Boolean(document.querySelector('#game-score-history')),
+        null, { timeout: 1200 }).catch(() => {});
+      const emptyScores = await pg.evaluate(() => {
+        const dialog = document.querySelector('#game-score-history');
+        const box = dialog?.getBoundingClientRect();
+        return {
+          role: dialog?.getAttribute('role'),
+          width: box?.width,
+          height: box?.height,
+          left: box?.left,
+          right: box?.right,
+          top: box?.top,
+          bottom: box?.bottom,
+          empty: document.querySelector('.game-score-history__empty')?.textContent?.trim(),
+          activeText: document.activeElement?.textContent?.trim(),
+        };
+      });
+      await pg.screenshot({ path: path.join(ARTIFACT_DIR, `${vp.name}-scores-empty.png`) });
+      await pg.keyboard.press('Escape');
+      await pg.waitForFunction(() => !document.querySelector('#game-score-history'),
+        null, { timeout: 1200 }).catch(() => {});
+      step.emptyScores = { button: scoresButtonBox, dialog: emptyScores };
+      if (!scoresButtonBox
+        || scoresButtonBox.width < 44
+        || scoresButtonBox.height < 44
+        || scoresButtonBox.x < 0
+        || scoresButtonBox.x + scoresButtonBox.width > vp.w + 1
+        || emptyScores.role !== 'dialog'
+        || !emptyScores.empty?.includes('first score')
+        || emptyScores.activeText !== 'CLOSE'
+        || emptyScores.left < 0
+        || emptyScores.right > vp.w + 1
+        || emptyScores.top < 0
+        || emptyScores.bottom > vp.h + 1) {
+        out.errors.push(vp.name + ': empty score chronicle is clipped or inaccessible: '
+          + JSON.stringify(step.emptyScores));
+      }
       if (vp.name === 'desktop') {
         // Focused DOM controls own Enter/Space. They must not confirm the game
         // or leak a combat action through the window-level input handler.
         const soundButton = pg.locator('.game-accessibility button').nth(1);
         await soundButton.focus();
+        step.focusReveal = await pg.locator('.game-accessibility').evaluate((panel) => {
+          const box = panel.getBoundingClientRect();
+          return { width: box.width, height: box.height, clipped: getComputedStyle(panel).clipPath };
+        });
+        if (step.focusReveal.width < 300 || step.focusReveal.height < 100
+          || step.focusReveal.clipped !== 'none') {
+          out.errors.push('desktop: keyboard focus entered clipped semantic controls: '
+            + JSON.stringify(step.focusReveal));
+        }
         const semanticBefore = await pg.evaluate(() => ({ state: window.__game.state, muted: window.__game.audio.muted }));
         await pg.keyboard.press('Enter');
         await pg.waitForTimeout(80);
@@ -240,6 +289,21 @@ async function installAudioSampleRate(context) {
       const st1 = await pg.evaluate(() => (window).__game && (window).__game.state);
       step.stateAfterStart = st1;
       if (st1 !== 'fight') out.errors.push(vp.name + ': did not reach fight state (' + st1 + ')');
+      await pg.waitForTimeout(300);
+      step.combatSemantics = await pg.evaluate(() => ({
+        status: document.querySelector('#game-status')?.textContent,
+        labelled: document.querySelector('#game-combat-status')?.getAttribute('aria-label'),
+        terms: Array.from(document.querySelectorAll('#game-combat-status dt')).map((node) => node.textContent?.trim()),
+        values: Array.from(document.querySelectorAll('#game-combat-status dd')).map((node) => node.textContent?.trim()),
+      }));
+      if (!step.combatSemantics.status?.includes('Battle in progress')
+        || step.combatSemantics.labelled !== 'Current combat status'
+        || !step.combatSemantics.terms.includes('Health')
+        || !step.combatSemantics.terms.includes('Malakar health')
+        || !step.combatSemantics.terms.includes('Queued attacks')
+        || step.combatSemantics.values.length !== step.combatSemantics.terms.length) {
+        out.errors.push(vp.name + ': semantic combat telemetry missing: ' + JSON.stringify(step.combatSemantics));
+      }
       const pauseControl = pg.locator('.game-pause-toggle');
       await pauseControl.waitFor({ state: 'visible', timeout: 1500 }).catch(() => {});
       step.pauseControl = await pauseControl.evaluate((button) => {
@@ -266,6 +330,31 @@ async function installAudioSampleRate(context) {
         || !step.pauseControl.shortcuts?.includes('Escape')) {
         out.errors.push(vp.name + ': pause control is missing, clipped, or too small: '
           + JSON.stringify(step.pauseControl));
+      }
+      const menuControl = pg.locator('.game-menu-toggle');
+      await menuControl.waitFor({ state: 'visible', timeout: 1500 }).catch(() => {});
+      step.menuControl = await menuControl.evaluate((button) => {
+        const box = button.getBoundingClientRect();
+        return {
+          label: button.textContent?.trim(),
+          width: box.width,
+          height: box.height,
+          left: box.left,
+          right: box.right,
+          top: box.top,
+          bottom: box.bottom,
+        };
+      }).catch(() => null);
+      if (!step.menuControl
+        || step.menuControl.label !== 'MENU'
+        || step.menuControl.width < 44
+        || step.menuControl.height < 44
+        || step.menuControl.left < 0
+        || step.menuControl.right > vp.w + 1
+        || step.menuControl.top < 0
+        || step.menuControl.bottom > vp.h + 1) {
+        out.errors.push(vp.name + ': battle menu control is missing, clipped, or too small: '
+          + JSON.stringify(step.menuControl));
       }
 
       const mixControl = pg.locator('.game-mix-toggle');
@@ -343,6 +432,71 @@ async function installAudioSampleRate(context) {
         || !afterMix.activeIsCanvas) {
         out.errors.push(vp.name + ': combat MIX did not audition and dismiss safely: '
           + JSON.stringify(step.mixControl));
+      }
+
+      const beforeBattleMenu = await pg.evaluate(() => ({
+        fightTime: window.__game.fightTime,
+        playerState: window.__game.player.state,
+      }));
+      await menuControl.click();
+      await pg.waitForFunction(() => Boolean(document.querySelector('#game-battle-menu')),
+        null, { timeout: 1200 }).catch(() => {});
+      await pg.waitForTimeout(140);
+      const battleMenuOpen = await pg.evaluate(() => ({
+        dialog: document.querySelector('#game-battle-menu')?.getAttribute('role'),
+        title: document.querySelector('#game-battle-menu-title')?.textContent?.trim(),
+        paused: window.__game.paused,
+        manualPaused: window.__game.manualPaused,
+        audio: window.__game.audio.debugState().contextState,
+        fightTime: window.__game.fightTime,
+        playerState: window.__game.player.state,
+        activeText: document.activeElement?.textContent?.trim(),
+        canvasTabIndex: document.querySelector('canvas')?.tabIndex,
+        pauseDisabled: document.querySelector('.game-pause-toggle')?.disabled,
+      }));
+      await pg.waitForTimeout(140);
+      const battleMenuHeld = await pg.evaluate(() => ({
+        paused: window.__game.paused,
+        audio: window.__game.audio.debugState().contextState,
+        fightTime: window.__game.fightTime,
+        playerState: window.__game.player.state,
+      }));
+      await pg.getByRole('button', { name: 'RESUME BATTLE' }).click();
+      await pg.waitForFunction(() => !window.__game.paused
+        && !document.querySelector('#game-battle-menu')
+        && window.__game.audio.debugState().contextState === 'running',
+        null, { timeout: 1500 }).catch(() => {});
+      const battleMenuAfter = await pg.evaluate(() => ({
+        paused: window.__game.paused,
+        audio: window.__game.audio.debugState().contextState,
+        playerState: window.__game.player.state,
+        bufferedLight: window.__game.input.hasBuffered('light'),
+        activeIsCanvas: document.activeElement === document.querySelector('canvas'),
+      }));
+      step.battleMenuResume = {
+        before: beforeBattleMenu,
+        open: battleMenuOpen,
+        held: battleMenuHeld,
+        after: battleMenuAfter,
+      };
+      if (battleMenuOpen.dialog !== 'dialog'
+        || battleMenuOpen.title !== 'Return to the main menu?'
+        || !battleMenuOpen.paused
+        || battleMenuOpen.manualPaused
+        || battleMenuOpen.audio !== 'suspended'
+        || battleMenuOpen.activeText !== 'RESUME BATTLE'
+        || battleMenuOpen.canvasTabIndex !== -1
+        || !battleMenuOpen.pauseDisabled
+        || !battleMenuHeld.paused
+        || battleMenuHeld.audio !== 'suspended'
+        || Math.abs(battleMenuHeld.fightTime - battleMenuOpen.fightTime) > 0.03
+        || battleMenuHeld.playerState !== battleMenuOpen.playerState
+        || battleMenuAfter.paused
+        || battleMenuAfter.audio !== 'running'
+        || battleMenuAfter.bufferedLight
+        || !battleMenuAfter.activeIsCanvas) {
+        out.errors.push(vp.name + ': battle menu did not pause and resume safely: '
+          + JSON.stringify(step.battleMenuResume));
       }
 
       if (vp.name === 'desktop') {
@@ -784,8 +938,9 @@ async function installAudioSampleRate(context) {
         step.victoryImmediate = victoryImmediate;
         const immediateScore = victoryImmediate.saved?.lastScore;
         const immediateBest = victoryImmediate.saved?.bestScores?.[String(victoryImmediate.trial)];
+        const immediateHistory = victoryImmediate.saved?.scoreHistory?.[0];
         if (victoryImmediate.state !== 'victory' || victoryImmediate.stateT !== 0
-          || victoryImmediate.saved?.v !== 5
+          || victoryImmediate.saved?.v !== 6
           || immediateScore?.grade !== victoryImmediate.grade
           || Math.abs((immediateScore?.time ?? -1) - victoryImmediate.fightTime) > 0.000001
           || immediateScore?.trial !== victoryImmediate.trial
@@ -793,6 +948,8 @@ async function installAudioSampleRate(context) {
           || typeof immediateScore?.flasksUsed !== 'number'
           || typeof immediateScore?.oathRank !== 'number'
           || immediateBest?.grade !== victoryImmediate.grade
+          || immediateHistory?.grade !== victoryImmediate.grade
+          || !Number.isFinite(Date.parse(immediateHistory?.completedAt || ''))
           || victoryImmediate.delay < 4.5) {
           out.errors.push('victory score was not saved immediately: ' + JSON.stringify(victoryImmediate));
         }
@@ -838,6 +995,64 @@ async function installAudioSampleRate(context) {
         const st2 = await pg.evaluate(() => (window).__game.state);
         step.restart = st2;
         if (st2 !== 'intro' && st2 !== 'fight') out.errors.push('restart flow broken (' + st2 + ')');
+
+        const beforeReturn = await pg.evaluate(() => ({
+          state: window.__game.state,
+          wins: window.__game.wins,
+          attempts: window.__game.attempts,
+          history: window.__game.scoreHistory.length,
+        }));
+        await pg.locator('.game-menu-toggle').click();
+        await pg.getByRole('button', { name: 'RETURN TO MAIN MENU' }).click();
+        await pg.waitForFunction(() => window.__game.state === 'title'
+          && Boolean(document.querySelector('.game-scores-toggle')), null, { timeout: 1800 }).catch(() => {});
+        const afterReturn = await pg.evaluate(() => ({
+          state: window.__game.state,
+          wins: window.__game.wins,
+          attempts: window.__game.attempts,
+          history: window.__game.scoreHistory.length,
+          paused: window.__game.paused,
+          scoreButton: document.querySelector('.game-scores-toggle')?.textContent?.trim(),
+        }));
+        await pg.locator('.game-scores-toggle').click();
+        await pg.waitForFunction(() => Boolean(document.querySelector('#game-score-history')),
+          null, { timeout: 1200 }).catch(() => {});
+        const scoreDialog = await pg.evaluate(() => ({
+          role: document.querySelector('#game-score-history')?.getAttribute('role'),
+          rows: document.querySelectorAll('.game-score-history__list > li').length,
+          dateTime: document.querySelector('.game-score-history time')?.getAttribute('datetime'),
+          visibleDate: document.querySelector('.game-score-history time')?.textContent?.trim(),
+          activeText: document.activeElement?.textContent?.trim(),
+          canvasTabIndex: document.querySelector('canvas')?.tabIndex,
+          summary: document.querySelector('.game-score-history__summary')?.textContent?.trim(),
+        }));
+        await pg.screenshot({ path: path.join(ARTIFACT_DIR, `${vp.name}-scores.png`) });
+        await pg.keyboard.press('Escape');
+        await pg.waitForFunction(() => !document.querySelector('#game-score-history'),
+          null, { timeout: 1200 }).catch(() => {});
+        const scoreDialogAfter = await pg.evaluate(() => ({
+          activeIsScores: document.activeElement === document.querySelector('.game-scores-toggle'),
+          canvasTabIndex: document.querySelector('canvas')?.tabIndex,
+        }));
+        step.returnAndScores = { before: beforeReturn, after: afterReturn, dialog: scoreDialog, closed: scoreDialogAfter };
+        if (afterReturn.state !== 'title'
+          || afterReturn.wins !== beforeReturn.wins
+          || afterReturn.attempts !== beforeReturn.attempts
+          || afterReturn.history !== beforeReturn.history
+          || afterReturn.paused
+          || afterReturn.scoreButton !== 'SCORES'
+          || scoreDialog.role !== 'dialog'
+          || scoreDialog.rows < 1
+          || !Number.isFinite(Date.parse(scoreDialog.dateTime || ''))
+          || !scoreDialog.visibleDate
+          || scoreDialog.activeText !== 'CLOSE'
+          || scoreDialog.canvasTabIndex !== -1
+          || !scoreDialog.summary?.includes('victory')
+          || !scoreDialogAfter.activeIsScores
+          || scoreDialogAfter.canvasTabIndex !== 0) {
+          out.errors.push(vp.name + ': return-to-menu or score chronicle failed: '
+            + JSON.stringify(step.returnAndScores));
+        }
 
         // focus loss must freeze both simulation and audio, then resume cleanly
         const pauseBefore = await pg.evaluate(async () => {
@@ -1420,19 +1635,24 @@ async function installAudioSampleRate(context) {
         }
         if (bladeSaint.hitRadius !== 34) out.errors.push('Blade-Saint visual pass changed the boss hit radius');
 
-        // save schema v5 round-trip incl. independent mix, settings, scorecards and teaching state
-        const sv5 = await pg.evaluate(() => {
+        // save schema v6 round-trip incl. independent mix, settings, scorecards,
+        // dated history and teaching state
+        const sv6 = await pg.evaluate(() => {
           const g = window.__game;
           g.state = 'title';
           g.setMusicVolume(0.65); g.setSfxVolume(0.95);
           g.setGrace(2); g.shakeEnabled = false; g.flashReduced = true; g.persist();
           return JSON.parse(localStorage.getItem('gracefell'));
         });
-        step.saveV5 = sv5;
-        if (sv5.v !== 5 || sv5.grace !== 2 || sv5.shakeEnabled !== false || sv5.flashReduced !== true
-          || sv5.musicVolume !== 0.65 || sv5.sfxVolume !== 0.95
-          || !sv5.bests || !sv5.lastScore || !sv5.bestScores || typeof sv5.tutorialComplete !== 'boolean') {
-          out.errors.push('save v5 did not round-trip mix, settings, teaching state and scores: ' + JSON.stringify(sv5));
+        step.saveV6 = sv6;
+        if (sv6.v !== 6 || sv6.grace !== 2 || sv6.shakeEnabled !== false || sv6.flashReduced !== true
+          || sv6.musicVolume !== 0.65 || sv6.sfxVolume !== 0.95
+          || !sv6.bests || !sv6.lastScore || !sv6.bestScores
+          || !Array.isArray(sv6.scoreHistory) || sv6.scoreHistory.length < 1
+          || sv6.scoreHistory.length > 20
+          || !Number.isFinite(Date.parse(sv6.scoreHistory[0].completedAt || ''))
+          || typeof sv6.tutorialComplete !== 'boolean') {
+          out.errors.push('save v6 did not round-trip mix, settings, teaching state and score history: ' + JSON.stringify(sv6));
         }
         const scoreReload = await pg.evaluate(() => {
           const live = window.__game;
@@ -1442,16 +1662,79 @@ async function installAudioSampleRate(context) {
           const r = {
             lastScore: g2.lastScore,
             bestScore: g2.lastScore ? g2.bestScores[String(g2.lastScore.trial)] : null,
+            scoreHistory: g2.scoreHistory,
           };
           g2.destroy();
           window.__game = live;
           return r;
         });
         step.scoreReload = scoreReload;
-        if (!scoreReload.lastScore || !scoreReload.bestScore
-          || scoreReload.lastScore.grade !== sv5.lastScore.grade
-          || scoreReload.bestScore.grade !== sv5.lastScore.grade) {
+        if (!scoreReload.lastScore || !scoreReload.bestScore || scoreReload.scoreHistory.length < 1
+          || scoreReload.lastScore.grade !== sv6.lastScore.grade
+          || scoreReload.bestScore.grade !== sv6.lastScore.grade
+          || scoreReload.scoreHistory[0].completedAt !== sv6.scoreHistory[0].completedAt) {
           out.errors.push('saved victory score did not reload: ' + JSON.stringify(scoreReload));
+        }
+
+        const v5ScoreMigration = await pg.evaluate(() => {
+          const live = window.__game;
+          const previousSave = localStorage.getItem('gracefell');
+          localStorage.setItem('gracefell', JSON.stringify({
+            v: 5,
+            lastScore: live.lastScore,
+            bestScores: live.bestScores,
+            wins: live.wins,
+            attempts: live.attempts,
+          }));
+          const G = live.constructor;
+          const c = document.createElement('canvas');
+          const migrated = new G(c);
+          const result = {
+            historyLength: migrated.scoreHistory.length,
+            completedAt: migrated.scoreHistory[0]?.completedAt,
+            grade: migrated.scoreHistory[0]?.grade,
+          };
+          migrated.destroy();
+          if (previousSave) localStorage.setItem('gracefell', previousSave);
+          window.__game = live;
+          return result;
+        });
+        step.v5ScoreMigration = v5ScoreMigration;
+        if (v5ScoreMigration.historyLength !== 1
+          || v5ScoreMigration.completedAt !== null
+          || v5ScoreMigration.grade !== sv6.lastScore.grade) {
+          out.errors.push('v5 last score did not migrate honestly into v6 history: '
+            + JSON.stringify(v5ScoreMigration));
+        }
+
+        const historyCap = await pg.evaluate(() => {
+          const live = window.__game;
+          const previousSave = localStorage.getItem('gracefell');
+          const save = JSON.parse(previousSave);
+          const base = save.lastScore;
+          save.scoreHistory = Array.from({ length: 25 }, (_, index) => ({
+            ...base,
+            attempt: index + 1,
+            completedAt: new Date(Date.UTC(2026, 6, 24, 0, index)).toISOString(),
+          }));
+          localStorage.setItem('gracefell', JSON.stringify(save));
+          const G = live.constructor;
+          const c = document.createElement('canvas');
+          const capped = new G(c);
+          const result = {
+            length: capped.scoreHistory.length,
+            firstAttempt: capped.scoreHistory[0]?.attempt,
+            lastAttempt: capped.scoreHistory[capped.scoreHistory.length - 1]?.attempt,
+          };
+          capped.destroy();
+          localStorage.setItem('gracefell', previousSave);
+          window.__game = live;
+          return result;
+        });
+        step.historyCap = historyCap;
+        if (historyCap.length !== 20 || historyCap.firstAttempt !== 1 || historyCap.lastAttempt !== 20) {
+          out.errors.push('v6 score history did not retain exactly the newest 20 valid entries: '
+            + JSON.stringify(historyCap));
         }
 
         // v1 save migrates forward
@@ -1704,6 +1987,67 @@ async function installAudioSampleRate(context) {
         out.errors.push('touch: player pause/resume contract failed: ' + JSON.stringify(t.manualPause));
       }
 
+      const touchMenu = pg.locator('.game-menu-toggle');
+      const touchMenuBox = await touchMenu.boundingBox();
+      const touchMenuBefore = await pg.evaluate(() => ({
+        fightTime: window.__game.fightTime,
+        playerState: window.__game.player.state,
+      }));
+      await touchMenu.tap();
+      await pg.waitForFunction(() => Boolean(document.querySelector('#game-battle-menu')),
+        null, { timeout: 1200 }).catch(() => {});
+      await pg.waitForTimeout(120);
+      const touchMenuOpen = await pg.evaluate(() => ({
+        paused: window.__game.paused,
+        audio: window.__game.audio.debugState().contextState,
+        fightTime: window.__game.fightTime,
+        playerState: window.__game.player.state,
+        canvasTabIndex: document.querySelector('canvas')?.tabIndex,
+        activeText: document.activeElement?.textContent?.trim(),
+      }));
+      await pg.waitForTimeout(120);
+      const touchMenuHeld = await pg.evaluate(() => ({
+        paused: window.__game.paused,
+        audio: window.__game.audio.debugState().contextState,
+        fightTime: window.__game.fightTime,
+        playerState: window.__game.player.state,
+      }));
+      await pg.getByRole('button', { name: 'RESUME BATTLE' }).tap();
+      await pg.waitForFunction(() => !window.__game.paused
+        && !document.querySelector('#game-battle-menu')
+        && window.__game.audio.debugState().contextState === 'running',
+        null, { timeout: 1500 }).catch(() => {});
+      const touchMenuAfter = await pg.evaluate(() => ({
+        paused: window.__game.paused,
+        playerState: window.__game.player.state,
+        activeIsCanvas: document.activeElement === document.querySelector('canvas'),
+      }));
+      t.battleMenu = {
+        box: touchMenuBox,
+        before: touchMenuBefore,
+        open: touchMenuOpen,
+        held: touchMenuHeld,
+        after: touchMenuAfter,
+      };
+      if (!touchMenuBox
+        || touchMenuBox.width < 44
+        || touchMenuBox.height < 44
+        || touchMenuBox.x < 0
+        || touchMenuBox.y < 0
+        || touchMenuBox.x + touchMenuBox.width > 391
+        || !touchMenuOpen.paused
+        || touchMenuOpen.audio !== 'suspended'
+        || touchMenuOpen.canvasTabIndex !== -1
+        || touchMenuOpen.activeText !== 'RESUME BATTLE'
+        || !touchMenuHeld.paused
+        || touchMenuHeld.audio !== 'suspended'
+        || Math.abs(touchMenuHeld.fightTime - touchMenuOpen.fightTime) > 0.03
+        || touchMenuHeld.playerState !== touchMenuOpen.playerState
+        || touchMenuAfter.paused
+        || !touchMenuAfter.activeIsCanvas) {
+        out.errors.push('touch: battle menu did not pause and resume safely: ' + JSON.stringify(t.battleMenu));
+      }
+
       // 6. +5 touch swipe timing and combo length must match what is drawn.
       t.difficultyTelegraphs = await pg.evaluate(() => {
         const g = window.__game;
@@ -1859,6 +2203,31 @@ async function installAudioSampleRate(context) {
           + JSON.stringify(t.rapidAtkCombo));
       }
       await pg.screenshot({ path: path.join(ARTIFACT_DIR, 'touch-combo-finisher.png') });
+
+      t.queuedComboFeedback = await pg.evaluate(() => {
+        const g = window.__game;
+        const canvas = document.querySelector('canvas');
+        const ctx = canvas.getContext('2d');
+        const originalFillText = ctx.fillText;
+        const labels = [];
+        ctx.fillText = function (text, x, y, maxWidth) {
+          labels.push(String(text));
+          return maxWidth === undefined
+            ? originalFillText.call(this, text, x, y)
+            : originalFillText.call(this, text, x, y, maxWidth);
+        };
+        g.playerChainHits = 0;
+        g.playerChainFinished = false;
+        g.playerChainT = 0;
+        g.player.queuedLightAttacks = 2;
+        g.render();
+        ctx.fillText = originalFillText;
+        g.player.queuedLightAttacks = 0;
+        return labels.find((label) => label.includes('INPUT QUEUED')) || '';
+      });
+      if (!t.queuedComboFeedback.includes('◆◆')) {
+        out.errors.push('touch: queued light attacks have no visible feedback (' + t.queuedComboFeedback + ')');
+      }
 
       // Expanded fingertip regions can overlap even though the circles do not.
       // A point on the visible ATK edge must resolve to exactly one nearest
@@ -2064,12 +2433,15 @@ async function installAudioSampleRate(context) {
         return {
           state: g.state,
           lastScore: g.lastScore,
-          saved: JSON.parse(localStorage.getItem('gracefell') || 'null')?.lastScore,
+          save: JSON.parse(localStorage.getItem('gracefell') || 'null'),
         };
       });
       if (t.victoryScore.state !== 'victory'
-        || t.victoryScore.lastScore?.grade !== t.victoryScore.saved?.grade
-        || t.victoryScore.lastScore?.time !== 83.2) {
+        || t.victoryScore.save?.v !== 6
+        || t.victoryScore.lastScore?.grade !== t.victoryScore.save?.lastScore?.grade
+        || t.victoryScore.lastScore?.time !== 83.2
+        || t.victoryScore.save?.scoreHistory?.[0]?.time !== 83.2
+        || !Number.isFinite(Date.parse(t.victoryScore.save?.scoreHistory?.[0]?.completedAt || ''))) {
         out.errors.push('touch: victory scorecard was not saved: ' + JSON.stringify(t.victoryScore));
       }
       await pg.screenshot({ path: path.join(ARTIFACT_DIR, 'touch-victory.png') });

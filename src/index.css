@@ -110,7 +110,9 @@ html, body, #root {
 }
 
 .game-mix-toggle,
-.game-pause-toggle {
+.game-pause-toggle,
+.game-menu-toggle,
+.game-scores-toggle {
   position: fixed;
   z-index: 8;
   top: calc(12px + env(safe-area-inset-top, 0px));
@@ -133,28 +135,46 @@ html, body, #root {
   min-width: 64px;
 }
 
+.game-menu-toggle {
+  right: calc(252px + env(safe-area-inset-right, 0px));
+  min-width: 68px;
+}
+
+.game-scores-toggle {
+  right: calc(12px + env(safe-area-inset-right, 0px));
+  min-width: 86px;
+}
+
 .game-mix-toggle:hover,
 .game-mix-toggle:focus-visible,
 .game-pause-toggle:hover,
-.game-pause-toggle.is-paused {
+.game-pause-toggle.is-paused,
+.game-menu-toggle:hover,
+.game-menu-toggle:focus-visible,
+.game-scores-toggle:hover,
+.game-scores-toggle:focus-visible {
   color: #f0d78c;
   border-color: rgba(240, 215, 140, 0.9);
   background: rgba(28, 23, 16, 0.94);
 }
 
 .game-mix-toggle:disabled,
-.game-pause-toggle:disabled {
+.game-pause-toggle:disabled,
+.game-menu-toggle:disabled,
+.game-scores-toggle:disabled {
   opacity: 0.42;
   cursor: not-allowed;
 }
 
 .game-mix-toggle:focus-visible,
-.game-pause-toggle:focus-visible {
+.game-pause-toggle:focus-visible,
+.game-menu-toggle:focus-visible,
+.game-scores-toggle:focus-visible {
   outline: 3px solid #f0d78c;
   outline-offset: 2px;
 }
 
-.game-mix-backdrop {
+.game-dialog-backdrop {
   position: fixed;
   z-index: 9;
   inset: 0;
@@ -270,4 +290,210 @@ html, body, #root {
 
 .game-accessibility button:disabled {
   opacity: 0.48;
+}
+
+.game-combat-status {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: 8px 0 12px;
+}
+
+.game-combat-status div {
+  padding: 7px 9px;
+  background: rgba(23, 18, 13, 0.86);
+  border: 1px solid rgba(201, 169, 89, 0.28);
+}
+
+.game-combat-status dt,
+.game-score-history dt {
+  color: #9f9176;
+  font: 700 11px "Cormorant Garamond", Georgia, serif;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.game-combat-status dd,
+.game-score-history dd {
+  margin: 2px 0 0;
+  color: #ece0c4;
+  font: 700 14px "Cormorant Garamond", Georgia, serif;
+}
+
+.game-dialog {
+  position: fixed;
+  z-index: 10;
+  top: 50%;
+  left: 50%;
+  width: min(520px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  padding: clamp(18px, 4vw, 28px);
+  overflow: auto;
+  color: #ece0c4;
+  background:
+    linear-gradient(145deg, rgba(37, 28, 20, 0.98), rgba(10, 8, 6, 0.99)),
+    #0b0907;
+  border: 1px solid rgba(201, 169, 89, 0.8);
+  box-shadow: 0 24px 90px rgba(0, 0, 0, 0.86), inset 0 0 40px rgba(201, 169, 89, 0.035);
+  transform: translate(-50%, -50%);
+}
+
+.game-dialog h1 {
+  margin: 0;
+  color: #f0dfb8;
+  font: 700 clamp(22px, 5vw, 30px) Cinzel, "Times New Roman", serif;
+  letter-spacing: 0.06em;
+}
+
+.game-dialog p {
+  color: #c7b99b;
+  font: 600 16px/1.35 "Cormorant Garamond", Georgia, serif;
+}
+
+.game-dialog__eyebrow {
+  margin: 0 0 6px;
+  color: #c9a959 !important;
+  font: 700 11px Cinzel, "Times New Roman", serif !important;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.game-dialog button {
+  min-height: 44px;
+  padding: 9px 14px;
+  color: #ddd0b5;
+  background: rgba(17, 13, 9, 0.94);
+  border: 1px solid rgba(201, 169, 89, 0.62);
+  font: 700 13px "Cormorant Garamond", Georgia, serif;
+  letter-spacing: 0.06em;
+}
+
+.game-dialog button:hover,
+.game-dialog button:focus-visible,
+.game-dialog button.is-primary {
+  color: #f0d78c;
+  border-color: rgba(240, 215, 140, 0.94);
+  background: rgba(39, 29, 18, 0.98);
+}
+
+.game-dialog button:focus-visible {
+  outline: 3px solid #f0d78c;
+  outline-offset: 3px;
+}
+
+.game-dialog__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.game-dialog__heading {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.game-dialog__close {
+  flex: 0 0 auto;
+}
+
+.game-score-history {
+  width: min(760px, calc(100vw - 24px));
+}
+
+.game-score-history__summary {
+  margin: 12px 0 16px;
+}
+
+.game-score-history__empty {
+  padding: 30px 18px;
+  color: #b8a98d;
+  background: rgba(8, 6, 4, 0.55);
+  border: 1px solid rgba(201, 169, 89, 0.28);
+  font: 600 17px/1.4 "Cormorant Garamond", Georgia, serif;
+  text-align: center;
+}
+
+.game-score-history__list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.game-score-history__list > li {
+  display: grid;
+  grid-template-columns: 54px minmax(145px, 0.7fr) minmax(270px, 1.3fr);
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  background: rgba(8, 6, 4, 0.58);
+  border: 1px solid rgba(201, 169, 89, 0.25);
+}
+
+.game-score-history__grade {
+  color: #f0d78c;
+  font: 700 31px Cinzel, "Times New Roman", serif;
+  text-align: center;
+}
+
+.game-score-history__result {
+  display: grid;
+}
+
+.game-score-history__result strong {
+  color: #eee2c7;
+  font: 700 20px Cinzel, "Times New Roman", serif;
+}
+
+.game-score-history__result span,
+.game-score-history__result time {
+  color: #aa9c82;
+  font: 600 13px "Cormorant Garamond", Georgia, serif;
+}
+
+.game-score-history__list dl {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(42px, 1fr));
+  gap: 6px;
+  margin: 0;
+}
+
+.game-score-history__list dl div {
+  min-width: 0;
+}
+
+@media (max-width: 560px) {
+  .game-menu-toggle {
+    top: calc(64px + env(safe-area-inset-top, 0px));
+    right: calc(12px + env(safe-area-inset-right, 0px));
+  }
+
+  .game-dialog {
+    padding: 18px;
+  }
+
+  .game-dialog__actions {
+    grid-template-columns: 1fr;
+  }
+
+  .game-combat-status {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .game-score-history__list > li {
+    grid-template-columns: 44px 1fr;
+  }
+
+  .game-score-history__list dl {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .game-score-history__list dt {
+    font-size: 9px;
+  }
 }

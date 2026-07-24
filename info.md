@@ -1,7 +1,7 @@
 # GRACEFELL project facts
 
-- Current package: `gracefell@2.18.0`
-- Gameplay release: `v2.18`
+- Current package: `gracefell@2.19.0`
+- Gameplay release: `v2.19`
 - Character release: Kite-Veil Penitent + Fallen Blade-Saint
 - Production: <https://gracefell.alyoechosys.dev>
 - Repository: <https://github.com/jonathanwxh-cell/gracefell>
@@ -29,8 +29,10 @@ npm run qa
 
 `npm run qa` is the acceptance gate. It builds the app, starts an isolated server on
 `127.0.0.1:8492`, and drives desktop, mobile, and real-touch Chromium paths. See
-[`docs/releases/v2.18.md`](docs/releases/v2.18.md) for the current adaptive-score, live MIX,
-save-v5, resilient-streaming, and local acceptance record,
+[`docs/releases/v2.19.md`](docs/releases/v2.19.md) for the current battle-menu, score-history,
+semantic combat, save-v6, and local acceptance record,
+[`docs/releases/v2.18.md`](docs/releases/v2.18.md) for the adaptive-score, live MIX,
+save-v5, and resilient-streaming record,
 [`docs/releases/v2.13.md`](docs/releases/v2.13.md) for the original pause/resume and input-ownership
 record, [`docs/releases/v2.12.1.md`](docs/releases/v2.12.1.md) for the
 previous balance and HUD record, [`docs/releases/v2.12.md`](docs/releases/v2.12.md) for the
@@ -48,6 +50,7 @@ original Journey/Oaths, teaching, death-recovery, visible-combo, and save-v4 des
 - [`PROVENANCE.md`](PROVENANCE.md) — contributor ledger and commit-trailer rules
 - [`public/audio/README.md`](public/audio/README.md) — generated music provenance
 - [`design-qa.md`](design-qa.md) — source-normalized mobile/desktop character comparisons
+- [`docs/releases/v2.19.md`](docs/releases/v2.19.md) — v2.19 battle menu, score chronicle, combat clarity, audio-state race fix, and local acceptance
 - [`docs/releases/v2.18.md`](docs/releases/v2.18.md) — v2.18 phase score, MIX controls, save v5, and local acceptance
 - [`docs/releases/v2.17.1.md`](docs/releases/v2.17.1.md) — v2.17.1 unit-test and engine-typing quality pass
 - [`docs/releases/v2.17.md`](docs/releases/v2.17.md) — v2.17 self-hosted fonts, icons, manifest, and metadata
