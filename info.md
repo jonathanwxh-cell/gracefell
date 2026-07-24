@@ -1,7 +1,7 @@
 # GRACEFELL project facts
 
-- Current package: `gracefell@2.13.0`
-- Gameplay release: `v2.13`
+- Current package: `gracefell@2.14.0`
+- Gameplay release: `v2.14`
 - Character release: Kite-Veil Penitent + Fallen Blade-Saint
 - Production: <https://gracefell.alyoechosys.dev>
 - Repository: <https://github.com/jonathanwxh-cell/gracefell>
@@ -46,6 +46,7 @@ original Journey/Oaths, teaching, death-recovery, visible-combo, and save-v4 des
 - [`PROVENANCE.md`](PROVENANCE.md) — contributor ledger and commit-trailer rules
 - [`public/audio/README.md`](public/audio/README.md) — generated music provenance
 - [`design-qa.md`](design-qa.md) — source-normalized mobile/desktop character comparisons
+- [`docs/releases/v2.14.md`](docs/releases/v2.14.md) — v2.14 feel & spectacle: dynamic camera, stagger execution, arena deterioration
 - [`docs/releases/v2.13.md`](docs/releases/v2.13.md) — v2.13 pause/resume design, QA, and production evidence
 - [`docs/releases/v2.12.1.md`](docs/releases/v2.12.1.md) — v2.12.1 input, balance, visual-polish, QA, and production evidence
 - [`docs/releases/v2.12.md`](docs/releases/v2.12.md) — v2.12 research, design, QA, deployment, and production evidence
