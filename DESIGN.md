@@ -1320,3 +1320,26 @@ dead-dependency prune (#37) is deferred to its own pass. No gameplay change.
 New `qa/verify.cjs` header assertion (node `fetch` against the QA server): root has `nosniff` +
 `Referrer-Policy`; `/audio/` MP3 is `immutable`. Direct-curl confirmed. lint/build clean; `npm ci`
 verified clean. Only the load-sensitive audio-init budgets fail locally (green on CI).
+
+## v2.16.1 — Claude (Opus 4.8), "hygiene B: dependency prune" (2026-07-24)
+
+Resolves audit issue #37. No behaviour change — pure dead-code + dependency removal, with the
+build and Playwright gate as the safety net.
+
+The rendered surface is `main.tsx → App.tsx → pages/Home.tsx` (React + react-router + the canvas
+engine). Everything else under `src/` was scaffolding from the initial Vite+shadcn template and
+unreachable from the game. Deleted `src/components/` (50 shadcn/ui files), `src/hooks/use-mobile.ts`,
+`src/lib/utils.ts`, `src/App.css`, `components.json`, and **43 production deps** (all `@radix-ui/*`
+plus cmdk/recharts/embla/react-day-picker/date-fns/vaul/react-hook-form/@hookform/zod/input-otp/
+react-resizable-panels/next-themes/sonner/lucide-react/cva/clsx/tailwind-merge). Kept react,
+react-dom, react-router. `src/` is now six files. CSS bundle 80 KB → 10.6 KB; JS unchanged.
+
+### Kept deliberately (live)
+- `index.css` — the game's real styles + the load-bearing `--sa-b`/`--sa-r` safe-area vars.
+- `App.tsx` — `main.tsx` renders it (`<BrowserRouter><App/></BrowserRouter>`).
+- `tailwindcss-animate` — required by `tailwind.config.js`.
+
+### Verification
+`tsc` passing is the proof nothing live imported the deleted tree (a broken import fails the build).
+lint/build clean; lockfile regenerated; `npm ci` verified; full gate green apart from the
+load-sensitive audio-init budgets (green on CI).

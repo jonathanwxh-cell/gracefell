@@ -1,7 +1,7 @@
 # GRACEFELL project facts
 
-- Current package: `gracefell@2.16.0`
-- Gameplay release: `v2.15` (v2.16 is a server/build hygiene pass, no gameplay change)
+- Current package: `gracefell@2.16.1`
+- Gameplay release: `v2.15` (v2.16/v2.16.1 are server/build/dependency hygiene, no gameplay change)
 - Character release: Kite-Veil Penitent + Fallen Blade-Saint
 - Production: <https://gracefell.alyoechosys.dev>
 - Repository: <https://github.com/jonathanwxh-cell/gracefell>
@@ -46,6 +46,7 @@ original Journey/Oaths, teaching, death-recovery, visible-combo, and save-v4 des
 - [`PROVENANCE.md`](PROVENANCE.md) — contributor ledger and commit-trailer rules
 - [`public/audio/README.md`](public/audio/README.md) — generated music provenance
 - [`design-qa.md`](design-qa.md) — source-normalized mobile/desktop character comparisons
+- [`docs/releases/v2.16.1.md`](docs/releases/v2.16.1.md) — v2.16.1 hygiene B: pruned the unreachable shadcn tree + 43 prod deps
 - [`docs/releases/v2.16.md`](docs/releases/v2.16.md) — v2.16 hygiene A: server headers + immutable audio, kimi-plugin removal, npm ci, LICENSE
 - [`docs/releases/v2.15.md`](docs/releases/v2.15.md) — v2.15 offense: hold-to-charge heavy, phase-3 musical lift
 - [`docs/releases/v2.14.md`](docs/releases/v2.14.md) — v2.14 feel & spectacle: dynamic camera, stagger execution, arena deterioration
