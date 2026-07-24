@@ -761,6 +761,7 @@ export class Boss {
   chargeDir = 0; chargeTime = 0;
   impulseVx = 0; impulseVy = 0; traceCount = 0;
   poise = 120; maxPoise = 120;
+  executeConsumed = false; // one stagger execution (riposte) per poise break
   cooldowns: Record<BossAttack, number> = { swipe: 0, slam: 0, charge: 0, volley: 0, meteor: 0, ring: 0, spiral: 0 };
   aura = 0; hurtFlash = 0;
   meteorQueue: Meteor[] = [];
@@ -959,6 +960,7 @@ export class Boss {
       game.shake(20, 0.9);
       game.goldFlash = 0.4;
       game.banner('THE SOVEREIGN BURNS', 'phase');
+      game.deepenArena(2);
       game.projectiles = []; game.rings = []; game.meteors = [];
       game.stampPhaseScars(2);
       // push player back
@@ -980,6 +982,7 @@ export class Boss {
       game.goldFlash = 0.5;
       game.slowT = 0.6; game.timeScale = 0.35;
       game.banner('GRACE ABANDONS HIM', 'phase');
+      game.deepenArena(3);
       game.projectiles = []; game.rings = []; game.meteors = [];
       game.stampPhaseScars(3);
       game.burst(this.x, this.y, 46, PAL.goldBright, 340, 1.1, 4);
@@ -1173,6 +1176,7 @@ export class Boss {
     if (game.mods.noStagger) { this.poise = this.maxPoise; return; }
     this.chainQueue = []; this.chainStep = 0; this.chainTotal = 0;
     this.state = 'staggered'; this.t = game.mods.staggerDuration;
+    this.executeConsumed = false;
     this.poise = this.maxPoise;
     game.audio.stagger(game.audioSpatial(this.x, this.y));
     game.onBossStaggered();
@@ -1586,10 +1590,11 @@ export class Game {
   projectiles: Projectile[] = [];
   rings: RingWave[] = [];
   meteors: Meteor[] = [];
-  camX = 0; camY = 0; camZoom = 1;
+  camX = 0; camY = 0; camZoom = 1; baseZoom = 1;
   shakeAmp = 0; shakeT = 0; shakeDur = 0;
   hitstop = 0; timeScale = 1; slowT = 0;
   redFlash = 0; goldFlash = 0;
+  phaseDecay = 0; emberDensityMul = 1; // v2.14: escalating arena deterioration
   bannerText = ''; bannerSub = ''; bannerT = 0; bannerKind = '';
   raf = 0; lastTs = 0;
   dpr = 1; w = 0; h = 0;
@@ -1819,6 +1824,34 @@ export class Game {
   shake(amp: number, dur: number) {
     if (!this.shakeEnabled) return;
     this.shakeAmp = Math.max(this.shakeAmp, amp); this.shakeT = 0; this.shakeDur = dur;
+  }
+
+  combatZoomTarget(): number {
+    // Intent exposed for QA the way menuGeom() is. A clean 1v1 tightens the
+    // frame for intimacy; live area-denial (projectiles/rings/meteors) and
+    // later phases widen it back to the viewport-fit floor so a phone never
+    // zooms into a storm it then cannot read.
+    const threats = this.projectiles.length + this.rings.length + this.meteors.length;
+    const phaseLoad = (this.boss.phase - 1) * 0.5;
+    const intensity = clamp(threats / 5 + phaseLoad, 0, 1);
+    return this.baseZoom * lerp(1.16, 1.0, intensity);
+  }
+
+  deepenArena(phase: number) {
+    // Phase spectacle through the existing accumulation surfaces only: the
+    // offscreen scorch canvas and ambient embers, never per-frame drawArena
+    // detail (baked-floor invariant). Dark scorch + amber embers; the reserved
+    // hazard hue is never touched.
+    this.phaseDecay = phase - 1;
+    this.emberDensityMul = phase >= 3 ? 2 : 1.5;
+    const stamps = phase >= 3 ? 10 : 6;
+    for (let i = 0; i < stamps; i++) {
+      const a = (i / stamps) * TAU + rand(-0.25, 0.25);
+      const r = this.arenaR * (phase >= 3 ? rand(0.28, 0.82) : rand(0.24, 0.6));
+      this.addScorch(Math.cos(a) * r, Math.sin(a) * r, rand(24, 46),
+        phase >= 3 ? 'rgba(14,7,4,0.7)' : 'rgba(20,11,7,0.58)',
+        phase >= 3 ? 0.34 : 0.26, phase >= 3 ? 3 : 2);
+    }
   }
   addParticle(p: Particle) { if (this.particles.length < 700) this.particles.push(p); }
   burst(x: number, y: number, n: number, color: string, spd: number, life: number, size: number) {
@@ -2294,7 +2327,24 @@ export class Game {
       const a = angTo(p.x, p.y, b.x, b.y);
       if (Math.abs(angDiff(p.facing, a)) < arc) {
         const punishedStagger = b.state === 'staggered';
-        b.takeDamage((heavy || finisher) ? dmg : dmg + Math.floor(rand(-2, 3)), this, p.x, p.y, impact);
+        const execute = heavy && punishedStagger && !b.executeConsumed;
+        if (execute) {
+          // Stagger execution: the payoff the whole defensive loop is built
+          // toward. takeDamage applies the 1.4x staggered multiplier on top of
+          // this riposte base. Spirit/gold hue only (never the reserved danger
+          // hue); shake()/zoomPunch route through the photosensitivity gates.
+          b.executeConsumed = true;
+          b.takeDamage(30 * 2.6, this, p.x, p.y, 'finisher');
+          this.hitstop = Math.max(this.hitstop, 0.14);
+          this.zoomPunch = Math.max(this.zoomPunch, 0.08);
+          this.goldFlash = Math.max(this.goldFlash, 0.5);
+          this.shake(14, 0.4);
+          this.sparks(b.x, b.y, 24);
+          this.addDamageNum(b.x, b.y - b.r - 20, 'EXECUTE', PAL.spirit, 24);
+          this.audio.stagger(this.audioSpatial(b.x, b.y));
+        } else {
+          b.takeDamage((heavy || finisher) ? dmg : dmg + Math.floor(rand(-2, 3)), this, p.x, p.y, impact);
+        }
         connected = true;
         if (!heavy) this.registerPlayerChain(step);
         if (punishedStagger && this.tutorialStage === 'stagger') {
@@ -2436,6 +2486,7 @@ export class Game {
     this.projectiles = []; this.rings = []; this.meteors = [];
     this.particles = []; this.dmgNums = [];
     this.fightTime = 0; this.damageDealt = 0; this.hitsTaken = 0;
+    this.phaseDecay = 0; this.emberDensityMul = 1;
     this.perfectDodges = 0; this.flasksUsed = 0;
     this.breakPlayerChain();
     this.lastDamageSource = 'unknown';
@@ -2734,8 +2785,9 @@ export class Game {
     const targetY = this.state === 'intro' ? b.y : lerp(lookY, (p.y + b.y) / 2, 0.25);
     this.camX = lerp(this.camX, targetX, 1 - Math.exp(-5 * dt));
     this.camY = lerp(this.camY, targetY, 1 - Math.exp(-5 * dt));
-    const baseZoom = clamp(Math.min(this.w / 1250, this.h / 900), 0.55, 1.35) * (this.state === 'intro' ? 1.12 : 1);
-    this.camZoom = lerp(this.camZoom, baseZoom, 1 - Math.exp(-3 * dt));
+    this.baseZoom = clamp(Math.min(this.w / 1250, this.h / 900), 0.55, 1.35) * (this.state === 'intro' ? 1.12 : 1);
+    const zoomTarget = this.state === 'fight' ? this.combatZoomTarget() : this.baseZoom;
+    this.camZoom = lerp(this.camZoom, zoomTarget, 1 - Math.exp(-3 * dt));
 
     // shake decay
     if (this.shakeT < this.shakeDur) this.shakeT += rawDt; else this.shakeAmp = 0;
@@ -2761,7 +2813,7 @@ export class Game {
     // ambient embers
     this.ambientT -= dt;
     if (this.ambientT <= 0) {
-      this.ambientT = 0.12;
+      this.ambientT = 0.12 / this.emberDensityMul;
       const a = rand(0, TAU), r = Math.sqrt(Math.random()) * this.arenaR;
       this.addParticle({
         x: Math.cos(a) * r, y: Math.sin(a) * r, vx: rand(-8, 8), vy: rand(-26, -10),
