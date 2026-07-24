@@ -19,9 +19,10 @@ and flasks, and assistive technology receives current player, boss, telegraph, a
 combo state without turning changing percentages into live-announcement spam.
 Save schema v6 migrates an older last score honestly as “Date unavailable.”
 The adaptive MiniMax phase score, MIX controls, Journey/Oath curve, retry behavior,
-and combat timing are unchanged. The completed local weather implementation and
-verification record is in [`docs/releases/v2.20.md`](docs/releases/v2.20.md);
-the deployed v2.19 record remains in [`docs/releases/v2.19.md`](docs/releases/v2.19.md).
+and combat timing are unchanged. The complete v2.20 implementation, CI, deployment,
+and public verification record is in
+[`docs/releases/v2.20.md`](docs/releases/v2.20.md); the v2.19 navigation and score
+chronicle record remains in [`docs/releases/v2.19.md`](docs/releases/v2.19.md).
 
 Zero runtime art assets, three generated music tracks. Every character silhouette, sword, halo blade,
 stone in the floor, ember, cape, and combat cue is generated at runtime from code — canvas 2D for

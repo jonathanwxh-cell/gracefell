@@ -1,7 +1,7 @@
 # GRACEFELL project facts
 
 - Current package: `gracefell@2.20.0`
-- Gameplay release: `v2.20` local candidate; production remains v2.19
+- Gameplay release: `v2.20`, merged, deployed, and publicly verified
 - Character release: Kite-Veil Penitent + Fallen Blade-Saint
 - Production: <https://gracefell.alyoechosys.dev>
 - Repository: <https://github.com/jonathanwxh-cell/gracefell>
@@ -30,7 +30,7 @@ npm run qa
 `npm run qa` is the acceptance gate. It builds the app, starts an isolated server on
 `127.0.0.1:8492`, and drives desktop, mobile, and real-touch Chromium paths. See
 [`docs/releases/v2.20.md`](docs/releases/v2.20.md) for the current fixed-pool phase-weather
-implementation and local acceptance record,
+implementation and production acceptance record,
 [`docs/releases/v2.19.md`](docs/releases/v2.19.md) for the current battle-menu, score-history,
 semantic combat, save-v6, and production acceptance record,
 [`docs/releases/v2.18.md`](docs/releases/v2.18.md) for the adaptive-score, live MIX,
@@ -52,7 +52,7 @@ original Journey/Oaths, teaching, death-recovery, visible-combo, and save-v4 des
 - [`PROVENANCE.md`](PROVENANCE.md) — contributor ledger and commit-trailer rules
 - [`public/audio/README.md`](public/audio/README.md) — generated music provenance
 - [`design-qa.md`](design-qa.md) — source-normalized mobile/desktop character comparisons
-- [`docs/releases/v2.20.md`](docs/releases/v2.20.md) — v2.20 fixed-pool Ash Gale weather and local acceptance
+- [`docs/releases/v2.20.md`](docs/releases/v2.20.md) — v2.20 fixed-pool Ash Gale weather and production acceptance
 - [`docs/releases/v2.19.md`](docs/releases/v2.19.md) — v2.19 battle menu, score chronicle, combat clarity, audio-state race fix, and production acceptance
 - [`docs/releases/v2.18.md`](docs/releases/v2.18.md) — v2.18 phase score, MIX controls, save v5, and local acceptance
 - [`docs/releases/v2.17.1.md`](docs/releases/v2.17.1.md) — v2.17.1 unit-test and engine-typing quality pass
