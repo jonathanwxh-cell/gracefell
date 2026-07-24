@@ -104,6 +104,8 @@ export class GameAudio {
   private adaptive = { tension: 0, intensity: 0, staggered: false };
   muted = false;
   phase = 1;
+  private phaseLift = 0;
+  private phaseDirty = false;
 
   prepare() {
     if (this.preparedNoise || this.prepareHandle !== null) return;
@@ -295,6 +297,7 @@ export class GameAudio {
       irBuildCostMs: this.irBuildCostMs,
       adaptive: { ...this.adaptive },
       phase: this.phase,
+      phaseLift: this.phaseLift,
       soundtrackState: this.soundtrackState,
       soundtrackMode: this.soundtrackSource ? 'stream' : 'fallback',
       soundtrackVersion: SOUNDTRACK_VERSION,
@@ -1033,17 +1036,23 @@ export class GameAudio {
     const tension = clamp01((0.35 - playerHpFraction) / 0.25);
     const intensity = clamp01((0.3 - bossHpFraction) / 0.25);
     if (
-      Math.abs(tension - this.adaptive.tension) < 0.015
+      !this.phaseDirty
+      && Math.abs(tension - this.adaptive.tension) < 0.015
       && Math.abs(intensity - this.adaptive.intensity) < 0.015
       && staggered === this.adaptive.staggered
     ) return;
+    this.phaseDirty = false;
     this.adaptive = { tension, intensity, staggered };
+    // Phase lift: a sustained escalation through the existing procedural buses
+    // (no new nodes, no MP3 change). Phase 3 "grace abandons him" hits hardest.
+    this.phaseLift = this.phase >= 3 ? 0.2 : this.phase === 2 ? 0.08 : 0;
+    const lift = this.phaseLift;
     const now = this.ctx.currentTime;
-    const tensionLevel = Math.max(0.0001, tension * 0.56);
-    const drumLevel = staggered ? 0.05 : 0.72 + intensity * 0.18;
+    const tensionLevel = Math.max(0.0001, tension * 0.56 + lift * 0.35);
+    const drumLevel = staggered ? 0.05 : 0.72 + intensity * 0.18 + lift * 0.5;
     const droneLevel = 0.94 + tension * 0.06;
-    const soundtrackLevel = staggered ? 0.32 : this.soundtrackBaseLevel + intensity * 0.03 - tension * 0.02;
-    const soundtrackCutoff = staggered ? 4200 : 7200 + intensity * 1600 + tension * 300;
+    const soundtrackLevel = staggered ? 0.32 : this.soundtrackBaseLevel + intensity * 0.03 - tension * 0.02 + lift * 0.04;
+    const soundtrackCutoff = staggered ? 4200 : 7200 + intensity * 1600 + tension * 300 + lift * 1200;
     this.tensionMusic.gain.setTargetAtTime(tensionLevel, now, 0.2);
     this.drumsMusic.gain.setTargetAtTime(drumLevel, now, staggered ? 0.055 : 0.16);
     this.droneMusic.gain.setTargetAtTime(droneLevel, now, 0.22);
@@ -1054,6 +1063,7 @@ export class GameAudio {
   }
 
   setPhase(phase: number) {
+    if (phase !== this.phase) this.phaseDirty = true;
     this.phase = phase;
   }
 }

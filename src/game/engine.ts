@@ -108,6 +108,7 @@ export class Input {
   btnPressed: Record<string, boolean> = {};
   isTouch = coarsePointer();
   taps: { x: number; y: number }[] = []; // consumed by menu hit-tests each frame
+  touchPoints: { id: number; x: number; y: number }[] = []; // active touches, for hold-to-charge
 
   constructor(canvas: HTMLCanvasElement, onFirstGesture: () => void, onPause: () => void) {
     this.canvas = canvas;
@@ -186,10 +187,10 @@ export class Input {
     const r = this.canvas.getBoundingClientRect();
     this.taps.push({ x: e.clientX - r.left, y: e.clientY - r.top });
     if (e.button === 0) this.pressed['light'] = Input.BUFFER_S;
-    if (e.button === 2) this.pressed['heavy'] = Input.BUFFER_S;
+    if (e.button === 2) { this.pressed['heavy'] = Input.BUFFER_S; this.held['heavy'] = true; }
     this.queueConfirm();
   };
-  private onMouseUp = () => {};
+  private onMouseUp = (e: MouseEvent) => { if (e.button === 2) this.held['heavy'] = false; };
   private onContextMenu = (event: MouseEvent) => event.preventDefault();
 
   // touch → joystick on left 45% of screen, buttons handled by game hit test
@@ -202,6 +203,7 @@ export class Input {
       const t = e.changedTouches[i];
       const x = t.clientX - r.left, y = t.clientY - r.top;
       this.taps.push({ x, y });
+      this.touchPoints.push({ id: t.identifier, x, y });
       if (x < r.width * 0.45 && !this.joyActive) {
         this.joyActive = true; this.joyId = t.identifier;
         this.joyOx = x; this.joyOy = y; this.joyX = 0; this.joyY = 0;
@@ -215,6 +217,8 @@ export class Input {
     const r = this.canvas.getBoundingClientRect();
     for (let i = 0; i < e.changedTouches.length; i++) {
       const t = e.changedTouches[i];
+      const tp = this.touchPoints.find((p) => p.id === t.identifier);
+      if (tp) { tp.x = t.clientX - r.left; tp.y = t.clientY - r.top; }
       if (this.joyActive && t.identifier === this.joyId) {
         const x = t.clientX - r.left, y = t.clientY - r.top;
         const dx = x - this.joyOx, dy = y - this.joyOy;
@@ -228,6 +232,7 @@ export class Input {
     e.preventDefault();
     for (let i = 0; i < e.changedTouches.length; i++) {
       const t = e.changedTouches[i];
+      this.touchPoints = this.touchPoints.filter((p) => p.id !== t.identifier);
       if (this.joyActive && t.identifier === this.joyId) {
         this.joyActive = false; this.joyX = 0; this.joyY = 0;
       }
@@ -255,6 +260,7 @@ export class Input {
     this.pressed = {};
     this.btnPressed = {};
     this.taps = [];
+    this.touchPoints = [];
     this.joyActive = false;
     this.joyId = -1;
     this.joyX = 0;
@@ -293,6 +299,7 @@ export class Input {
 
 // ------------------------------------------------------------------ player
 export class Player {
+  static HEAVY_MAX_CHARGE = 0.5;
   x = 0; y = 240; vx = 0; vy = 0; r = 15;
   facing = -Math.PI / 2;
   hp = 110; maxHp = 110;
@@ -304,6 +311,7 @@ export class Player {
   rollDir = 0; attackHit = false; lungeVx = 0; lungeVy = 0;
   impulseVx = 0; impulseVy = 0;
   comboStep = 0; comboWindow = 0; perfectCd = 0;
+  charge01 = 0; heavyChargeT = 0; heavyCharging = false; // hold-to-charge heavy
   queuedLightAttacks = 0;
   trail: { x: number; y: number; a: number; life: number }[] = [];
   swordTip: { x: number; y: number }[] = [];
@@ -370,6 +378,7 @@ export class Player {
       } else if (this.stam >= 26 && this.state !== 'flask' && input.consume('heavy')) {
         this.state = 'heavy'; this.t = 0.62; this.attackHit = false;
         this.queuedLightAttacks = 0;
+        this.heavyChargeT = 0; this.charge01 = 0; this.heavyCharging = false;
         this.stam -= 26; this.stamDelay = 0.7;
         const b = game.boss;
         if (b && b.hp > 0) this.facing = angTo(this.x, this.y, b.x, b.y);
@@ -426,10 +435,19 @@ export class Player {
       const tipY = this.y + Math.sin(sw) * (heavy ? 88 : 74);
       this.swordTip.push({ x: tipX, y: tipY });
       if (this.swordTip.length > 10) this.swordTip.shift();
-      // hit check
+      // hit check — a heavy can be charged by holding through the wind-up
       if (!this.attackHit && elapsed >= activeStart) {
-        this.attackHit = true;
-        game.playerStrike(heavy);
+        if (heavy && this.heavyChargeT < Player.HEAVY_MAX_CHARGE && game.heavyInputHeld()) {
+          this.heavyCharging = true;
+          this.heavyChargeT = Math.min(Player.HEAVY_MAX_CHARGE, this.heavyChargeT + dt);
+          this.t = 0.2;             // hold at the strike frame; 0.2 s recovery remains after release
+          this.vx = 0; this.vy = 0; // rooted while charging
+        } else {
+          this.attackHit = true;
+          this.heavyCharging = false;
+          if (heavy) this.charge01 = clamp(this.heavyChargeT / Player.HEAVY_MAX_CHARGE, 0, 1);
+          game.playerStrike(heavy);
+        }
       }
       if (this.t <= 0) {
         this.state = 'move'; this.swordTip = [];
@@ -522,7 +540,7 @@ export class Player {
 
   private drawKiteVeilBody(ctx: CanvasRenderingContext2D, rolling: boolean) {
     const state = this.state;
-    const heavyCharge = state === 'heavy' && this.t > 0.28;
+    const heavyCharge = state === 'heavy' && (this.t > 0.28 || this.heavyCharging);
     const flutter = Math.sin(this.capePhase) * (rolling ? 0.7 : state === 'heavy' ? 1.1 : 1.8);
 
     ctx.save();
@@ -670,6 +688,18 @@ export class Player {
       ctx.stroke();
       ctx.restore();
     }
+    // hold-to-charge heavy: a gold ring tightens and brightens as the heavy
+    // winds up (reserved danger hue untouched).
+    if (this.heavyCharging) {
+      const c = clamp(this.heavyChargeT / Player.HEAVY_MAX_CHARGE, 0, 1);
+      ctx.save();
+      ctx.globalAlpha = 0.35 + c * 0.5;
+      ctx.strokeStyle = c >= 0.98 ? '#fff2d0' : PAL.goldBright;
+      ctx.lineWidth = 1.5 + c * 2.5;
+      ctx.beginPath(); ctx.arc(x, y, this.r + 14 - c * 8, 0, TAU); ctx.stroke();
+      ctx.restore();
+    }
+
     // shadow
     ctx.fillStyle = 'rgba(0,0,0,0.45)';
     ctx.beginPath(); ctx.ellipse(x, y + this.r * 0.85, this.r * 1.05, this.r * 0.42, 0, 0, TAU); ctx.fill();
@@ -1837,6 +1867,15 @@ export class Game {
     return this.baseZoom * lerp(1.16, 1.0, intensity);
   }
 
+  heavyInputHeld(): boolean {
+    // Keyboard/right-mouse held, or a touch resting on the HVY fingertip zone.
+    if (this.input.held.heavy) return true;
+    if (!this.input.isTouch) return false;
+    const hvy = this.touchLayout().btns.find((b) => b.id === 'heavy');
+    if (!hvy) return false;
+    return this.input.touchPoints.some((p) => Math.hypot(p.x - hvy.x, p.y - hvy.y) < hvy.r * 1.6);
+  }
+
   deepenArena(phase: number) {
     // Phase spectacle through the existing accumulation surfaces only: the
     // offscreen scorch canvas and ambient embers, never per-frame drawArena
@@ -2317,9 +2356,10 @@ export class Game {
     const step = p.comboStep;
     const finisher = !heavy && step === 2;
     const impact: PlayerImpact = heavy ? 'heavy' : finisher ? 'finisher' : 'light';
-    const range = heavy ? 95 : finisher ? 88 : 78;
+    const charge = heavy ? p.charge01 : 0;
+    const range = (heavy ? 95 : finisher ? 88 : 78) + charge * 16;
     const arc = heavy ? 1.25 : finisher ? 1.3 : 1.05;
-    const dmg = heavy ? 30 : finisher ? 24 : step === 1 ? 14 : 12;
+    const dmg = heavy ? Math.round(30 * (1 + charge * 0.75)) : finisher ? 24 : step === 1 ? 14 : 12;
     const d = dist(p.x, p.y, b.x, b.y);
     let connected = false;
     if (heavy) this.breakPlayerChain();
@@ -2344,6 +2384,13 @@ export class Game {
           this.audio.stagger(this.audioSpatial(b.x, b.y));
         } else {
           b.takeDamage((heavy || finisher) ? dmg : dmg + Math.floor(rand(-2, 3)), this, p.x, p.y, impact);
+          if (heavy && charge > 0) {
+            // Charged heavies are the poise-breaker that sets up an execution.
+            if (b.state !== 'staggered') b.applyPoise(charge * 40, this);
+            this.shake(6 + charge * 8, 0.25);
+            this.zoomPunch = Math.max(this.zoomPunch, charge * 0.06);
+            this.sparks(b.x, b.y, Math.round(8 + charge * 14));
+          }
         }
         connected = true;
         if (!heavy) this.registerPlayerChain(step);

@@ -1261,3 +1261,41 @@ audio-init budgets (20/25 ms) — the shared box runs 40+ services; they pass on
 and are untouched here (no `audio.ts` change). Final visual/feel tuning (zoom ceiling, scorch
 density, execution damage) is left for an owner playtest, per the standing "screenshots aren't
 always agent-reviewable" note.
+
+## v2.15 — Claude (Opus 4.8), "offense" (2026-07-24)
+
+The offense half of the polish review, split from v2.14 because both items reach into fragile
+subsystems (touch input, the audio bus graph) that deserve their own QA lane.
+
+### Hold-to-charge heavy
+Offense was one-note (light-3 + a fixed heavy) against a 1350-HP boss. The obvious fix — a charged
+heavy — normally means firing heavy on *release*, adding latency to the basic verb. Instead this
+charges by *holding through the existing wind-up*: a quick tap fires today's heavy unchanged
+(`charge01` = 0, same timing), but if HVY is still held when the strike frame arrives the player
+roots and `heavyChargeT` builds to `Player.HEAVY_MAX_CHARGE` (0.5 s). Release/max fires a strike
+scaled by `charge01` — up to 1.75× damage, +16 range, and a `charge*40` poise bonus so charged
+heavies are *the* poise-breaker feeding the v2.14 stagger execution. Cost = exposure (rooted,
+telegraphed): Souls charged-R2 risk/reward. A gold ring tightens/brightens as it charges. Input:
+keyboard/right-mouse via `input.held.heavy`; touch via new `Input.touchPoints` (tracked by
+identifier) + `Game.heavyInputHeld()` reading `touchLayout()` (the SSOT). Discrete heavy still fires
+on press/touch-start; charge is additive. No change to `queuedLightAttacks`, roll priority, or
+one-action touch targeting.
+
+### Phase-3 musical lift
+`setPhase()` stored the phase but was silent; music escalated only by boss-HP intensity. `setPhase`
+now marks dirty and `updateCombatState()` (still the owner) folds a `phaseLift` (0/0.08/0.2 for
+phases 1/2/3) into the existing procedural buses (drums, tension pad, soundtrack cutoff). No new Web
+Audio nodes, no MP3 change (no `SOUNDTRACK_VERSION` bump), master route + bus-gain contracts intact.
+
+### Changed from earlier passes
+- **Heavy (was: fixed 0.62 s commit).** A tap is the old heavy exactly; only holding past the strike
+  frame is new. Damage/range/poise scale with `charge01`, which is 0 for a tap.
+- **`audio.setPhase()` (was: inert).** Now drives a sustained lift via `updateCombatState`; the
+  boss-HP intensity curve is unchanged and adds on top.
+
+### QA / verification
+Four assertions added first (TDD), green after implementation: charge accumulates on a real keyboard
+hold (`heavyChargeT ≥ 0.4`, sim-gated), charged heavy `> 1.4×` normal (via `charge01` injection),
+touch held-detection over the HVY zone, and `debugState().phaseLift ≥ 0.2` at phase 3. Lint/build
+clean. Real touch-and-hold is covered by the detection unit test + an owner playtest (Playwright
+touch has no hold primitive). Only the load-sensitive audio-init budgets fail locally (green in CI).
