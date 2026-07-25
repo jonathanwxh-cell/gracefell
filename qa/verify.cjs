@@ -1037,7 +1037,7 @@ async function installAudioSampleRate(context) {
         const immediateBest = victoryImmediate.saved?.bestScores?.[String(victoryImmediate.trial)];
         const immediateHistory = victoryImmediate.saved?.scoreHistory?.[0];
         if (victoryImmediate.state !== 'victory' || victoryImmediate.stateT !== 0
-          || victoryImmediate.saved?.v !== 6
+          || victoryImmediate.saved?.v !== 7
           || immediateScore?.grade !== victoryImmediate.grade
           || Math.abs((immediateScore?.time ?? -1) - victoryImmediate.fightTime) > 0.000001
           || immediateScore?.trial !== victoryImmediate.trial
@@ -1742,7 +1742,7 @@ async function installAudioSampleRate(context) {
           return JSON.parse(localStorage.getItem('gracefell'));
         });
         step.saveV6 = sv6;
-        if (sv6.v !== 6 || sv6.grace !== 2 || sv6.shakeEnabled !== false || sv6.flashReduced !== true
+        if (sv6.v !== 7 || sv6.grace !== 2 || sv6.shakeEnabled !== false || sv6.flashReduced !== true
           || sv6.musicVolume !== 0.65 || sv6.sfxVolume !== 0.95
           || !sv6.bests || !sv6.lastScore || !sv6.bestScores
           || !Array.isArray(sv6.scoreHistory) || sv6.scoreHistory.length < 1
@@ -2534,7 +2534,7 @@ async function installAudioSampleRate(context) {
         };
       });
       if (t.victoryScore.state !== 'victory'
-        || t.victoryScore.save?.v !== 6
+        || t.victoryScore.save?.v !== 7
         || t.victoryScore.lastScore?.grade !== t.victoryScore.save?.lastScore?.grade
         || t.victoryScore.lastScore?.time !== 83.2
         || t.victoryScore.save?.scoreHistory?.[0]?.time !== 83.2

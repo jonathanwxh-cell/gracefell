@@ -1287,9 +1287,15 @@ export class GameAudio {
     from?.element.pause();
     if (from) {
       try { from.element.currentTime = 0; } catch { /* media may not be seekable yet */ }
-      if (from.gain) from.gain.gain.value = 0.0001;
+      if (from.gain) {
+        this.holdAudioParam(from.gain.gain, this.ctx.currentTime);
+        from.gain.gain.setValueAtTime(0.0001, this.ctx.currentTime);
+      }
     }
-    if (to?.gain) to.gain.gain.value = 1;
+    if (to?.gain) {
+      this.holdAudioParam(to.gain.gain, this.ctx.currentTime);
+      to.gain.gain.setValueAtTime(1, this.ctx.currentTime);
+    }
     this.activeSoundtrackDeck = transition.to;
     this.soundtrackPhase = transition.phase;
     this.pendingSoundtrackPhase = null;

@@ -24,9 +24,9 @@ async function waitForServer() {
   throw new Error(`Gracefell server did not become healthy at ${BASE_URL}`);
 }
 
-function runVerify() {
+function runScript(script) {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, ['qa/verify.cjs'], {
+    const child = spawn(process.execPath, [script], {
       stdio: 'inherit',
       env: { ...process.env, GRACEFELL_URL: BASE_URL },
     });
@@ -44,7 +44,8 @@ function runVerify() {
       });
       await waitForServer();
     }
-    await runVerify();
+    await runScript('qa/verify.cjs');
+    await runScript('qa/v221.cjs');
   } finally {
     if (server) server.kill();
   }

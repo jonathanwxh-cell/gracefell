@@ -8,20 +8,23 @@ rules are all decided by what works one-handed on a 390px screen.
 
 **Play it: [gracefell.alyoechosys.dev](https://gracefell.alyoechosys.dev)**
 
-Current gameplay release: **v2.20** — the arena weather now changes with Malakar:
-Quiet Ash becomes an Ember Gale, then reverses into the pale Gracefall Storm.
-The same fixed pool of 64 motes supplies all three phases, with background ash
-behind combat signals and an edge-only foreground layer for depth.
+Current gameplay release: **v2.21** — six player-requested mastery and access features now form
+one coherent combat loop. Attack during a roll buffers a post-dodge slash without cancelling
+invulnerability; rear-arc hits earn a disclosed FLANK reward; terminal chronicles explain damage
+mix, phase splits, recent wounds, and the next grade threshold. Victory offers explicit REMAIN,
+one-step ASCEND, and an offline-generated share PNG. Touch controls can be mirrored for a
+left-handed player and persist in save schema v7.
 Every active battle also has a safe **MENU** route back to the title, and the
 title has a **SCORES** chronicle for the latest 20 victories.
 Rapid light taps acknowledge queued follow-ups, the combat HUD labels HP, stamina,
 and flasks, and assistive technology receives current player, boss, telegraph, and
 combo state without turning changing percentages into live-announcement spam.
-Save schema v6 migrates an older last score honestly as “Date unavailable.”
+Save schema v7 migrates older settings and scores while defaulting handedness to the established layout.
 The adaptive MiniMax phase score, MIX controls, Journey/Oath curve, retry behavior,
 and combat timing are unchanged. The complete v2.20 implementation, CI, deployment,
 and public verification record is in
-[`docs/releases/v2.20.md`](docs/releases/v2.20.md); the v2.19 navigation and score
+[`docs/releases/v2.21.md`](docs/releases/v2.21.md); the v2.20 weather record remains in
+[`docs/releases/v2.20.md`](docs/releases/v2.20.md), and the v2.19 navigation and score
 chronicle record remains in [`docs/releases/v2.19.md`](docs/releases/v2.19.md).
 
 Zero runtime art assets, three generated music tracks. Every character silhouette, sword, halo blade,
@@ -42,7 +45,7 @@ The sovereign has an audio language, not one generic warning: swipes whistle, ch
 
 **v2 — extended by Claude (Opus 4.8).** Combat depth, a third phase, a full rendering pass, persistence, and a headless verification gate. Details in [DESIGN.md](DESIGN.md).
 
-**v2.4–v2.20 — audio, responsiveness, combat integrity, character readability, progression, victory persistence, player-controlled pause, adaptive phase scoring, navigation/accessibility polish, and fixed-pool phase weather extended by
+**v2.4–v2.21 — audio, responsiveness, combat integrity, character readability, progression, victory persistence, player-controlled pause, adaptive phase scoring, navigation/accessibility polish, fixed-pool phase weather, and mastery feedback extended by
 Codex (GPT-5).** Attack-specific procedural cues, spatial mix protection, the MiniMax-generated
 score family, mobile/accessibility hardening, trustworthy combat and retry behavior, the verified
 Grace-to-Oaths mastery path, and the production Kite-Veil/Blade-Saint silhouettes. The v2.11 player
@@ -65,8 +68,8 @@ who did which pass, and the rules any future agent follows before touching the c
 
 | | |
 |---|---|
-| drag anywhere on the **left half** | a floating stick appears under your thumb; steer with it |
-| **ATK** | slash — connect three light hits to fill the visible chain and land its finisher |
+| drag on the **movement side** | a floating stick appears under your thumb; defaults left and can be mirrored |
+| **ATK** | slash — connect three light hits for a finisher, or press during a roll for a recovery slash |
 | **ROLL** | invincible — roll *into* a swing for a perfect dodge |
 | **HVY** | heavy, slow, big poise damage |
 | **FLASK** | heal (Journey starts with four; the selected path is shown before the fight) |
@@ -76,6 +79,8 @@ who did which pass, and the rules any future agent follows before touching the c
 
 The buttons scale with your screen and sit clear of the home indicator. Haptics fire on hits and
 perfect dodges, and can be switched off on the title screen.
+The title’s TOUCH LAYOUT row mirrors the joystick and the complete action cluster; the visible
+controls, hit-tests, heavy-hold detection, tutorial copy, and saved preference all change together.
 
 **On a desktop**, if that's what you have: WASD/arrows move, Space or Shift rolls, J or left-click
 slashes, K or right-click is heavy, F drinks, M mutes, and P or Escape pauses/resumes. MENU is

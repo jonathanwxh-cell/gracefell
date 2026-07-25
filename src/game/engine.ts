@@ -135,7 +135,7 @@ interface Projectile { x: number; y: number; vx: number; vy: number; r: number; 
 interface RingWave { x: number; y: number; r: number; speed: number; thickness: number; dmg: number; maxR: number; hostile: boolean; hitDone: boolean; }
 interface Meteor { x: number; y: number; fuse: number; maxFuse: number; r: number; dmg: number; }
 type PlayerImpact = 'light' | 'finisher' | 'heavy';
-type DamageSource = BossAttack | 'unknown';
+export type DamageSource = BossAttack | 'unknown';
 
 export interface WeatherSnapshot {
   fromPhase: WeatherPhase;
@@ -190,6 +190,7 @@ export class Input {
   isTouch = coarsePointer();
   taps: { x: number; y: number }[] = []; // consumed by menu hit-tests each frame
   touchPoints: { id: number; x: number; y: number }[] = []; // active touches, for hold-to-charge
+  leftHanded = false;
 
   constructor(canvas: HTMLCanvasElement, onFirstGesture: () => void, onPause: () => void) {
     this.canvas = canvas;
@@ -285,7 +286,8 @@ export class Input {
       const x = t.clientX - r.left, y = t.clientY - r.top;
       this.taps.push({ x, y });
       this.touchPoints.push({ id: t.identifier, x, y });
-      if (x < r.width * 0.45 && !this.joyActive) {
+      const inJoyZone = this.leftHanded ? x > r.width * 0.55 : x < r.width * 0.45;
+      if (inJoyZone && !this.joyActive) {
         this.joyActive = true; this.joyId = t.identifier;
         this.joyOx = x; this.joyOy = y; this.joyX = 0; this.joyY = 0;
       }
@@ -325,6 +327,11 @@ export class Input {
     if (action === 'confirm') this.queueConfirm();
     else this.pressed[action] = Input.BUFFER_S;
     this.btnPressed[action] = true;
+  }
+
+  setLeftHanded(value: boolean) {
+    this.leftHanded = value;
+    this.reset();
   }
 
   hasBuffered(action: string) { return (this.pressed[action] ?? 0) > 0; }
@@ -386,7 +393,7 @@ export class Player {
   hp = 110; maxHp = 110;
   stam = 100; maxStam = 100; stamDelay = 0;
   flasks = 3; maxFlasks = 3;
-  state: 'move' | 'roll' | 'light' | 'heavy' | 'flask' | 'stagger' | 'dead' = 'move';
+  state: 'move' | 'roll' | 'rollSlash' | 'light' | 'heavy' | 'flask' | 'stagger' | 'dead' = 'move';
   t = 0; // state timer
   iframes = 0; rollIframes = 0; hurtFlash = 0;
   rollDir = 0; attackHit = false; lungeVx = 0; lungeVy = 0;
@@ -394,6 +401,7 @@ export class Player {
   comboStep = 0; comboWindow = 0; perfectCd = 0;
   charge01 = 0; heavyChargeT = 0; heavyCharging = false; // hold-to-charge heavy
   queuedLightAttacks = 0;
+  rollSlashQueued = false;
   trail: { x: number; y: number; a: number; life: number }[] = [];
   swordTip: { x: number; y: number }[] = [];
   capePhase = 0;
@@ -428,6 +436,10 @@ export class Player {
     if (this.state === 'light' && input.consume('light')) {
       this.queuedLightAttacks = Math.min(2, this.queuedLightAttacks + 1);
     }
+    // A dodge attack is buffered, never allowed to cancel invulnerability.
+    // This preserves the beginner-safe roll while making ATK during the roll
+    // resolve into an authored recovery slash.
+    if (this.state === 'roll' && input.consume('light')) this.rollSlashQueued = true;
 
     // state transitions
     if (this.state === 'move' || this.state === 'flask') {
@@ -435,7 +447,7 @@ export class Player {
       if (this.state === 'move' && queuedLight && this.stam < 12) this.queuedLightAttacks = 0;
       if (this.stam >= 20 && this.state !== 'flask' && input.consume('roll')) {
         this.state = 'roll'; this.t = 0.42;
-        this.comboStep = 0; this.comboWindow = 0; this.queuedLightAttacks = 0;
+        this.comboStep = 0; this.comboWindow = 0; this.queuedLightAttacks = 0; this.rollSlashQueued = false;
         const m = Math.hypot(ax.x, ax.y);
         this.rollDir = m > 0.1 ? Math.atan2(ax.y, ax.x) : this.facing;
         this.stam -= 20; this.stamDelay = 0.55;
@@ -483,11 +495,26 @@ export class Player {
       this.vx = Math.cos(this.rollDir) * rollSpd;
       this.vy = Math.sin(this.rollDir) * rollSpd;
       this.trail.push({ x: this.x, y: this.y, a: this.facing, life: 0.3 });
-      if (this.t <= 0) { this.state = 'move'; this.vx *= 0.3; this.vy *= 0.3; }
-    } else if (this.state === 'light' || this.state === 'heavy') {
+      if (this.t <= 0) {
+        if (this.rollSlashQueued && this.stam >= 10) {
+          this.rollSlashQueued = false;
+          this.state = 'rollSlash'; this.t = 0.3; this.attackHit = false;
+          this.stam -= 10; this.stamDelay = 0.5;
+          const b = game.boss;
+          if (b && b.hp > 0) this.facing = angTo(this.x, this.y, b.x, b.y);
+          this.lungeVx = Math.cos(this.facing) * 390;
+          this.lungeVy = Math.sin(this.facing) * 390;
+          game.audio.swing(1, game.audioSpatial(this.x, this.y));
+        } else {
+          this.rollSlashQueued = false;
+          this.state = 'move'; this.vx *= 0.3; this.vy *= 0.3;
+        }
+      }
+    } else if (this.state === 'light' || this.state === 'heavy' || this.state === 'rollSlash') {
       const heavy = this.state === 'heavy';
-      const total = heavy ? 0.62 : this.comboStep === 2 ? 0.44 : 0.32;
-      const activeStart = heavy ? 0.62 - 0.20 : total - 0.16;
+      const rollSlash = this.state === 'rollSlash';
+      const total = heavy ? 0.62 : rollSlash ? 0.3 : this.comboStep === 2 ? 0.44 : 0.32;
+      const activeStart = heavy ? 0.62 - 0.20 : rollSlash ? 0.1 : total - 0.16;
       const elapsed = total - this.t;
       // lunge early
       // Preserve the original 60 Hz tuning without making reach depend on the
@@ -527,12 +554,12 @@ export class Player {
           this.attackHit = true;
           this.heavyCharging = false;
           if (heavy) this.charge01 = clamp(this.heavyChargeT / Player.HEAVY_MAX_CHARGE, 0, 1);
-          game.playerStrike(heavy);
+          game.playerStrike(heavy, rollSlash);
         }
       }
       if (this.t <= 0) {
         this.state = 'move'; this.swordTip = [];
-        if (!heavy) { this.comboWindow = 0.6; this.comboStep = (this.comboStep + 1) % 3; }
+        if (!heavy && !rollSlash) { this.comboWindow = 0.6; this.comboStep = (this.comboStep + 1) % 3; }
         else { this.comboStep = 0; this.comboWindow = 0; }
       }
     } else if (this.state === 'flask') {
@@ -567,6 +594,10 @@ export class Player {
 
   swordAngle(): number {
     // sweep across arc based on attack progress
+    if (this.state === 'rollSlash') {
+      const p = 1 - this.t / 0.3;
+      return this.facing - 1.15 + p * 2.3;
+    }
     if (this.state === 'light') {
       const dur = this.comboStep === 2 ? 0.44 : 0.32;
       const p = 1 - this.t / dur;
@@ -592,7 +623,7 @@ export class Player {
       }
       return false;
     }
-    this.comboStep = 0; this.comboWindow = 0; this.queuedLightAttacks = 0;
+    this.comboStep = 0; this.comboWindow = 0; this.queuedLightAttacks = 0; this.rollSlashQueued = false;
     game.breakPlayerChain();
     game.lastDamageSource = source;
     this.rollIframes = 0;
@@ -609,6 +640,7 @@ export class Player {
     game.burst(this.x, this.y, 14, PAL.blood, 200, 0.5, 3.5);
     game.addScorch(this.x + rand(-8, 8), this.y + rand(-8, 8), rand(14, 26), 'rgba(90,16,12,0.8)', 0.4);
     game.hitsTaken++;
+    game.lastHits = [...game.lastHits, { source, at: game.fightTime }].slice(-3);
     if (this.hp <= 0) {
       this.hp = 0; this.state = 'dead'; this.t = 0;
       game.onPlayerDeath();
@@ -672,7 +704,7 @@ export class Player {
       ctx.lineTo(-15, 10);
       ctx.lineTo(-6, 15 + flutter * 0.2);
       ctx.lineTo(4, 8);
-    } else if (state === 'light' || state === 'heavy') {
+    } else if (state === 'light' || state === 'heavy' || state === 'rollSlash') {
       // Narrow spear profile during attack/release.
       ctx.moveTo(6, -5);
       ctx.lineTo(-4, -8);
@@ -702,7 +734,7 @@ export class Player {
     ctx.fill();
 
     const apex = rolling ? 12 : state === 'flask' ? 14 : heavyCharge ? 18 : 17;
-    const hoodHalf = rolling ? 7 : state === 'light' || (state === 'heavy' && !heavyCharge) ? 7 : state === 'flask' ? 8 : 10;
+    const hoodHalf = rolling ? 7 : state === 'light' || state === 'rollSlash' || (state === 'heavy' && !heavyCharge) ? 7 : state === 'flask' ? 8 : 10;
     const rear = rolling ? -6 : -4;
     ctx.save();
     if (state === 'stagger') ctx.rotate(0.48);
@@ -810,7 +842,7 @@ export class Player {
     const swordVisible = this.state !== 'dead' && this.state !== 'flask' && this.state !== 'stagger' && !rolling;
     if (!blink && swordVisible) {
       const sw = this.swordAngle();
-      const inAtk = this.state === 'light' || this.state === 'heavy';
+      const inAtk = this.state === 'light' || this.state === 'heavy' || this.state === 'rollSlash';
       const len = inAtk ? (this.state === 'heavy' ? 88 : 74) : 34;
       const a = inAtk ? sw : this.facing + 0.9;
       // trail ribbon
@@ -1260,9 +1292,9 @@ export class Boss {
     this.vx *= 0.2; this.vy *= 0.2;
   }
 
-  takeDamage(dmg: number, game: Game, fromX: number, fromY: number, impact?: PlayerImpact) {
-    if (game.state !== 'fight') return;
-    if (this.state === 'dying' || this.state === 'spawn') return;
+  takeDamage(dmg: number, game: Game, fromX: number, fromY: number, impact?: PlayerImpact): number {
+    if (game.state !== 'fight') return 0;
+    if (this.state === 'dying' || this.state === 'spawn') return 0;
     const staggered = this.state === 'staggered';
     const final = staggered ? dmg * 1.4 : dmg;
     this.hp -= final;
@@ -1281,9 +1313,10 @@ export class Boss {
     if (this.hp <= 0) {
       this.hp = 0;
       game.onBossDeath();
-      return;
+      return final;
     }
     if (this.poise <= 0 && !staggered) this.triggerStagger(game);
+    return final;
   }
 
   applyPoise(dmg: number, game: Game) {
@@ -1649,10 +1682,15 @@ export interface GameUiSnapshot {
   shakeEnabled: boolean;
   flashReduced: boolean;
   hapticsEnabled: boolean;
+  leftHanded: boolean;
   touch: boolean;
+  terminalReady: boolean;
+  canAscend: boolean;
   wins: number;
   attempts: number;
+  lastScore: VictoryScore | null;
   scoreHistory: ScoreHistoryEntry[];
+  chronicle: FightChronicle;
   combat: {
     playerHpPercent: number;
     playerStaminaPercent: number;
@@ -1665,6 +1703,15 @@ export interface GameUiSnapshot {
     comboHits: number;
     queuedLights: number;
   };
+}
+
+export type DamageKind = 'light' | 'heavy' | 'riposte' | 'flank';
+
+export interface FightChronicle {
+  damageMix: Record<DamageKind, number>;
+  phaseSplits: number[];
+  lastHits: { source: DamageSource; at: number }[];
+  gradeGap: string;
 }
 
 export interface VictoryScore {
@@ -1707,6 +1754,16 @@ export function isScoreHistoryEntry(value: unknown): value is ScoreHistoryEntry 
 export function reducedMotionPreferred(): boolean {
   try { return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches; }
   catch { return false; }
+}
+
+export function isFlankHit(
+  bossFacing: number,
+  bossX: number,
+  bossY: number,
+  playerX: number,
+  playerY: number,
+): boolean {
+  return Math.abs(angDiff(bossFacing, angTo(bossX, bossY, playerX, playerY))) > (110 * Math.PI) / 180;
 }
 
 // Button *shape*; absolute positions come from Game.touchLayout() so they scale
@@ -1781,6 +1838,9 @@ export class Game {
   // stats
   attempts = 1; fightTime = 0; damageDealt = 0; hitsTaken = 0;
   perfectDodges = 0; flasksUsed = 0;
+  damageMix: Record<DamageKind, number> = { light: 0, heavy: 0, riposte: 0, flank: 0 };
+  phaseEnteredAt = [0, 0, 0];
+  lastHits: { source: DamageSource; at: number }[] = [];
   playerChainHits = 0; playerChainT = 0; playerChainFinished = false;
   lastDamageSource: DamageSource = 'unknown';
   tutorialStage: 'move' | 'roll' | 'poise' | 'stagger' | 'done' = 'move';
@@ -1819,8 +1879,9 @@ export class Game {
   shakeEnabled = !reducedMotionPreferred();
   flashReduced = reducedMotionPreferred();
   hapticsEnabled = true;
+  leftHanded = false;
   safeBottom = 0; safeRight = 0;
-  static SAVE_VERSION = 6;
+  static SAVE_VERSION = 7;
   static SCORE_HISTORY_LIMIT = 20;
   static VICTORY_INPUT_DELAY = 4.5;
   static WEATHER_TRANSITION_S = 2.4;
@@ -1905,8 +1966,10 @@ export class Game {
       if (typeof sv.shakeEnabled === 'boolean') this.shakeEnabled = sv.shakeEnabled;
       if (typeof sv.flashReduced === 'boolean') this.flashReduced = sv.flashReduced;
       if (typeof sv.hapticsEnabled === 'boolean') this.hapticsEnabled = sv.hapticsEnabled;
+      if (typeof sv.leftHanded === 'boolean') this.leftHanded = sv.leftHanded;
       if (sv.tutorialComplete === true) this.tutorialStage = 'done';
     } catch { /* first run / private mode */ }
+    this.input.setLeftHanded(this.leftHanded);
     this.buildFloor();
     this.startLoop();
   }
@@ -2179,6 +2242,9 @@ export class Game {
     // detail (baked-floor invariant). Dark scorch + amber embers; the reserved
     // hazard hue is never touched.
     this.beginWeatherPhase(phase);
+    if (phase >= 2 && phase <= 3 && this.phaseEnteredAt[phase - 1] === 0) {
+      this.phaseEnteredAt[phase - 1] = this.fightTime;
+    }
     this.phaseDecay = phase - 1;
     this.emberDensityMul = phase >= 3 ? 2 : 1.5;
     const stamps = phase >= 3 ? 10 : 6;
@@ -2251,9 +2317,11 @@ export class Game {
     if (g === -2) return 'recommended · 15% slower · 30% softer · 4 flasks';
     if (g === -1) return 'gentle · 7% slower · 15% softer · wider dodge';
     if (g === 0) return 'measured · canonical timing · damage · stagger';
-    const chain = m.chainRank === 1 ? '2-beat chains' : m.chainRank === 2 ? 'stronger chains' : '3-beat chains';
-    if (g === 5) return `oath V · ${chain} · 1 flask · ironbound`;
-    return `oath ${['', 'I', 'II', 'III', 'IV'][g]} · ${Math.round((m.bossSpeed - 1) * 100)}% faster · ${chain}`;
+    const chain = m.chainRank >= 3 ? '3-beat chains' : m.chainRank > 0 ? '2-beat chains' : 'solo attacks';
+    const damage = `${Math.round((m.dmgTaken - 1) * 100)}% harder hits`;
+    const poise = m.noStagger ? 'no stagger' : m.poiseMul > 1 ? `${Math.round((m.poiseMul - 1) * 100)}% more poise` : 'standard poise';
+    if (g === 5) return `oath V · ${chain} · ${damage} · 1 flask · no stagger`;
+    return `oath ${['', 'I', 'II', 'III', 'IV'][g]} · ${Math.round((m.bossSpeed - 1) * 100)}% faster · ${damage} · ${chain} · ${poise} · ${m.flasks} flasks`;
   }
 
   trialBest(g = this.grace): number {
@@ -2279,7 +2347,7 @@ export class Game {
         attempts: this.attempts, muted: this.audio.muted,
         musicVolume: this.audio.musicVolume, sfxVolume: this.audio.sfxVolume,
         grace: this.grace, shakeEnabled: this.shakeEnabled, flashReduced: this.flashReduced,
-        hapticsEnabled: this.hapticsEnabled,
+        hapticsEnabled: this.hapticsEnabled, leftHanded: this.leftHanded,
         tutorialComplete: this.tutorialStage === 'done',
       }));
     } catch { /* ignore */ }
@@ -2325,6 +2393,14 @@ export class Game {
     this.vibrate(15);
   }
 
+  toggleLeftHanded() {
+    this.leftHanded = !this.leftHanded;
+    this.input.setLeftHanded(this.leftHanded);
+    this.persist();
+    this.audio.ui();
+    this.uiChanged?.();
+  }
+
   confirm() {
     this.audio.init();
     this.input.bufferPress('confirm');
@@ -2343,6 +2419,38 @@ export class Game {
     this.terminalConfirmSequence = this.input.confirmSequence;
     this.syncPauseState();
     this.uiChanged?.();
+  }
+
+  replayVictory(ascend: boolean): boolean {
+    if (this.state !== 'victory' || this.stateT <= Game.VICTORY_INPUT_DELAY) return false;
+    if (ascend && this.graceAtStart < 5) this.grace = this.graceAtStart + 1;
+    else this.grace = this.graceAtStart;
+    this.attempts++;
+    this.persist();
+    this.resetFight();
+    this.state = 'intro';
+    this.stateT = 0;
+    this.uiChanged?.();
+    return true;
+  }
+
+  terminalChronicle(): FightChronicle {
+    const p2 = this.phaseEnteredAt[1] || this.fightTime;
+    const p3 = this.phaseEnteredAt[2] || this.fightTime;
+    return {
+      damageMix: { ...this.damageMix },
+      phaseSplits: [
+        p2,
+        this.phaseEnteredAt[1] ? Math.max(0, p3 - p2) : 0,
+        this.phaseEnteredAt[2] ? Math.max(0, this.fightTime - p3) : 0,
+      ],
+      lastHits: [...this.lastHits],
+      gradeGap: this.grade === 'S' ? 'S rank secured'
+        : this.fightTime >= 160 ? `${Math.ceil(this.fightTime - 159)}s from the A time gate`
+        : this.hitsTaken > 6 ? `${this.hitsTaken - 6} fewer wounds for A`
+        : this.grade === 'A' ? 'under 1:40 with three or fewer wounds earns S'
+        : 'cleaner wounds and a faster finish raise the seal',
+    };
   }
 
   uiSnapshot(): GameUiSnapshot {
@@ -2372,10 +2480,16 @@ export class Game {
       shakeEnabled: this.shakeEnabled,
       flashReduced: this.flashReduced,
       hapticsEnabled: this.hapticsEnabled,
+      leftHanded: this.leftHanded,
       touch: this.input.isTouch,
+      terminalReady: (this.state === 'dead' && this.stateT > 1.4)
+        || (this.state === 'victory' && this.stateT > Game.VICTORY_INPUT_DELAY),
+      canAscend: this.state === 'victory' && this.graceAtStart < 5,
       wins: this.wins,
       attempts: this.attempts,
+      lastScore: this.lastScore,
       scoreHistory: this.scoreHistory,
+      chronicle: this.terminalChronicle(),
       combat: {
         playerHpPercent: Math.round(clamp(this.player.hp / this.player.maxHp, 0, 1) * 100),
         playerStaminaPercent: Math.round(clamp(this.player.stam / this.player.maxStam, 0, 1) * 100),
@@ -2661,7 +2775,9 @@ export class Game {
 
   tutorialMessage(): string {
     if (this.tutorialT <= 0 || this.tutorialStage === 'done') return '';
-    if (this.tutorialStage === 'move') return this.input.isTouch ? 'MOVE · drag the left side' : 'MOVE · WASD or arrows';
+    if (this.tutorialStage === 'move') return this.input.isTouch
+      ? `MOVE · drag the ${this.leftHanded ? 'right' : 'left'} side`
+      : 'MOVE · WASD or arrows';
     if (this.tutorialStage === 'roll') return 'ROLL THROUGH THE BLADE';
     if (this.tutorialStage === 'poise') return 'PERFECT · DODGES BREAK POISE';
     return 'STAGGERED · STRIKE NOW';
@@ -2681,15 +2797,15 @@ export class Game {
     return hints[source];
   }
 
-  playerStrike(heavy: boolean) {
+  playerStrike(heavy: boolean, rollSlash = false) {
     const p = this.player, b = this.boss;
     const step = p.comboStep;
-    const finisher = !heavy && step === 2;
+    const finisher = !heavy && !rollSlash && step === 2;
     const impact: PlayerImpact = heavy ? 'heavy' : finisher ? 'finisher' : 'light';
     const charge = heavy ? p.charge01 : 0;
-    const range = (heavy ? 95 : finisher ? 88 : 78) + charge * 16;
-    const arc = heavy ? 1.25 : finisher ? 1.3 : 1.05;
-    const dmg = heavy ? Math.round(30 * (1 + charge * 0.75)) : finisher ? 24 : step === 1 ? 14 : 12;
+    const range = (heavy ? 95 : rollSlash ? 92 : finisher ? 88 : 78) + charge * 16;
+    const arc = heavy ? 1.25 : rollSlash ? 1.2 : finisher ? 1.3 : 1.05;
+    const dmg = heavy ? Math.round(30 * (1 + charge * 0.75)) : rollSlash ? 18 : finisher ? 24 : step === 1 ? 14 : 12;
     const d = dist(p.x, p.y, b.x, b.y);
     let connected = false;
     if (heavy) this.breakPlayerChain();
@@ -2698,22 +2814,32 @@ export class Game {
       if (Math.abs(angDiff(p.facing, a)) < arc) {
         const punishedStagger = b.state === 'staggered';
         const execute = heavy && punishedStagger && !b.executeConsumed;
+        const flank = !punishedStagger && b.state !== 'windup'
+          && isFlankHit(b.facing, b.x, b.y, p.x, p.y);
         if (execute) {
           // Stagger execution: the payoff the whole defensive loop is built
           // toward. takeDamage applies the 1.4x staggered multiplier on top of
           // this riposte base. Spirit/gold hue only (never the reserved danger
           // hue); shake()/zoomPunch route through the photosensitivity gates.
           b.executeConsumed = true;
-          b.takeDamage(30 * 2.6, this, p.x, p.y, 'finisher');
+          const dealt = b.takeDamage(30 * 2.6, this, p.x, p.y, 'finisher');
+          this.damageMix.riposte += dealt;
           this.hitstop = Math.max(this.hitstop, 0.14);
           this.zoomPunch = Math.max(this.zoomPunch, 0.08);
           this.goldFlash = Math.max(this.goldFlash, 0.5);
           this.shake(14, 0.4);
           this.sparks(b.x, b.y, 24);
-          this.addDamageNum(b.x, b.y - b.r - 20, 'EXECUTE', PAL.spirit, 24);
+          this.addDamageNum(b.x, b.y - b.r - 48, 'EXECUTE', PAL.spirit, 24);
           this.audio.stagger(this.audioSpatial(b.x, b.y));
         } else {
-          b.takeDamage((heavy || finisher) ? dmg : dmg + Math.floor(rand(-2, 3)), this, p.x, p.y, impact);
+          const base = (heavy || finisher || rollSlash) ? dmg : dmg + Math.floor(rand(-2, 3));
+          const dealt = b.takeDamage(base * (flank ? 1.25 : 1), this, p.x, p.y, impact);
+          const kind: DamageKind = flank ? 'flank' : heavy ? 'heavy' : 'light';
+          this.damageMix[kind] += dealt;
+          if (flank) {
+            if (b.state !== 'staggered') b.applyPoise(base * 0.25, this);
+            this.addDamageNum(b.x, b.y - b.r - 46, 'FLANK', PAL.spirit, 18);
+          }
           if (heavy && charge > 0) {
             // Charged heavies are the poise-breaker that sets up an execution.
             if (b.state !== 'staggered') b.applyPoise(charge * 40, this);
@@ -2723,7 +2849,7 @@ export class Game {
           }
         }
         connected = true;
-        if (!heavy) this.registerPlayerChain(step);
+        if (!heavy && !rollSlash) this.registerPlayerChain(step);
         if (punishedStagger && this.tutorialStage === 'stagger') {
           this.tutorialStage = 'done';
           this.tutorialT = 0;
@@ -2734,10 +2860,10 @@ export class Game {
           b.impulseVx += Math.cos(a) * force;
           b.impulseVy += Math.sin(a) * force;
         }
-        if (finisher) { this.sparks(b.x, b.y, 10); this.shake(5, 0.2); }
+        if (finisher || rollSlash) { this.sparks(b.x, b.y, rollSlash ? 7 : 10); this.shake(rollSlash ? 4 : 5, 0.2); }
       }
     }
-    if (!heavy && !connected) this.breakPlayerChain();
+    if (!heavy && !rollSlash && !connected) this.breakPlayerChain();
   }
   onPerfectDodge() {
     const p = this.player;
@@ -2786,6 +2912,7 @@ export class Game {
     this.projectiles = [];
     this.rings = [];
     this.meteors = [];
+    this.dmgNums = [];
     // Death changes the owner of directional input. Discard the final combat
     // press so Receive Grace always requires a fresh post-death choice.
     this.input.consume('left');
@@ -2804,6 +2931,7 @@ export class Game {
     this.projectiles = [];
     this.rings = [];
     this.meteors = [];
+    this.dmgNums = [];
     this.terminalConfirmSequence = this.input.confirmSequence;
     this.state = 'victory'; this.stateT = 0;
     this.goldFlash = 0.8;
@@ -2870,6 +2998,9 @@ export class Game {
     this.phaseDecay = 0; this.emberDensityMul = 1;
     this.weatherFromPhase = 1; this.weatherPhase = 1; this.weatherBlend = 1;
     this.perfectDodges = 0; this.flasksUsed = 0;
+    this.damageMix = { light: 0, heavy: 0, riposte: 0, flank: 0 };
+    this.phaseEnteredAt = [0, 0, 0];
+    this.lastHits = [];
     this.breakPlayerChain();
     this.lastDamageSource = 'unknown';
     this.hitstop = 0; this.timeScale = 1; this.slowT = 0;
@@ -2897,8 +3028,9 @@ export class Game {
   // above the iOS home indicator / Android gesture bar via safe-area insets.
   touchLayout() {
     const padR = 16 + this.safeRight;
+    const padL = 16;
     const padB = 18 + this.safeBottom;
-    const joyZoneR = this.w * 0.45; // left of this belongs to the stick
+    const joyZoneR = this.w * 0.45;
     // Shrink the whole cluster on narrow phones rather than letting buttons
     // collide or spill into the joystick half — the QA overlap test caught
     // exactly that when this was laid out in a fixed unit square.
@@ -2907,11 +3039,16 @@ export class Game {
     const btns = TOUCH_BTNS.map((b) => ({
       id: b.id,
       label: b.label,
-      x: this.w - padR - base * b.ox,
+      x: this.leftHanded ? padL + base * b.ox : this.w - padR - base * b.ox,
       y: this.h - padB - base * b.oy,
       r: base * b.ur,
     }));
-    return { base, btns, joyZoneR, padB, padR };
+    return {
+      base, btns, joyZoneR, padB, padR, padL,
+      joySide: this.leftHanded ? 'right' as const : 'left' as const,
+      joyMinX: this.leftHanded ? this.w * 0.55 : 0,
+      joyMaxX: this.leftHanded ? this.w : this.w * 0.45,
+    };
   }
 
   soundButtonRect() {
@@ -2930,8 +3067,8 @@ export class Game {
   // Laid out once and reused by both the renderer and the hit-test, so the
   // thing you see is provably the thing you can press.
   menuRows(): { id: string; y: number; label: string; value: string }[] {
-    const rowCount = this.input.isTouch ? 4 : 3;
-    const gap = this.input.isTouch ? 44 : Math.max(30, Math.min(38, this.h * 0.045));
+    const rowCount = this.input.isTouch ? 5 : 3;
+    const gap = this.input.isTouch ? 40 : Math.max(30, Math.min(38, this.h * 0.045));
     const baseScale = this.input.isTouch ? 0.72 : this.w < 520 ? 0.735 : 0.70;
     const baseY = this.h * baseScale - (rowCount - 3) * gap * 0.5;
     const rows = [
@@ -2941,6 +3078,12 @@ export class Game {
     ];
     if (this.input.isTouch) {
       rows.push({ id: 'haptics', y: baseY + gap * 3, label: 'HAPTICS', value: this.hapticsEnabled ? 'on' : 'off' });
+      rows.push({
+        id: 'handedness',
+        y: baseY + gap * 4,
+        label: 'TOUCH LAYOUT',
+        value: this.leftHanded ? 'left-handed' : 'right-handed',
+      });
     }
     return rows;
   }
@@ -2984,6 +3127,7 @@ export class Game {
       if (row.id === 'shake') { this.toggleShake(); return true; }
       if (row.id === 'flash') { this.toggleFlashes(); return true; }
       if (row.id === 'haptics') { this.toggleHaptics(); return true; }
+      if (row.id === 'handedness') { this.toggleLeftHanded(); return true; }
     }
     return false;
   }
@@ -3112,9 +3256,7 @@ export class Game {
         this.input.consume('confirm');
       } else if (this.stateT > Game.VICTORY_INPUT_DELAY && this.input.confirmSequence > this.terminalConfirmSequence) {
         this.input.consume('confirm');
-        this.attempts++;
-        this.resetFight();
-        this.state = 'intro'; this.stateT = 0;
+        this.replayVictory(false);
       }
     }
 
@@ -4218,7 +4360,7 @@ Game.prototype.drawTouchUI = function drawTouchUI(this: Game, ctx: CanvasRenderi
     ctx.beginPath(); ctx.arc(this.input.joyOx + this.input.joyX * 52, this.input.joyOy + this.input.joyY * 52, 22, 0, TAU); ctx.fill();
     ctx.globalAlpha = 1;
   } else if (this.hintT > 0) {
-    const guideX = this.w * 0.22;
+    const guideX = this.w * (this.leftHanded ? 0.78 : 0.22);
     const guideY = this.h - Math.max(84, 72 + this.safeBottom);
     ctx.globalAlpha = 0.38 * clamp(this.hintT / 2, 0, 1);
     ctx.strokeStyle = PAL.parchment;
@@ -4237,7 +4379,8 @@ Game.prototype.drawTouchUI = function drawTouchUI(this: Game, ctx: CanvasRenderi
     const unavailable = b.id === 'flask' && this.player.flasks <= 0;
     const active = this.input.btnPressed[b.id]
       || this.input.hasBuffered(b.id)
-      || this.player.state === b.id;
+      || this.player.state === b.id
+      || (b.id === 'light' && this.player.state === 'rollSlash');
     ctx.globalAlpha = unavailable ? 0.38 : 1;
     ctx.fillStyle = active
       ? (b.id === 'flask' ? PAL.goldBright : PAL.parchment)

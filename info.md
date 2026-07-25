@@ -1,7 +1,7 @@
 # GRACEFELL project facts
 
-- Current package: `gracefell@2.20.0`
-- Gameplay release: `v2.20`, merged, deployed, and publicly verified
+- Current package: `gracefell@2.21.0`
+- Gameplay release: `v2.21` candidate; local acceptance complete, publication evidence in the release record
 - Character release: Kite-Veil Penitent + Fallen Blade-Saint
 - Production: <https://gracefell.alyoechosys.dev>
 - Repository: <https://github.com/jonathanwxh-cell/gracefell>
@@ -31,6 +31,8 @@ npm run qa
 `127.0.0.1:8492`, and drives desktop, mobile, and real-touch Chromium paths. See
 [`docs/releases/v2.20.md`](docs/releases/v2.20.md) for the current fixed-pool phase-weather
 implementation and production acceptance record,
+[`docs/releases/v2.21.md`](docs/releases/v2.21.md) for roll slash, flank reward, terminal mastery
+feedback, Ascension, victory sharing, mirrored touch controls, and save-v7 acceptance,
 [`docs/releases/v2.19.md`](docs/releases/v2.19.md) for the current battle-menu, score-history,
 semantic combat, save-v6, and production acceptance record,
 [`docs/releases/v2.18.md`](docs/releases/v2.18.md) for the adaptive-score, live MIX,
@@ -53,6 +55,7 @@ original Journey/Oaths, teaching, death-recovery, visible-combo, and save-v4 des
 - [`public/audio/README.md`](public/audio/README.md) — generated music provenance
 - [`design-qa.md`](design-qa.md) — source-normalized mobile/desktop character comparisons
 - [`docs/releases/v2.20.md`](docs/releases/v2.20.md) — v2.20 fixed-pool Ash Gale weather and production acceptance
+- [`docs/releases/v2.21.md`](docs/releases/v2.21.md) — v2.21 combat mastery, terminal actions, sharing, handedness, and save-v7 acceptance
 - [`docs/releases/v2.19.md`](docs/releases/v2.19.md) — v2.19 battle menu, score chronicle, combat clarity, audio-state race fix, and production acceptance
 - [`docs/releases/v2.18.md`](docs/releases/v2.18.md) — v2.18 phase score, MIX controls, save v5, and local acceptance
 - [`docs/releases/v2.17.1.md`](docs/releases/v2.17.1.md) — v2.17.1 unit-test and engine-typing quality pass
