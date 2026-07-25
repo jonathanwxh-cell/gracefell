@@ -8,8 +8,12 @@ rules are all decided by what works one-handed on a 390px screen.
 
 **Play it: [gracefell.alyoechosys.dev](https://gracefell.alyoechosys.dev)**
 
-Current gameplay release: **v2.21** — six player-requested mastery and access features now form
-one coherent combat loop. Attack during a roll buffers a post-dodge slash without cancelling
+Current gameplay release: **v2.21.1** — the short-phone title menu now keeps saved scores,
+the start prompt, touch guidance, Journey/Oath summary, settings plate, and footer in one measured,
+non-overlapping layout. This is a presentation-only hotfix over v2.21; difficulty, combat, weather,
+audio, scoring, saves, and touch hit targets are unchanged.
+
+The six v2.21 mastery and access features still form one coherent combat loop. Attack during a roll buffers a post-dodge slash without cancelling
 invulnerability; rear-arc hits earn a disclosed FLANK reward; terminal chronicles explain damage
 mix, phase splits, recent wounds, and the next grade threshold. Victory offers explicit REMAIN,
 one-step ASCEND, and an offline-generated share PNG. Touch controls can be mirrored for a
@@ -21,8 +25,9 @@ and flasks, and assistive technology receives current player, boss, telegraph, a
 combo state without turning changing percentages into live-announcement spam.
 Save schema v7 migrates older settings and scores while defaulting handedness to the established layout.
 The adaptive MiniMax phase score, MIX controls, Journey/Oath curve, retry behavior,
-and combat timing are unchanged. The complete v2.20 implementation, CI, deployment,
-and public verification record is in
+and combat timing are unchanged. The v2.21.1 hotfix evidence is in
+[`docs/releases/v2.21.1.md`](docs/releases/v2.21.1.md); the complete v2.21 implementation,
+CI, deployment, and public verification record is in
 [`docs/releases/v2.21.md`](docs/releases/v2.21.md); the v2.20 weather record remains in
 [`docs/releases/v2.20.md`](docs/releases/v2.20.md), and the v2.19 navigation and score
 chronicle record remains in [`docs/releases/v2.19.md`](docs/releases/v2.19.md).
