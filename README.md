@@ -22,6 +22,8 @@ weak alternates remain documented but cannot enter runtime rotation. Complete as
 measurements live in [`public/audio/sfx/README.md`](public/audio/sfx/README.md), while the design,
 loader and lifecycle contract, local acceptance, GitHub receipts, exact-SHA deployment, and public
 verification are recorded in [`docs/releases/v2.22.md`](docs/releases/v2.22.md).
+Local, clean-runner, and complete public desktop/mobile/true-touch acceptance all passed with zero
+errors; production serves the exact reviewed merge and immutable versioned SFX.
 
 The six v2.21 mastery and access features still form one coherent combat loop. Attack during a roll buffers a post-dodge slash without cancelling
 invulnerability; rear-arc hits earn a disclosed FLANK reward; terminal chronicles explain damage
