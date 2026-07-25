@@ -8,25 +8,21 @@ rules are all decided by what works one-handed on a 390px screen.
 
 **Play it: [gracefell.alyoechosys.dev](https://gracefell.alyoechosys.dev)**
 
-Current gameplay release: **v2.21.1** — the short-phone title menu now keeps saved scores,
-the start prompt, touch guidance, Journey/Oath summary, settings plate, and footer in one measured,
-non-overlapping layout. This is a presentation-only hotfix over v2.21; difficulty, combat, weather,
-audio, scoring, saves, and touch hit targets are unchanged.
+Current gameplay release: **v2.21.2** — three independent game-menu specialists completed two
+review rounds over the v2.21.1 measured title foundation. The resulting Trial Seal gives difficulty
+one clear label, plain-language effects, and visible easier/harder paths; the screen has one primary
+**RAISE YOUR BLADE** action, a quieter **RECORDS** utility, compact key-first instructions, and
+subordinate safety settings. Saved results no longer cross the start prompt at 1280x800, the title
+settings plate and supporting copy scale together up to 1920x1080, and the wordmark fits a 360px
+touch viewport. Keyboard focus reveals one structured, veiled controls panel with native Combat
+tips instead of an uneven wrapped toolbar.
 
-Local review candidate: **v2.21.2** extends the same measured hierarchy to desktop and
-incorporates two autonomous review rounds by three game-menu specialists. The resulting Trial Seal
-gives difficulty one clear label, plain-language effects, and visible easier/harder paths; the
-screen has one primary **RAISE YOUR BLADE** action, a quieter **RECORDS** utility, compact key-first
-instructions, and subordinate safety settings. Saved results no longer cross the start prompt at
-1280x800, the title settings plate and supporting copy scale together up to 1920x1080, and the
-wordmark fits a 360px touch viewport. Keyboard focus reveals one structured, veiled controls panel
-with native combat tips instead of an uneven wrapped toolbar. It has passed local lint, 19/19 unit
-tests, production build, and the complete desktop/mobile/true-touch gate with `ok=true` and zero
-errors. One preceding run exceeded the unchanged 25ms Web Audio cold-start budget; an unchanged,
-fresh isolated rerun passed, and no menu assertion failed in either run. This candidate has not been
-published or deployed.
+The release passed local lint, 19/19 unit tests, production build, clean-runner GitHub Actions, and
+complete local and public desktop/mobile/true-touch gates with `ok=true` and zero errors. Difficulty,
+combat, boss patterns, weather, audio, scoring, saves, touch hit targets, and runtime assets are
+unchanged.
 The two-round review method, reviewer roles, implementation ownership map, screenshots, invariants,
-and deployment evidence contract are recorded in
+GitHub receipts, exact-SHA deployment, and public acceptance are recorded in
 [`docs/releases/v2.21.2.md`](docs/releases/v2.21.2.md).
 
 The six v2.21 mastery and access features still form one coherent combat loop. Attack during a roll buffers a post-dodge slash without cancelling
