@@ -1,7 +1,7 @@
 # GRACEFELL project facts
 
 - Current package: `gracefell@2.22.0`
-- Gameplay release: `v2.22`, recorded-combat-foley release candidate
+- Gameplay release: `v2.22`, merged, deployed, and publicly verified
 - Character release: Kite-Veil Penitent + Fallen Blade-Saint
 - Production: <https://gracefell.alyoechosys.dev>
 - Repository: <https://github.com/jonathanwxh-cell/gracefell>
