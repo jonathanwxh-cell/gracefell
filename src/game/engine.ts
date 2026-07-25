@@ -229,7 +229,7 @@ export class Input {
 
   private interactiveTarget(target: EventTarget | null) {
     return target instanceof Element
-      && Boolean(target.closest('button, input, select, textarea, a, [contenteditable="true"]'));
+      && Boolean(target.closest('button, input, select, textarea, summary, details, a, [contenteditable="true"]'));
   }
 
   private onKeyDown = (e: KeyboardEvent) => {
@@ -1678,6 +1678,8 @@ export interface GameUiSnapshot {
   grace: number;
   graceLabel: string;
   graceSummary: string;
+  graceMenuLabel: string;
+  graceMenuSummary: string;
   oathRank: number;
   shakeEnabled: boolean;
   flashReduced: boolean;
@@ -2311,6 +2313,21 @@ export class Game {
     return `${names[g] ?? ''} ${g > 0 ? '+' : ''}${g}`.trim();
   }
 
+  graceMenuLabel(g = this.grace): string {
+    const labels: Record<number, string> = {
+      [-3]: 'UNBURDENED · OPEN',
+      [-2]: 'JOURNEY · GUIDED',
+      [-1]: 'STEADIED · GENTLE',
+      0: 'MEASURED · STANDARD',
+      1: 'HASTE · OATH I',
+      2: 'FAMINE · OATH II',
+      3: 'IRON · OATH III',
+      4: 'FRAILTY · OATH IV',
+      5: 'FORSAKEN · OATH V',
+    };
+    return labels[g] ?? this.graceLabel(g);
+  }
+
   graceSummary(g = this.grace): string {
     const m = this.difficultyForGrace(g);
     if (g === -3) return 'deep grace · 22% slower · 45% softer · clearest tells';
@@ -2322,6 +2339,27 @@ export class Game {
     const poise = m.noStagger ? 'no stagger' : m.poiseMul > 1 ? `${Math.round((m.poiseMul - 1) * 100)}% more poise` : 'standard poise';
     if (g === 5) return `oath V · ${chain} · ${damage} · 1 flask · no stagger`;
     return `oath ${['', 'I', 'II', 'III', 'IV'][g]} · ${Math.round((m.bossSpeed - 1) * 100)}% faster · ${damage} · ${chain} · ${poise} · ${m.flasks} flasks`;
+  }
+
+  graceMenuSummary(g = this.grace): string {
+    const m = this.difficultyForGrace(g);
+    if (g === -3) return `Most forgiving · Clearest tells · ${m.flasks} flasks`;
+    if (g === -2) return `Recommended for first victories · Slower foe · Less damage taken · ${m.flasks} flasks`;
+    if (g === -1) return `Gentle · Wider dodge · ${m.flasks} flasks`;
+    if (g === 0) return `Standard · Original timing and damage · ${m.flasks} flasks`;
+    const oath = ['I', 'II', 'III', 'IV', 'V'][g - 1];
+    const chain = m.chainRank >= 3 ? '3-beat chains' : m.chainRank > 0 ? '2-beat chains' : 'Solo attacks';
+    return `Oath ${oath} · ${Math.round((m.bossSpeed - 1) * 100)}% faster · ${chain} · ${m.flasks} flask${m.flasks === 1 ? '' : 's'}`;
+  }
+
+  graceMenuCompactSummary(g = this.grace): string {
+    const m = this.difficultyForGrace(g);
+    if (g === -3) return `Open · Clearest tells · ${m.flasks} flasks`;
+    if (g === -2) return `Guided · Slower foe · Less damage taken · ${m.flasks} flasks`;
+    if (g === -1) return `Gentle · Wider dodge · ${m.flasks} flasks`;
+    if (g === 0) return 'Standard · Original timing';
+    const oath = ['I', 'II', 'III', 'IV', 'V'][g - 1];
+    return `Oath ${oath} · ${Math.round((m.bossSpeed - 1) * 100)}% faster · ${m.flasks} flask${m.flasks === 1 ? '' : 's'}`;
   }
 
   trialBest(g = this.grace): number {
@@ -2476,6 +2514,8 @@ export class Game {
       grace: this.grace,
       graceLabel: this.graceLabel(),
       graceSummary: this.graceSummary(),
+      graceMenuLabel: this.graceMenuLabel(),
+      graceMenuSummary: this.graceMenuSummary(),
       oathRank: this.difficultyForGrace().chainRank,
       shakeEnabled: this.shakeEnabled,
       flashReduced: this.flashReduced,
@@ -3068,7 +3108,7 @@ export class Game {
   // thing you see is provably the thing you can press.
   menuRows(): { id: string; y: number; label: string; value: string }[] {
     const rowCount = this.input.isTouch ? 5 : 3;
-    const gap = this.input.isTouch ? 40 : Math.max(30, Math.min(38, this.h * 0.045));
+    const gap = this.input.isTouch ? 40 : Math.max(30, Math.min(46, this.h * 0.045));
     const baseScale = this.input.isTouch ? 0.72 : this.w < 520 ? 0.735 : 0.70;
     const desiredBaseY = this.h * baseScale - (rowCount - 3) * gap * 0.5;
     // Keep the final instruction above the bottom edge on short phones. The
@@ -3079,7 +3119,12 @@ export class Game {
     const maxBaseY = this.h - bottomClearance - 30 - (rowCount - 1) * gap;
     const baseY = Math.min(desiredBaseY, maxBaseY);
     const rows = [
-      { id: 'grace', y: baseY, label: 'PATH', value: this.graceLabel() },
+      {
+        id: 'grace',
+        y: baseY,
+        label: this.w < 520 ? 'DIFFICULTY' : 'CHOOSE DIFFICULTY',
+        value: this.w < 520 ? this.graceMenuLabel().split(' · ')[0] : this.graceMenuLabel(),
+      },
       { id: 'shake', y: baseY + gap, label: 'SCREEN SHAKE', value: this.shakeEnabled ? 'on' : 'off' },
       { id: 'flash', y: baseY + gap * 2, label: 'FLASHES', value: this.flashReduced ? 'reduced' : 'full' },
     ];
@@ -3100,58 +3145,49 @@ export class Game {
   // press, at any viewport, without a human eyeballing a screenshot.
   menuGeom() {
     const cx = this.w / 2;
-    const halfW = Math.min(300, this.w * 0.42);
-    const pad = 18;
-    const pipStep = Math.min(16, halfW * 0.055);
+    const uiScale = !this.input.isTouch && this.w >= 1600
+      ? Math.min(1.2, this.w / 1600)
+      : 1;
+    const halfW = Math.min(300 * uiScale, this.w * 0.42);
+    const pad = 18 * uiScale;
+    const pipStep = Math.min(16 * uiScale, halfW * 0.055);
+    const compactPipShift = this.w < 520 ? 8 : 0;
     return {
-      cx, halfW, pad, pipStep,
+      cx, halfW, pad, pipStep, uiScale,
       plateL: cx - halfW,
       plateR: cx + halfW,
-      rowH: this.input.isTouch ? 40 : 32,
+      rowH: this.input.isTouch ? 40 : 32 * uiScale,
       chevLx: cx - halfW + pad,
       chevRx: cx + halfW - pad,
       valueRx: cx + halfW - pad * 2.2,
       labelLx: cx - halfW + pad * 0.8,
-      pipX: (g: number) => cx - 18 + (g - 1) * pipStep,
+      pipX: (g: number) => cx - 18 + compactPipShift + (g - 1) * pipStep,
       decZone: cx - halfW * 0.42,
       incZone: cx + halfW * 0.42,
     };
   }
 
   titleTextLayout() {
-    const compact = this.w < 520;
     const rows = this.menuRows();
     const gm = this.menuGeom();
     const menuTop = rows[0].y - gm.rowH / 2;
-
-    if (this.input.isTouch || compact) {
-      // Anchor the title copy above the settings plate instead of scattering it
-      // across viewport percentages. This prevents shorter mobile browser
-      // viewports from stacking the prompt, controls, summary, and first row.
-      const summaryY = menuTop - 12;
-      const compactKeyboard = !this.input.isTouch;
-      const controlsAltY = summaryY - 22;
-      const controlsY = controlsAltY - (compactKeyboard ? 19 : 0);
-      const promptY = controlsY - 24;
-      const statsY = promptY - 23;
-      return {
-        titleY: Math.min(this.h * 0.36, statsY - 84),
-        statsY,
-        promptY,
-        controlsY,
-        controlsAltY,
-        summaryY,
-        menuTop,
-      };
-    }
-
+    // The settings plate is the stable title-screen landmark at every size.
+    // The ritual action and plain-language trial summary form one measured
+    // stack above it; saved progress occupies the quieter space below the seal.
+    const rhythm = gm.uiScale;
+    const summaryY = menuTop - 12 * rhythm;
+    const controlsY = summaryY - 28 * rhythm;
+    const controlsAltY = controlsY;
+    const promptY = controlsY - 22 * rhythm;
+    const titleY = Math.min(this.h * 0.36, promptY - 120 * rhythm);
+    const statsY = Math.min(promptY - 30 * rhythm, titleY + 112 * rhythm);
     return {
-      titleY: this.h * 0.36,
-      statsY: this.h * 0.60 + 26,
-      promptY: this.h * 0.60,
-      controlsY: this.h * 0.64,
-      controlsAltY: this.h * 0.64,
-      summaryY: this.h * 0.666,
+      titleY,
+      statsY,
+      promptY,
+      controlsY,
+      controlsAltY,
+      summaryY,
       menuTop,
     };
   }
@@ -4121,12 +4157,22 @@ Game.prototype.drawTitle = function drawTitle(this: Game, ctx: CanvasRenderingCo
   }
 
   ctx.textAlign = 'center';
-  ctx.font = serif(clamp(this.w * 0.085, 44, 96), 900);
+  const title = 'GRACEFELL';
+  const titleSize = clamp(this.w * 0.064, 42, 96);
+  ctx.save();
+  ctx.letterSpacing = `${clamp(this.w * 0.0075, 3, 10)}px`;
+  ctx.font = serif(titleSize, 900);
+  const titleMaxWidth = this.w - (this.w < 520 ? 28 : 64);
+  const measuredTitleWidth = ctx.measureText(title).width;
+  if (measuredTitleWidth > titleMaxWidth) {
+    ctx.font = serif(titleSize * titleMaxWidth / measuredTitleWidth, 900);
+  }
   ctx.fillStyle = PAL.parchment;
   ctx.shadowColor = 'rgba(201,169,89,0.45)';
   ctx.shadowBlur = 30;
-  ctx.fillText('G R A C E F E L L', cx, cy);
+  ctx.fillText(title, cx, cy);
   ctx.shadowBlur = 0;
+  ctx.restore();
 
   ctx.font = body(clamp(this.w * 0.02, 16, 22), 500);
   ctx.fillStyle = PAL.parchmentDim;
@@ -4145,35 +4191,52 @@ Game.prototype.drawTitle = function drawTitle(this: Game, ctx: CanvasRenderingCo
   ctx.globalAlpha = blink;
   ctx.font = serif(clamp(this.w * 0.018, 15, 20), 600);
   ctx.fillStyle = PAL.goldBright;
-  ctx.fillText(
-    this.input.isTouch ? 'TOUCH TO RAISE YOUR BLADE' : 'CLICK TO RAISE YOUR BLADE',
-    cx,
-    titleLayout.promptY,
-  );
+  ctx.fillText('RAISE YOUR BLADE', cx, titleLayout.promptY);
   ctx.globalAlpha = 1;
+  const titleCopyScale = this.menuGeom().uiScale;
+  ctx.font = body(12 * titleCopyScale, 650);
+  ctx.fillStyle = 'rgba(201,190,164,0.86)';
+  ctx.fillText(this.input.isTouch ? 'TOUCH TO BEGIN' : 'CLICK OR PRESS ENTER', cx, titleLayout.controlsY);
 
   // ---- settings dial: trial / shake / flashes
   {
     const rows = this.menuRows();
     const gm = this.menuGeom();
     const halfW = gm.halfW;
+    const menuScale = gm.uiScale;
     for (const row of rows) {
       const isGrace = row.id === 'grace';
-      // row plate
+      const utilityInset = 12 * menuScale;
+      const rowLeft = isGrace ? cx - halfW : cx - halfW + utilityInset;
+      const rowWidth = isGrace ? halfW * 2 : halfW * 2 - utilityInset * 2;
+      const visualRowH = isGrace ? gm.rowH : gm.rowH * 0.78;
+      // The selected trial is the play decision. Safety preferences remain
+      // available underneath, but use quieter open hairlines instead of
+      // competing with the trial seal as equal boxed cards.
       ctx.globalAlpha = 1;
-      ctx.fillStyle = 'rgba(10,8,5,0.76)';
-      ctx.fillRect(cx - halfW, row.y - gm.rowH / 2, halfW * 2, gm.rowH);
-      ctx.strokeStyle = 'rgba(201,169,89,0.48)';
+      ctx.fillStyle = isGrace ? 'rgba(13,10,6,0.86)' : 'rgba(10,8,5,0.44)';
+      ctx.fillRect(rowLeft, row.y - visualRowH / 2, rowWidth, visualRowH);
+      ctx.strokeStyle = isGrace ? 'rgba(201,169,89,0.72)' : 'rgba(201,169,89,0.30)';
       ctx.lineWidth = 1;
-      ctx.strokeRect(cx - halfW, row.y - gm.rowH / 2, halfW * 2, gm.rowH);
+      if (isGrace) {
+        ctx.strokeRect(rowLeft, row.y - visualRowH / 2, rowWidth, visualRowH);
+      } else {
+        ctx.beginPath();
+        ctx.moveTo(rowLeft, row.y - visualRowH / 2);
+        ctx.lineTo(rowLeft + rowWidth, row.y - visualRowH / 2);
+        ctx.moveTo(rowLeft, row.y + visualRowH / 2);
+        ctx.lineTo(rowLeft + rowWidth, row.y + visualRowH / 2);
+        ctx.stroke();
+      }
 
       ctx.textAlign = 'left';
-      ctx.font = body(14, 600);
-      ctx.fillStyle = PAL.parchmentDim;
-      ctx.fillText(row.label, isGrace ? gm.chevLx + 24 : gm.labelLx, row.y + 5);
+      const labelSize = isGrace && this.w < 520 ? 11 : isGrace ? 13 : 12;
+      ctx.font = body(labelSize * menuScale, isGrace ? 700 : 600);
+      ctx.fillStyle = isGrace ? PAL.goldBright : PAL.parchmentDim;
+      ctx.fillText(row.label, isGrace ? gm.chevLx + 24 : gm.labelLx + utilityInset, row.y + 5);
 
       ctx.textAlign = 'right';
-      ctx.font = serif(14, 700);
+      ctx.font = serif((isGrace ? 14 : 12) * menuScale, 700);
       ctx.fillStyle = isGrace
         ? (this.grace > 0 ? PAL.ember : this.grace < 0 ? PAL.spirit : PAL.goldBright)
         : PAL.parchment;
@@ -4182,7 +4245,7 @@ Game.prototype.drawTitle = function drawTitle(this: Game, ctx: CanvasRenderingCo
       if (isGrace) {
         // chevrons — dimmed at the ends of the range so the limit is visible
         ctx.textAlign = 'center';
-        ctx.font = serif(17, 700);
+        ctx.font = serif(17 * menuScale, 700);
         ctx.fillStyle = this.grace > -3 ? PAL.gold : 'rgba(201,169,89,0.25)';
         ctx.fillText('\u25c0', gm.chevLx, row.y + 6);
         ctx.fillStyle = this.grace < 5 ? PAL.gold : 'rgba(201,169,89,0.25)';
@@ -4201,36 +4264,31 @@ Game.prototype.drawTitle = function drawTitle(this: Game, ctx: CanvasRenderingCo
       }
     }
     ctx.textAlign = 'center';
-    ctx.font = body(12, 500);
-    ctx.fillStyle = 'rgba(184,170,138,0.9)';
+    ctx.font = body(12 * menuScale, 600);
+    ctx.fillStyle = 'rgba(201,190,164,0.82)';
     ctx.fillText(
-      this.input.isTouch ? 'tap a row to change it \u00b7 tap anywhere else to begin'
-                         : '\u2190 \u2192 or click to change \u00b7 the trial is recorded with your grade',
+      this.input.isTouch
+        ? `${this.leftHanded ? 'RIGHT' : 'LEFT'}: MOVE · ${this.leftHanded ? 'LEFT' : 'RIGHT'}: FIGHT + FLASK`
+        : 'WASD MOVE · SPACE ROLL · J ATTACK · K HEAVY · F FLASK',
       cx, rows[rows.length - 1].y + 30,
+      Math.min(this.w - 28, halfW * 2),
     );
   }
 
-  const compactKeyboard = !this.input.isTouch && this.w < 520;
-  ctx.font = body(this.input.isTouch && this.w < 520 ? 14 : compactKeyboard ? 13 : 15, 500);
-  ctx.fillStyle = 'rgba(184,170,138,0.92)';
-  if (compactKeyboard) {
-    ctx.fillText('WASD / arrows move \u00b7 SPACE rolls', cx, titleLayout.controlsY);
-    ctx.fillText('J attack \u00b7 K heavy \u00b7 F flask', cx, titleLayout.controlsAltY);
-  } else {
-    ctx.fillText(
-      this.input.isTouch
-        ? 'left thumb steers \u00b7 right thumb strikes, rolls, drinks'
-        : 'WASD move \u00b7 SPACE roll \u00b7 J slash \u00b7 K heavy \u00b7 F flask',
-      cx, titleLayout.controlsY,
-    );
-  }
-  ctx.font = body(11, 650);
+  ctx.font = body(12 * titleCopyScale, 650);
+  ctx.globalAlpha = 0.84;
   ctx.fillStyle = this.grace < 0 ? PAL.spirit : this.grace > 0 ? PAL.ember : PAL.goldBright;
-  ctx.fillText(this.graceSummary(), cx, titleLayout.summaryY);
+  ctx.fillText(
+    this.w < 520 ? this.graceMenuCompactSummary() : this.graceMenuSummary(),
+    cx,
+    titleLayout.summaryY,
+    Math.min(this.w - 24, this.menuGeom().halfW * 2 - 16),
+  );
+  ctx.globalAlpha = 1;
   const selectedBest = this.trialBest();
   if (this.wins > 0 || selectedBest > 0) {
     const compactStats = this.w < 520;
-    ctx.font = body(compactStats ? 12 : 15, 500);
+    ctx.font = body((compactStats ? 12 : 15) * titleCopyScale, 500);
     ctx.fillStyle = 'rgba(201,169,89,0.75)';
     const bm = Math.floor(selectedBest / 60), bs2 = Math.floor(selectedBest % 60);
     const parts: string[] = [];
@@ -4244,9 +4302,6 @@ Game.prototype.drawTitle = function drawTitle(this: Game, ctx: CanvasRenderingCo
       compactStats ? this.w - 36 : undefined,
     );
   }
-  ctx.font = body(13, 400);
-  ctx.fillStyle = 'rgba(184,170,138,0.78)';
-  ctx.fillText('the sovereign does not forgive \u00b7 grace answers', cx, this.h - 26);
 };
 
 Game.prototype.drawIntro = function drawIntro(this: Game, ctx: CanvasRenderingContext2D) {

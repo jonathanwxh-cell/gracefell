@@ -13,13 +13,29 @@ the start prompt, touch guidance, Journey/Oath summary, settings plate, and foot
 non-overlapping layout. This is a presentation-only hotfix over v2.21; difficulty, combat, weather,
 audio, scoring, saves, and touch hit targets are unchanged.
 
+Local review candidate: **v2.21.2** extends the same measured hierarchy to desktop and
+incorporates two autonomous review rounds by three game-menu specialists. The resulting Trial Seal
+gives difficulty one clear label, plain-language effects, and visible easier/harder paths; the
+screen has one primary **RAISE YOUR BLADE** action, a quieter **RECORDS** utility, compact key-first
+instructions, and subordinate safety settings. Saved results no longer cross the start prompt at
+1280x800, the title settings plate and supporting copy scale together up to 1920x1080, and the
+wordmark fits a 360px touch viewport. Keyboard focus reveals one structured, veiled controls panel
+with native combat tips instead of an uneven wrapped toolbar. It has passed local lint, 19/19 unit
+tests, production build, and the complete desktop/mobile/true-touch gate with `ok=true` and zero
+errors. One preceding run exceeded the unchanged 25ms Web Audio cold-start budget; an unchanged,
+fresh isolated rerun passed, and no menu assertion failed in either run. This candidate has not been
+published or deployed.
+The two-round review method, reviewer roles, implementation ownership map, screenshots, invariants,
+and deployment evidence contract are recorded in
+[`docs/releases/v2.21.2.md`](docs/releases/v2.21.2.md).
+
 The six v2.21 mastery and access features still form one coherent combat loop. Attack during a roll buffers a post-dodge slash without cancelling
 invulnerability; rear-arc hits earn a disclosed FLANK reward; terminal chronicles explain damage
 mix, phase splits, recent wounds, and the next grade threshold. Victory offers explicit REMAIN,
 one-step ASCEND, and an offline-generated share PNG. Touch controls can be mirrored for a
 left-handed player and persist in save schema v7.
 Every active battle also has a safe **MENU** route back to the title, and the
-title has a **SCORES** chronicle for the latest 20 victories.
+title has a **RECORDS** chronicle for the latest 20 victories.
 Rapid light taps acknowledge queued follow-ups, the combat HUD labels HP, stamina,
 and flasks, and assistive technology receives current player, boss, telegraph, and
 combo state without turning changing percentages into live-announcement spam.

@@ -91,6 +91,8 @@ async function installAudioSampleRate(context) {
           grace: g.grace,
           label: g.graceLabel(),
           summary: g.graceSummary(),
+          menuLabel: g.graceMenuLabel(),
+          menuSummary: g.graceMenuSummary(),
           clearTells: g.difficultyForGrace().clearTells,
           flasks: g.difficultyForGrace().flasks,
           uiGrace: ui.grace,
@@ -104,6 +106,8 @@ async function installAudioSampleRate(context) {
         step.firstJourney.grace !== -2
         || step.firstJourney.label !== 'JOURNEY -2'
         || !step.firstJourney.summary.includes('recommended')
+        || step.firstJourney.menuLabel !== 'JOURNEY · GUIDED'
+        || !step.firstJourney.menuSummary.includes('Recommended for first victories')
         || !step.firstJourney.clearTells
         || step.firstJourney.flasks !== 4
           || step.firstJourney.uiGrace !== -2
@@ -171,13 +175,58 @@ async function installAudioSampleRate(context) {
         // or leak a combat action through the window-level input handler.
         const soundButton = pg.locator('.game-accessibility button').nth(1);
         await soundButton.focus();
+        await pg.waitForFunction(() => Boolean(document.querySelector('.game-controls-backdrop')),
+          null, { timeout: 1000 }).catch(() => {});
         step.focusReveal = await pg.locator('.game-accessibility').evaluate((panel) => {
           const box = panel.getBoundingClientRect();
-          return { width: box.width, height: box.height, clipped: getComputedStyle(panel).clipPath };
+          const actions = panel.querySelector('.game-accessibility__actions');
+          const primary = panel.querySelector('.game-accessibility__primary')?.getBoundingClientRect();
+          const primaryNode = panel.querySelector('.game-accessibility__primary');
+          const tipsNode = panel.querySelector('.game-accessibility__tips summary');
+          const sound = panel.querySelector('.game-accessibility__sound')?.getBoundingClientRect();
+          const ranges = Array.from(panel.querySelectorAll('.game-accessibility__range'))
+            .map((node) => node.getBoundingClientRect());
+          const trialRow = [
+            panel.querySelector('.game-accessibility__trial-step'),
+            panel.querySelector('.game-accessibility__trial'),
+            panel.querySelectorAll('.game-accessibility__trial-step')[1],
+          ].map((node) => node?.getBoundingClientRect());
+          return {
+            width: box.width,
+            height: box.height,
+            left: box.left,
+            right: box.right,
+            top: box.top,
+            bottom: box.bottom,
+            clipped: getComputedStyle(panel).clipPath,
+            actionsDisplay: actions ? getComputedStyle(actions).display : '',
+            hasBackdrop: Boolean(document.querySelector('.game-controls-backdrop')),
+            primaryBeforeTips: Boolean(primaryNode && tipsNode
+              && (primaryNode.compareDocumentPosition(tipsNode) & Node.DOCUMENT_POSITION_FOLLOWING)),
+            primary: primary ? { x: primary.x, y: primary.y, width: primary.width } : null,
+            sound: sound ? { x: sound.x, y: sound.y, width: sound.width } : null,
+            ranges: ranges.map((range) => ({ x: range.x, width: range.width })),
+            trialRow: trialRow.map((item) => item ? ({ x: item.x, y: item.y, width: item.width }) : null),
+          };
         });
         if (step.focusReveal.width < 300 || step.focusReveal.height < 100
-          || step.focusReveal.clipped !== 'none') {
-          out.errors.push('desktop: keyboard focus entered clipped semantic controls: '
+          || step.focusReveal.clipped !== 'none'
+          || step.focusReveal.actionsDisplay !== 'grid'
+          || !step.focusReveal.hasBackdrop
+          || !step.focusReveal.primaryBeforeTips
+          || step.focusReveal.left < 0
+          || step.focusReveal.right > vp.w + 1
+          || step.focusReveal.top < 0
+          || step.focusReveal.bottom > vp.h + 1
+          || !step.focusReveal.primary
+          || !step.focusReveal.sound
+          || Math.abs(step.focusReveal.primary.y - step.focusReveal.sound.y) > 2
+          || Math.abs(step.focusReveal.primary.width - step.focusReveal.sound.width) > 2
+          || step.focusReveal.ranges.length !== 2
+          || step.focusReveal.ranges.some((range) => range.width < step.focusReveal.width - 50)
+          || step.focusReveal.trialRow.some((item) => !item)
+          || step.focusReveal.trialRow.some((item) => Math.abs(item.y - step.focusReveal.trialRow[0].y) > 2)) {
+          out.errors.push('desktop: keyboard controls panel is clipped or loses its visual grid: '
             + JSON.stringify(step.focusReveal));
         }
         const semanticBefore = await pg.evaluate(() => ({ state: window.__game.state, muted: window.__game.audio.muted }));
@@ -214,36 +263,58 @@ async function installAudioSampleRate(context) {
         // semantic path controls could start the fight or shift the selected
         // path again when Start was activated. Exercise pointer and keyboard
         // ownership directly before accepting the title.
-        const moreOath = pg.getByRole('button', { name: 'More Oath' });
+        const moreOath = pg.getByRole('button', { name: /Harder path/ });
         await moreOath.focus();
         await moreOath.click();
         await pg.waitForFunction(() => window.__game.grace === -1, null, { timeout: 1000 }).catch(() => {});
         const afterPointerOath = await pg.evaluate(() => ({
           state: window.__game.state,
           grace: window.__game.grace,
-          label: document.querySelector('output[aria-label="Current trial"]')?.textContent,
+          label: document.querySelector('output[aria-label="Current difficulty"]')?.textContent,
           confirmSequence: window.__game.input.confirmSequence,
         }));
-        const moreGrace = pg.getByRole('button', { name: 'More Grace' });
+        const moreGrace = pg.getByRole('button', { name: /Easier path/ });
         await moreGrace.focus();
         await pg.keyboard.press('Enter');
         await pg.waitForFunction(() => window.__game.grace === -2, null, { timeout: 1000 }).catch(() => {});
         const afterKeyboardGrace = await pg.evaluate(() => ({
           state: window.__game.state,
           grace: window.__game.grace,
-          label: document.querySelector('output[aria-label="Current trial"]')?.textContent,
+          label: document.querySelector('output[aria-label="Current difficulty"]')?.textContent,
           confirmSequence: window.__game.input.confirmSequence,
         }));
         step.semanticPathOwnership = { afterPointerOath, afterKeyboardGrace };
         if (afterPointerOath.state !== 'title' || afterPointerOath.grace !== -1
-          || afterPointerOath.label !== 'STEADIED -1'
+          || afterPointerOath.label !== 'STEADIED · GENTLE'
           || afterKeyboardGrace.state !== 'title' || afterKeyboardGrace.grace !== -2
-          || afterKeyboardGrace.label !== 'JOURNEY -2'
+          || afterKeyboardGrace.label !== 'JOURNEY · GUIDED'
           || afterPointerOath.confirmSequence !== semanticAfter.confirmSequence
           || afterKeyboardGrace.confirmSequence !== semanticAfter.confirmSequence) {
           out.errors.push('desktop: semantic path controls leaked into canvas confirmation: '
             + JSON.stringify(step.semanticPathOwnership));
         }
+
+        const tips = pg.locator('.game-accessibility__tips summary');
+        await tips.focus();
+        const tipsBefore = await pg.evaluate(() => ({
+          state: window.__game.state,
+          confirmSequence: window.__game.input.confirmSequence,
+        }));
+        await pg.keyboard.press('Enter');
+        await pg.waitForTimeout(80);
+        const tipsAfter = await pg.evaluate(() => ({
+          open: document.querySelector('.game-accessibility__tips')?.open,
+          state: window.__game.state,
+          confirmSequence: window.__game.input.confirmSequence,
+        }));
+        step.semanticTips = { before: tipsBefore, after: tipsAfter };
+        if (!tipsAfter.open
+          || tipsAfter.state !== 'title'
+          || tipsAfter.confirmSequence !== tipsBefore.confirmSequence) {
+          out.errors.push('desktop: Combat tips disclosure lost native keyboard ownership: '
+            + JSON.stringify(step.semanticTips));
+        }
+        await pg.keyboard.press('Enter'); // close the optional disclosure
         await pg.locator('canvas').focus();
       }
       // canvas exists and draws
@@ -268,7 +339,7 @@ async function installAudioSampleRate(context) {
       // the disabled title control and pause the fight. Touch/non-touch mobile
       // retain their direct canvas start paths.
       if (vp.name === 'desktop') {
-        const startButton = pg.getByRole('button', { name: 'Start fight' });
+        const startButton = pg.getByRole('button', { name: 'Raise your blade' });
         await startButton.focus();
         await pg.keyboard.press('Enter');
       } else {
@@ -508,7 +579,7 @@ async function installAudioSampleRate(context) {
         }));
         step.semanticStart = semanticStart;
         if (semanticStart.paused || semanticStart.uiFocused || !semanticStart.activeIsCanvas || !semanticStart.rafRunning) {
-          out.errors.push('desktop: semantic Start fight did not return control to the canvas: ' + JSON.stringify(semanticStart));
+          out.errors.push('desktop: semantic Raise your blade did not return control to the canvas: ' + JSON.stringify(semanticStart));
         }
 
         // Player pause is distinct from focus/interruption pause: it must stop
@@ -1137,7 +1208,7 @@ async function installAudioSampleRate(context) {
           || afterReturn.attempts !== beforeReturn.attempts
           || afterReturn.history !== beforeReturn.history
           || afterReturn.paused
-          || afterReturn.scoreButton !== 'SCORES'
+          || afterReturn.scoreButton !== 'RECORDS'
           || scoreDialog.role !== 'dialog'
           || scoreDialog.rows < 1
           || !Number.isFinite(Date.parse(scoreDialog.dateTime || ''))
@@ -1903,10 +1974,18 @@ async function installAudioSampleRate(context) {
         const ctx = canvas.getContext('2d');
         const originalFillText = ctx.fillText;
         let valueLeft = Number.POSITIVE_INFINITY;
+        let trialLabelRight = 0;
+        let titleWidth = 0;
         ctx.fillText = function (text, x, y, maxWidth) {
-          if (String(text) === 'FORSAKEN +5') {
+          if (String(text) === 'FORSAKEN · OATH V' || String(text) === 'FORSAKEN') {
             const width = this.measureText(String(text)).width;
             valueLeft = this.textAlign === 'right' ? x - width : x;
+          }
+          if (String(text) === 'GRACEFELL') {
+            titleWidth = this.measureText(String(text)).width;
+          }
+          if (String(text) === 'CHOOSE DIFFICULTY' || String(text) === 'DIFFICULTY') {
+            trialLabelRight = x + this.measureText(String(text)).width;
           }
           return maxWidth === undefined
             ? originalFillText.call(this, text, x, y)
@@ -1920,10 +1999,13 @@ async function installAudioSampleRate(context) {
           chevLx: gm.chevLx, chevRx: gm.chevRx,
           valueRx: gm.valueRx, labelLx: gm.labelLx,
           pipMin: gm.pipX(-3), pipMax: gm.pipX(5),
-          valueLeft,
+          valueLeft, trialLabelRight, titleWidth,
+          titleMaxWidth: g.w - (g.w < 520 ? 28 : 64),
+          uiScale: gm.uiScale,
           decZone: gm.decZone, incZone: gm.incZone,
           lastRowY: rows[rows.length - 1].y,
           firstRowY: rows[0].y,
+          title: g.titleTextLayout(),
         };
       });
       step.menuLayout = lay;
@@ -1933,17 +2015,71 @@ async function installAudioSampleRate(context) {
       if (lay.labelLx < lay.plateL + 8) L.push('label outside plate');
       if (lay.valueRx > lay.chevRx - 12) L.push('value text collides with right chevron');
       if (lay.pipMin < lay.plateL + 8 || lay.pipMax > lay.plateR - 8) L.push('grace pips outside plate');
-      if (lay.pipMax > lay.valueLeft - 6) L.push('grace pips collide with FORSAKEN +5 text');
+      if (lay.trialLabelRight > lay.pipMin - 6) L.push('difficulty label collides with grace pips');
+      if (lay.pipMax > lay.valueLeft - 6) L.push('grace pips collide with FORSAKEN Oath V text');
       if (lay.plateL < 4 || lay.plateR > lay.w - 4) L.push('menu plate wider than viewport');
+      if (lay.titleWidth > lay.titleMaxWidth + 1) L.push('title wordmark wider than viewport');
       if (lay.lastRowY + 40 > lay.h) L.push('menu overflows bottom of screen');
       if (lay.firstRowY < lay.h * 0.5) L.push('menu overlaps the title block');
       if (!(lay.decZone < lay.incZone)) L.push('grace hit zones inverted');
+      if (lay.title.titleY + 64 > lay.title.statsY - 18) L.push('title divider collides with saved-result summary');
+      if (lay.title.statsY > lay.title.promptY - 18) L.push('saved-result summary collides with prompt');
+      if (lay.title.promptY > lay.title.controlsY - 18) L.push('prompt collides with controls');
+      if (Math.abs(lay.title.controlsY - lay.title.controlsAltY) > 1) {
+        L.push('single-line controls split unexpectedly');
+      }
+      const lastControlsY = Math.max(lay.title.controlsY, lay.title.controlsAltY);
+      if (lastControlsY > lay.title.summaryY - 18) L.push('controls collide with trial summary');
+      if (lay.title.summaryY > lay.title.menuTop - 8) L.push('trial summary collides with settings plate');
       if (L.length) out.errors.push(vp.name + ' menu layout: ' + L.join('; '));
 
       step.consoleErrors = consoleErrs;
       if (consoleErrs.length) out.errors.push(vp.name + ' console: ' + consoleErrs.join(' | '));
       out.steps[vp.name] = step;
       await ctxB.close();
+    }
+    // A wide desktop should not strand a phone-sized settings plate beneath
+    // the cinematic wordmark. This is a focused title-only lane so the full
+    // combat suite does not have to run a third time.
+    {
+      const wideCtx = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
+      await installAudioSampleRate(wideCtx);
+      const pg = await wideCtx.newPage();
+      await pg.goto(URL, { waitUntil: 'load' });
+      await pg.waitForTimeout(900);
+      const wide = await pg.evaluate(() => {
+        const g = window.__game;
+        g.state = 'title';
+        g.grace = -2;
+        g.wins = 2;
+        g.bestTime = 82;
+        g.bests['-2'] = 82;
+        const gm = g.menuGeom();
+        const rows = g.menuRows();
+        const layout = g.titleTextLayout();
+        g.render();
+        return {
+          uiScale: gm.uiScale,
+          plateWidth: gm.plateR - gm.plateL,
+          rowH: gm.rowH,
+          firstRowY: rows[0].y,
+          lastRowY: rows[rows.length - 1].y,
+          ...layout,
+        };
+      });
+      out.steps.desktopWideMenu = wide;
+      if (wide.uiScale < 1.19
+        || wide.plateWidth < 700
+        || wide.rowH < 38
+        || wide.lastRowY + 40 > 1080
+        || wide.statsY > wide.promptY - 18
+        || wide.promptY > wide.controlsY - 18
+        || wide.controlsY > wide.summaryY - 18
+        || wide.summaryY > wide.menuTop - 8) {
+        out.errors.push('desktop-wide: title hierarchy did not scale as one system: ' + JSON.stringify(wide));
+      }
+      await pg.screenshot({ path: path.join(ARTIFACT_DIR, 'desktop-wide-title.png') });
+      await wideCtx.close();
     }
     // ================= TOUCH DEVICE PASS =================
     // The touch path had never been driven by a test — only rendered. This
@@ -1975,7 +2111,7 @@ async function installAudioSampleRate(context) {
         return {
           ...layout,
           helpY: rows[rows.length - 1].y + 30,
-          footerY: g.h - 26,
+          bottomY: g.h - 16,
         };
       });
       if (t.titleLayout.titleY + 64 > t.titleLayout.statsY - 18) {
@@ -1987,8 +2123,8 @@ async function installAudioSampleRate(context) {
         || t.titleLayout.summaryY > t.titleLayout.menuTop - 8) {
         out.errors.push('touch: title copy overlaps the settings menu: ' + JSON.stringify(t.titleLayout));
       }
-      if (t.titleLayout.helpY > t.titleLayout.footerY - 18) {
-        out.errors.push('touch: settings instruction overlaps the title footer: ' + JSON.stringify(t.titleLayout));
+      if (t.titleLayout.helpY > t.titleLayout.bottomY) {
+        out.errors.push('touch: control legend overflows the title viewport: ' + JSON.stringify(t.titleLayout));
       }
       await pg.screenshot({ path: path.join(ARTIFACT_DIR, 'touch-title.png') });
       t.forsakenTitle = await pg.evaluate(() => {
@@ -2000,7 +2136,7 @@ async function installAudioSampleRate(context) {
         const originalFillText = ctx.fillText;
         let labelLeft = Number.POSITIVE_INFINITY;
         ctx.fillText = function (text, x, y, maxWidth) {
-          if (String(text) === 'FORSAKEN +5') labelLeft = x - this.measureText(String(text)).width;
+          if (String(text) === 'FORSAKEN') labelLeft = x - this.measureText(String(text)).width;
           return maxWidth === undefined
             ? originalFillText.call(this, text, x, y)
             : originalFillText.call(this, text, x, y, maxWidth);
@@ -2009,7 +2145,7 @@ async function installAudioSampleRate(context) {
         ctx.fillText = originalFillText;
         return { pipMax: gm.pipX(5), labelLeft, gap: labelLeft - gm.pipX(5) };
       });
-      if (t.forsakenTitle.gap < 6) out.errors.push('touch: FORSAKEN +5 overlaps the grace pips: ' + JSON.stringify(t.forsakenTitle));
+      if (t.forsakenTitle.gap < 6) out.errors.push('touch: FORSAKEN Oath V overlaps the grace pips: ' + JSON.stringify(t.forsakenTitle));
       await pg.screenshot({ path: path.join(ARTIFACT_DIR, 'touch-forsaken-title.png') });
 
       // 3. controls layout: inside screen, clear of the joystick half and the safe area
