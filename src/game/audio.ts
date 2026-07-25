@@ -14,6 +14,7 @@ type SpatialInput = SpatialAudio | number;
 // resampled into the device AudioContext when the graph is created.
 const PREPARED_SAMPLE_RATE = 24000;
 const SOUNDTRACK_VERSION = '2.18';
+const SFX_VERSION = '2.22.0';
 const SOUNDTRACK_BPM = 78;
 const SOUNDTRACK_BEAT_SECONDS = 60 / SOUNDTRACK_BPM;
 const SOUNDTRACK_MAX_QUANTIZE_WAIT = 0.25;
@@ -45,6 +46,79 @@ interface MusicDuck {
   amount: number;
   endAt: number;
 }
+
+type SfxTier = 'critical' | 'phase' | 'cosmetic';
+
+interface SfxAsset {
+  name: string;
+  tier: SfxTier;
+}
+
+// Ordering is intentional. Four bounded workers decode combat-critical voices
+// first, phase/boss voices second, and nonessential texture last. The five weak
+// audition variants (swing-2/3, dodge-2, player-step-1, near-miss-2) are not
+// shipped through runtime rotation.
+const SFX_MANIFEST: readonly SfxAsset[] = [
+  { name: 'swing-1', tier: 'critical' },
+  { name: 'swing-heavy-1', tier: 'critical' },
+  { name: 'hit-light-1', tier: 'critical' },
+  { name: 'hit-heavy-1', tier: 'critical' },
+  { name: 'dodge-1', tier: 'critical' },
+  { name: 'hurt-light-1', tier: 'critical' },
+  { name: 'hurt-heavy-1', tier: 'critical' },
+  { name: 'flask-1', tier: 'critical' },
+  { name: 'charge-loop', tier: 'critical' },
+  { name: 'tele-swipe', tier: 'critical' },
+  { name: 'tele-slam', tier: 'critical' },
+  { name: 'tele-charge', tier: 'critical' },
+  { name: 'tele-volley', tier: 'critical' },
+  { name: 'projectile-1', tier: 'critical' },
+  { name: 'charge-scrape-1', tier: 'critical' },
+
+  // Alternates and reaction punctuation fill only after the complete Phase 1
+  // vocabulary is available.
+  { name: 'swing-heavy-2', tier: 'phase' },
+  { name: 'hit-light-2', tier: 'phase' },
+  { name: 'hit-light-3', tier: 'phase' },
+  { name: 'hit-heavy-2', tier: 'phase' },
+  { name: 'stagger', tier: 'phase' },
+  { name: 'parry-spark', tier: 'phase' },
+  { name: 'execute-1', tier: 'phase' },
+  { name: 'roar-small', tier: 'phase' },
+  { name: 'slam-1', tier: 'phase' },
+  { name: 'slam-2', tier: 'phase' },
+  { name: 'boss-step-1', tier: 'phase' },
+  { name: 'boss-step-2', tier: 'phase' },
+  { name: 'tele-meteor', tier: 'phase' },
+  { name: 'meteor-warning', tier: 'phase' },
+  { name: 'meteor-1', tier: 'phase' },
+  { name: 'meteor-2', tier: 'phase' },
+  { name: 'tele-ring', tier: 'phase' },
+  { name: 'ring-release', tier: 'phase' },
+  { name: 'tele-spiral', tier: 'phase' },
+  { name: 'projectile-2', tier: 'phase' },
+  { name: 'charge-scrape-2', tier: 'phase' },
+  { name: 'stamp', tier: 'phase' },
+  { name: 'roar-big', tier: 'phase' },
+  { name: 'death-sting', tier: 'phase' },
+
+  // Cold-title and environmental texture always retain synthesis, so they are
+  // safe to leave behind the battle vocabulary on constrained connections.
+  { name: 'flask-empty', tier: 'cosmetic' },
+  { name: 'blade-draw', tier: 'cosmetic' },
+  { name: 'ui', tier: 'cosmetic' },
+  { name: 'player-step-2', tier: 'cosmetic' },
+  { name: 'ward-chime', tier: 'cosmetic' },
+  { name: 'near-miss-1', tier: 'cosmetic' },
+] as const;
+
+const SFX_EXPECTED_BY_TIER = SFX_MANIFEST.reduce<Record<SfxTier, number>>(
+  (totals, asset) => {
+    totals[asset.tier]++;
+    return totals;
+  },
+  { critical: 0, phase: 0, cosmetic: 0 },
+);
 
 const CROSSFADE_IN = Float32Array.from({ length: 32 }, (_, index) => (
   Math.max(0.0001, Math.sin((index / 31) * Math.PI * 0.5))
@@ -93,6 +167,14 @@ interface NoiseOptions {
   variation?: VoiceVariation;
 }
 
+interface SustainedVoice {
+  source: AudioScheduledSourceNode;
+  gain: GainNode;
+  nodes: AudioNode[];
+  cleanup: () => void;
+  fallback: boolean;
+}
+
 export class GameAudio {
   private ctx: AudioContext | null = null;
   private master!: GainNode;
@@ -112,6 +194,7 @@ export class GameAudio {
   private noiseBuffer: AudioBuffer | null = null;
   private preparedNoise: Float32Array | null = null;
   private preparedImpulse: Float32Array | null = null;
+  private preparedLimiterCurve: Float32Array<ArrayBuffer> | null = null;
   private prepareHandle: number | null = null;
   private prepareUsesIdleCallback = false;
   private reverbBuildHandle: number | null = null;
@@ -158,6 +241,19 @@ export class GameAudio {
   phase = 1;
   private phaseLift = 0;
   private phaseDirty = false;
+  private sfxBuffers = new Map<string, AudioBuffer>();
+  private sfxRoundRobin = new Map<string, number>();
+  private sfxFilesTotal = 0;
+  private sfxLoadedCount = 0;
+  private sfxFailedCount = 0;
+  private sfxQueueRemaining = 0;
+  private sfxLoadingCount = 0;
+  private sfxWorkerCount = 0;
+  private sfxLoadedByTier: Record<SfxTier, number> = { critical: 0, phase: 0, cosmetic: 0 };
+  private sfxSampleState: 'idle' | 'loading' | 'ready' | 'partial' | 'fallback' = 'idle';
+  private sfxLoadGeneration = 0;
+  private sfxAbortController: AbortController | null = null;
+  private chargeLoopVoice: SustainedVoice | null = null;
 
   prepare() {
     if (this.preparedNoise || this.prepareHandle !== null) return;
@@ -166,6 +262,7 @@ export class GameAudio {
       this.prepareHandle = null;
       this.prepareUsesIdleCallback = false;
       this.ensureWaveData();
+      this.preparedLimiterCurve = this.buildLimiterCurve(Math.pow(10, -1 / 20));
     };
     // A zero-delay task runs before a realistically fast first tap. Chromium's
     // idle callback can wait 50 ms under startup load, moving waveform work
@@ -196,7 +293,8 @@ export class GameAudio {
     this.limiter.attack.value = 0.003;
     this.limiter.release.value = 0.18;
     this.peakLimiter = this.ctx.createWaveShaper();
-    this.peakLimiter.curve = this.buildLimiterCurve(Math.pow(10, -1 / 20));
+    this.peakLimiter.curve = this.preparedLimiterCurve
+      ?? this.buildLimiterCurve(Math.pow(10, -1 / 20));
     this.peakLimiter.oversample = '2x';
     this.master.connect(this.limiter).connect(this.peakLimiter).connect(this.ctx.destination);
 
@@ -239,32 +337,42 @@ export class GameAudio {
 
     this.cancelPreparation();
     this.ensureWaveData();
-    this.noiseBuffer = this.buildNoiseBuffer();
     this.reverb = this.ctx.createConvolver();
     this.reverbWet = this.ctx.createGain();
     this.reverbWet.gain.value = 0.19;
     this.reverb.connect(this.reverbWet).connect(this.master);
     this.initCostMs = performance.now() - initStartedAt;
 
-    // The first combat noise cannot occur until after the intro, so attach the
-    // already-prepared room buffer on the next task instead of making the input
-    // gesture pay its allocation/copy cost. Dry SFX remain valid during this
-    // tiny window and the common reverb route does not change.
+    // Noise-based combat cannot occur until after the intro. Copy both prepared
+    // buffers on the next task so the input gesture pays only for the graph.
+    // Tone/sample fallbacks remain valid during this tiny window.
     const initializedContext = this.ctx;
     this.reverbBuildHandle = window.setTimeout(() => {
       this.reverbBuildHandle = null;
       if (this.ctx !== initializedContext || !this.reverb) return;
       const irStartedAt = performance.now();
+      this.noiseBuffer = this.buildNoiseBuffer();
       this.reverb.buffer = this.buildArenaImpulse();
       this.irBuildCostMs = performance.now() - irStartedAt;
     }, 0);
 
     this.startDrone();
     void this.loadSoundtrack(this.ctx);
+    // Never put network dispatch or MP3 decoding inside the first input
+    // gesture. Procedural voices cover cold-start cues while the priority
+    // queue fills in the following task.
+    const sfxContext = this.ctx;
+    window.setTimeout(() => {
+      if (this.ctx === sfxContext) void this.loadSfxSamples(sfxContext);
+    }, 0);
   }
 
   destroy() {
     this.cancelPreparation();
+    this.sfxLoadGeneration++;
+    this.sfxAbortController?.abort();
+    this.sfxAbortController = null;
+    this.stopSustainedCues(true);
     if (this.reverbBuildHandle !== null) {
       window.clearTimeout(this.reverbBuildHandle);
       this.reverbBuildHandle = null;
@@ -305,6 +413,16 @@ export class GameAudio {
     this.soundtrackRetryCount = 0;
     this.soundtrackState = 'idle';
     this.musicNodes = [];
+    this.sfxBuffers.clear();
+    this.sfxRoundRobin.clear();
+    this.sfxFilesTotal = 0;
+    this.sfxLoadedCount = 0;
+    this.sfxFailedCount = 0;
+    this.sfxQueueRemaining = 0;
+    this.sfxLoadingCount = 0;
+    this.sfxWorkerCount = 0;
+    this.sfxLoadedByTier = { critical: 0, phase: 0, cosmetic: 0 };
+    this.sfxSampleState = 'idle';
     this.lastCue.clear();
     this.variations.clear();
     this.variationCount = 0;
@@ -323,6 +441,7 @@ export class GameAudio {
     this.noiseBuffer = null;
     this.preparedNoise = null;
     this.preparedImpulse = null;
+    this.preparedLimiterCurve = null;
     this.activeVoices = 0;
     this.suspended = false;
     this.contextStateTask = Promise.resolve();
@@ -424,6 +543,18 @@ export class GameAudio {
       soundtrackDeckCount: this.soundtrackDecks.filter(Boolean).length,
       soundtrackTransitioning: Boolean(this.soundtrackTransition),
       soundtrackRetryCount: this.soundtrackRetryCount,
+      sfxSampleState: this.sfxSampleState,
+      sfxVersion: SFX_VERSION,
+      sfxSamplesLoaded: this.sfxLoadedCount,
+      sfxSamplesFailed: this.sfxFailedCount,
+      sfxSamplesTotal: this.sfxFilesTotal,
+      sfxQueueRemaining: this.sfxQueueRemaining,
+      sfxLoadingCount: this.sfxLoadingCount,
+      sfxWorkerCount: this.sfxWorkerCount,
+      sfxLoadedByTier: { ...this.sfxLoadedByTier },
+      sfxExpectedByTier: { ...SFX_EXPECTED_BY_TIER },
+      sustainedCueActive: Boolean(this.chargeLoopVoice),
+      sustainedCueFallback: this.chargeLoopVoice?.fallback ?? false,
       soundtrackDecksPaused: this.soundtrackDecks.map((deck) => deck?.element.paused ?? true),
       musicNodeCount: this.musicNodes.length,
       waveDataPrepared: Boolean(this.preparedNoise && this.preparedImpulse),
@@ -781,6 +912,271 @@ export class GameAudio {
     this.refreshDuckEnvelope();
   }
 
+  // ---- recorded SFX sample layer --------------------------------------
+  // Samples provide authored body and texture. Every gameplay-significant
+  // cue retains a procedural path so cold starts, failed fetches, and decoded
+  // asset gaps never make combat silent.
+
+  private sfxWorkerLimit() {
+    const connectedNavigator = navigator as Navigator & {
+      connection?: { saveData?: boolean; effectiveType?: string };
+    };
+    const connection = connectedNavigator.connection;
+    const slowConnection = Boolean(
+      connection?.saveData
+      || connection?.effectiveType === 'slow-2g'
+      || connection?.effectiveType === '2g',
+    );
+    if (slowConnection) return 2;
+    return (navigator.hardwareConcurrency || 8) <= 4 ? 3 : 4;
+  }
+
+  private sfxUrl(name: string) {
+    const configuredBase = import.meta.env.BASE_URL || '/';
+    const base = configuredBase.endsWith('/') ? configuredBase : `${configuredBase}/`;
+    return `${base}audio/sfx/${name}.mp3?v=${SFX_VERSION}`;
+  }
+
+  private async loadSfxSamples(ctx: AudioContext) {
+    if (this.sfxSampleState !== 'idle') return;
+
+    const generation = ++this.sfxLoadGeneration;
+    const controller = new AbortController();
+    this.sfxAbortController?.abort();
+    this.sfxAbortController = controller;
+
+    const queue = [...SFX_MANIFEST];
+    const counts = {
+      next: 0,
+      loading: 0,
+      loaded: 0,
+      failed: 0,
+      byTier: { critical: 0, phase: 0, cosmetic: 0 } as Record<SfxTier, number>,
+    };
+    const workerCount = Math.min(this.sfxWorkerLimit(), queue.length);
+    const isCurrent = () => (
+      this.ctx === ctx
+      && this.sfxLoadGeneration === generation
+      && this.sfxAbortController === controller
+      && !controller.signal.aborted
+    );
+    const publish = () => {
+      if (!isCurrent()) return;
+      this.sfxLoadedCount = counts.loaded;
+      this.sfxFailedCount = counts.failed;
+      this.sfxQueueRemaining = Math.max(0, queue.length - counts.next);
+      this.sfxLoadingCount = counts.loading;
+      this.sfxLoadedByTier = { ...counts.byTier };
+    };
+
+    this.sfxSampleState = 'loading';
+    this.sfxFilesTotal = queue.length;
+    this.sfxLoadedCount = 0;
+    this.sfxFailedCount = 0;
+    this.sfxQueueRemaining = queue.length;
+    this.sfxLoadingCount = 0;
+    this.sfxWorkerCount = workerCount;
+    this.sfxLoadedByTier = { critical: 0, phase: 0, cosmetic: 0 };
+
+    const worker = async () => {
+      while (isCurrent()) {
+        const asset = queue[counts.next++];
+        if (!asset) break;
+        counts.loading++;
+        publish();
+        try {
+          const response = await fetch(this.sfxUrl(asset.name), {
+            signal: controller.signal,
+            credentials: 'same-origin',
+          });
+          if (!response.ok) throw new Error(`sfx ${asset.name}: ${response.status}`);
+          const encoded = await response.arrayBuffer();
+          const decoded = await ctx.decodeAudioData(encoded);
+          if (!isCurrent()) return;
+          this.sfxBuffers.set(asset.name, decoded);
+          counts.loaded++;
+          counts.byTier[asset.tier]++;
+        } catch (error) {
+          if (!isCurrent()) return;
+          if (!(error instanceof DOMException && error.name === 'AbortError')) counts.failed++;
+        } finally {
+          if (isCurrent()) {
+            counts.loading = Math.max(0, counts.loading - 1);
+            publish();
+          }
+        }
+      }
+    };
+
+    await Promise.all(Array.from({ length: workerCount }, () => worker()));
+    if (!isCurrent()) return;
+
+    publish();
+    this.sfxLoadingCount = 0;
+    this.sfxQueueRemaining = 0;
+    this.sfxSampleState = counts.loaded === queue.length
+      ? 'ready'
+      : counts.loaded > 0
+        ? 'partial'
+        : 'fallback';
+    this.sfxAbortController = null;
+  }
+
+  /** Exact key, else a stable prefix family with no immediate repeat. */
+  private pickSfx(name: string): AudioBuffer | null {
+    const exact = this.sfxBuffers.get(name);
+    if (exact) return exact;
+    const group = [...this.sfxBuffers.keys()]
+      .filter((key) => key.startsWith(`${name}-`))
+      .sort();
+    if (group.length === 0) return null;
+    if (group.length === 1) return this.sfxBuffers.get(group[0]) ?? null;
+    const previous = this.sfxRoundRobin.get(name);
+    const index = previous === undefined
+      ? Math.floor(Math.random() * group.length)
+      : (previous + 1) % group.length;
+    this.sfxRoundRobin.set(name, index);
+    return this.sfxBuffers.get(group[index]) ?? null;
+  }
+
+  private playSample(opts: {
+    name: string;
+    gain?: number;
+    rate?: number;
+    spatial?: SpatialInput;
+    reverb?: number;
+    priority?: VoicePriority;
+  }): boolean {
+    if (!this.ctx || !this.sfx || this.muted) return false;
+    const buffer = this.pickSfx(opts.name);
+    if (!buffer || !this.reserveVoice(opts.priority ?? 'normal')) return false;
+
+    const ctx = this.ctx;
+    const variation = this.vary(`sample-${opts.name}`, 0.38, true);
+    const source = ctx.createBufferSource();
+    const gain = ctx.createGain();
+    source.buffer = buffer;
+    source.playbackRate.value = (opts.rate ?? 1) * variation.pitch;
+    gain.gain.value = Math.max(0.0001, (opts.gain ?? 0.5) * variation.gain);
+    source.connect(gain);
+    const routed = this.routeVoice(gain, this.sfx, opts.spatial ?? 0, opts.reverb ?? 0.2);
+    source.onended = () => {
+      this.activeVoices = Math.max(0, this.activeVoices - 1);
+      for (const node of [source, gain, ...routed]) {
+        try { node.disconnect(); } catch { /* already disconnected */ }
+      }
+    };
+    source.start(this.now() + variation.delay);
+    return true;
+  }
+
+  // One short 1–5 kHz contact voice keeps bass-led recordings legible on
+  // phones. It is intentionally a single reserved voice, not a second full
+  // procedural effect.
+  private phoneTransient(
+    spatial: SpatialInput,
+    gain = 0.12,
+    frequency = 2400,
+    duration = 0.028,
+  ) {
+    this.noise({
+      dur: duration,
+      gain,
+      type: 'bandpass',
+      freq: frequency,
+      freqEnd: Math.max(900, frequency * 0.54),
+      q: 1.1,
+      spatial,
+      reverb: 0.055,
+      priority: 'critical',
+    });
+  }
+
+  chargeLoopStart() {
+    if (!this.ctx || !this.sfx || this.chargeLoopVoice || this.muted) return;
+    if (!this.reserveVoice('critical')) return;
+
+    const ctx = this.ctx;
+    const buffer = this.pickSfx('charge-loop');
+    const gain = ctx.createGain();
+    gain.gain.value = 0.0001;
+    const extraNodes: AudioNode[] = [];
+    let source: AudioScheduledSourceNode;
+    let fallback = false;
+
+    if (buffer) {
+      const sample = ctx.createBufferSource();
+      sample.buffer = buffer;
+      sample.loop = true;
+      source = sample;
+      sample.connect(gain);
+    } else {
+      // Cold-start/network fallback: a restrained, band-limited motor tone.
+      const oscillator = ctx.createOscillator();
+      const filter = ctx.createBiquadFilter();
+      oscillator.type = 'sawtooth';
+      oscillator.frequency.value = 118;
+      filter.type = 'bandpass';
+      filter.frequency.value = 720;
+      filter.Q.value = 0.75;
+      oscillator.connect(filter).connect(gain);
+      extraNodes.push(filter);
+      source = oscillator;
+      fallback = true;
+    }
+
+    gain.gain.setTargetAtTime(fallback ? 0.055 : 0.34, ctx.currentTime, 0.12);
+    const routed = this.routeVoice(gain, this.sfx, 0, fallback ? 0.12 : 0.28);
+    let cleaned = false;
+    const cleanup = () => {
+      if (cleaned) return;
+      cleaned = true;
+      this.activeVoices = Math.max(0, this.activeVoices - 1);
+      for (const node of [source, ...extraNodes, gain, ...routed]) {
+        try { node.disconnect(); } catch { /* already disconnected */ }
+      }
+    };
+    source.onended = cleanup;
+    this.chargeLoopVoice = { source, gain, nodes: [...extraNodes, ...routed], cleanup, fallback };
+    try {
+      source.start();
+    } catch {
+      this.chargeLoopVoice = null;
+      cleanup();
+    }
+  }
+
+  chargeLoopSet(intensity: number) {
+    if (!this.chargeLoopVoice) return;
+    const amount = Math.max(0, Math.min(1, intensity));
+    const context = this.chargeLoopVoice.source.context;
+    this.chargeLoopVoice.gain.gain.setTargetAtTime(
+      this.chargeLoopVoice.fallback ? 0.04 + amount * 0.055 : 0.22 + amount * 0.28,
+      context.currentTime,
+      0.08,
+    );
+  }
+
+  chargeLoopStop() {
+    this.stopSustainedCues(false);
+  }
+
+  stopSustainedCues(immediate = false) {
+    const voice = this.chargeLoopVoice;
+    if (!voice) return;
+    this.chargeLoopVoice = null;
+    const now = voice.source.context.currentTime;
+    try {
+      voice.gain.gain.cancelScheduledValues(now);
+      if (immediate) voice.gain.gain.setValueAtTime(0.0001, now);
+      else voice.gain.gain.setTargetAtTime(0.0001, now, 0.04);
+      voice.source.stop(now + (immediate ? 0 : 0.18));
+      if (immediate) voice.cleanup();
+    } catch {
+      voice.cleanup();
+    }
+  }
+
   // ---- player and impact SFX ------------------------------------------
   private metalResonance(base: number, heavy: boolean, spatial: SpatialInput, variation: VoiceVariation) {
     const ratios = [1, 2.76, 5.4, 8.9, 13.3];
@@ -883,6 +1279,7 @@ export class GameAudio {
 
   ui() {
     if (!this.allowCue('ui', 0.045)) return;
+    if (this.playSample({ name: 'ui', gain: 0.42, reverb: 0.08 })) return;
     this.tone({ freq: 420, freqEnd: 560, dur: 0.11, type: 'triangle', gain: 0.07, reverb: 0.025 });
   }
 
@@ -890,6 +1287,14 @@ export class GameAudio {
     if (!this.allowCue('swing', 0.035)) return;
     this.duckMusic(0.56, 0.22);
     const lift = Math.max(0, Math.min(2, comboStep));
+    if (this.playSample({
+      name: 'swing-1',
+      gain: 0.32 + lift * 0.055,
+      rate: 1 + lift * 0.055,
+      spatial,
+      reverb: 0.18,
+      priority: 'critical',
+    })) return;
     const variation = this.vary(`swing-${lift}`, 0.8);
     this.noise({ dur: 0.14 + lift * 0.018, gain: 0.15 + lift * 0.015, freq: 2800 + lift * 350, freqEnd: 520 + lift * 90, q: 1.5, spatial, reverb: 0.035, variation, priority: 'critical' });
     this.tone({ freq: 280 + lift * 38, freqEnd: 150 + lift * 24, dur: 0.11, type: 'triangle', gain: 0.045, spatial, variation, priority: 'critical' });
@@ -898,6 +1303,10 @@ export class GameAudio {
   swingHeavy(spatial: SpatialInput = 0) {
     if (!this.allowCue('swing-heavy', 0.055)) return;
     this.duckMusic(0.36, 0.4);
+    if (this.playSample({ name: 'swing-heavy', gain: 0.5, spatial, reverb: 0.28, priority: 'critical' })) {
+      this.phoneTransient(spatial, 0.105, 2800, 0.025);
+      return;
+    }
     const variation = this.vary('swing-heavy', 0.72);
     this.noise({ dur: 0.31, gain: 0.23, freq: 1650, freqEnd: 210, q: 1.15, spatial, reverb: 0.08, variation, priority: 'critical' });
     this.tone({ freq: 180, freqEnd: 62, dur: 0.25, type: 'triangle', gain: 0.11, spatial, variation, priority: 'critical' });
@@ -906,6 +1315,17 @@ export class GameAudio {
   hit(heavy = false, spatial: SpatialInput = 0, variant = 0) {
     const key = heavy ? 'hit-heavy' : 'hit';
     if (!this.allowCue(key, 0.035)) return;
+    this.duckMusic(heavy ? 0.5 : 0.62, heavy ? 0.34 : 0.2);
+    if (this.playSample({
+      name: heavy ? 'hit-heavy' : 'hit-light',
+      gain: heavy ? 0.56 : 0.44,
+      spatial,
+      reverb: heavy ? 0.27 : 0.18,
+      priority: 'critical',
+    })) {
+      if (heavy) this.phoneTransient(spatial, 0.16, 3100, 0.022);
+      return;
+    }
     const variation = this.vary(`${key}-${variant % 3}`, 0.7, true);
     // Keep one phone-speaker contact crack inside the reserved critical budget.
     // This replaces the expendable >9 kHz light transient rather than adding a
@@ -930,20 +1350,30 @@ export class GameAudio {
       this.tone({ freq: heavy ? 92 : 118, freqEnd: heavy ? 30 : 46, dur: subDur, type: 'sine', gain: heavy ? 0.43 : 0.24, spatial, reverb: heavy ? 0.14 : 0.04, variation, priority: heavy ? 'critical' : 'normal' });
     }
     this.metalResonance(heavy ? 122 : 164, heavy, spatial, variation);
-    this.duckMusic(heavy ? 0.5 : 0.62, heavy ? 0.34 : 0.2);
   }
 
   dodge(spatial: SpatialInput = 0) {
     if (!this.allowCue('dodge', 0.08)) return;
     this.duckMusic(0.5, 0.28);
+    if (this.playSample({ name: 'dodge-1', gain: 0.38, spatial, reverb: 0.12, priority: 'critical' })) return;
     const variation = this.vary('dodge', 0.55);
     this.noise({ dur: 0.24, gain: 0.14, type: 'lowpass', freq: 3400, freqEnd: 260, q: 0.55, spatial, reverb: 0.035, variation, priority: 'critical' });
     this.tone({ freq: 150, freqEnd: 82, dur: 0.16, type: 'sine', gain: 0.045, spatial, variation, priority: 'critical' });
   }
 
-  playerHurt(spatial: SpatialInput = 0) {
-    const variation = this.vary('player-hurt', 0.52, true);
+  playerHurt(spatial: SpatialInput = 0, heavy = true) {
     this.duckMusic(0.28, 0.46);
+    if (this.playSample({
+      name: heavy ? 'hurt-heavy-1' : 'hurt-light-1',
+      gain: heavy ? 0.54 : 0.42,
+      spatial,
+      reverb: heavy ? 0.23 : 0.16,
+      priority: 'critical',
+    })) {
+      this.phoneTransient(spatial, heavy ? 0.11 : 0.07, heavy ? 1900 : 2300, 0.03);
+      return;
+    }
+    const variation = this.vary(`player-hurt-${heavy ? 'heavy' : 'light'}`, 0.52, true);
     this.noise({ dur: 0.007, gain: 0.2, type: 'highpass', freq: 7200, freqEnd: 4300, spatial, reverb: 0.035, variation, priority: 'critical' });
     this.noise({ dur: 0.075, gain: 0.31, type: 'bandpass', freq: 1050, freqEnd: 680, q: 2.1, spatial, reverb: 0.08, variation, priority: 'critical' });
     this.tone({ freq: 218, freqEnd: 74, dur: 0.27, type: 'square', gain: 0.15, spatial, reverb: 0.07, variation, priority: 'critical' });
@@ -953,6 +1383,7 @@ export class GameAudio {
   flask() {
     if (!this.allowCue('flask', 0.2)) return;
     this.duckMusic(0.46, 0.62);
+    if (this.playSample({ name: 'flask-1', gain: 0.45, reverb: 0.22, priority: 'critical' })) return;
     const variation = this.vary('flask', 0.25);
     this.noise({ dur: 0.08, gain: 0.12, type: 'highpass', freq: 4200, freqEnd: 2600, q: 2.4, reverb: 0.12, variation, priority: 'critical' });
     this.tone({ freq: 540, freqEnd: 780, dur: 0.5, type: 'sine', gain: 0.12, attack: 0.07, reverb: 0.1, variation, priority: 'critical' });
@@ -961,13 +1392,27 @@ export class GameAudio {
 
   roar(big = false, spatial: SpatialInput = 0) {
     this.duckMusic(big ? 0.2 : 0.43, big ? 1.35 : 0.72);
+    if (this.playSample({
+      name: big ? 'roar-big' : 'roar-small',
+      gain: big ? 0.72 : 0.5,
+      spatial,
+      reverb: big ? 0.45 : 0.32,
+      priority: 'critical',
+    })) {
+      this.phoneTransient(spatial, big ? 0.13 : 0.085, big ? 1550 : 1900, big ? 0.07 : 0.045);
+      return;
+    }
     this.organicGrowl(big, spatial);
   }
 
   slam(spatial: SpatialInput = 0) {
     if (!this.allowCue('slam-impact', 0.07)) return;
-    const variation = this.vary('slam-impact', 0.38);
     this.duckMusic(0.2, 0.58);
+    if (this.playSample({ name: 'slam', gain: 0.72, spatial, reverb: 0.4, priority: 'critical' })) {
+      this.phoneTransient(spatial, 0.18, 3300, 0.024);
+      return;
+    }
+    const variation = this.vary('slam-impact', 0.38);
     this.noise({ dur: 0.008, gain: 0.44, type: 'highpass', freq: 8400, freqEnd: 4200, q: 0.5, spatial, reverb: 0.16, variation, priority: 'critical' });
     this.tone({ freq: 96, freqEnd: 24, dur: 0.68, type: 'sine', gain: 0.55, spatial, reverb: 0.23, variation, priority: 'critical' });
     this.noise({ dur: 0.48, gain: 0.27, type: 'lowpass', freq: 620, freqEnd: 52, spatial, reverb: 0.36, variation });
@@ -976,6 +1421,7 @@ export class GameAudio {
   ring(spatial: SpatialInput = 0) {
     if (!this.allowCue('ring-release', 0.1)) return;
     this.duckMusic(0.46, 0.38);
+    if (this.playSample({ name: 'ring-release', gain: 0.62, spatial, reverb: 0.36, priority: 'critical' })) return;
     this.tone({ freq: 330, freqEnd: 72, dur: 0.72, type: 'sine', gain: 0.2, spatial, reverb: 0.38 });
     this.tone({ freq: 690, freqEnd: 155, dur: 0.56, type: 'triangle', gain: 0.1, detune: -9, spatial, reverb: 0.36 });
     this.noise({ dur: 0.42, gain: 0.1, type: 'bandpass', freq: 1800, freqEnd: 340, q: 1.8, spatial, reverb: 0.32 });
@@ -983,6 +1429,7 @@ export class GameAudio {
 
   projectile(spatial: SpatialInput = 0) {
     if (!this.allowCue('projectile', 0.045)) return;
+    if (this.playSample({ name: 'projectile', gain: 0.38, spatial, reverb: 0.25 })) return;
     const variation = this.vary('projectile', 0.52, true);
     this.tone({ freq: 920, freqEnd: 190, dur: 0.22, type: 'sawtooth', gain: 0.085, spatial, reverb: 0.07, variation });
     this.noise({ dur: 0.13, gain: 0.09, freq: 2800, freqEnd: 820, spatial, reverb: 0.05, variation });
@@ -990,14 +1437,22 @@ export class GameAudio {
 
   meteorWarning(spatial: SpatialInput = 0) {
     if (!this.allowCue('meteor-warning', 0.11)) return;
+    if (this.playSample({ name: 'meteor-warning', gain: 0.48, spatial, reverb: 0.3, priority: 'critical' })) {
+      this.phoneTransient(spatial, 0.075, 1800, 0.045);
+      return;
+    }
     this.tone({ freq: 1180, freqEnd: 170, dur: 0.78, type: 'sawtooth', gain: 0.075, spatial, reverb: 0.34 });
     this.noise({ dur: 0.62, gain: 0.07, type: 'bandpass', freq: 3400, freqEnd: 480, q: 2.2, spatial, reverb: 0.3 });
   }
 
   meteor(spatial: SpatialInput = 0) {
     if (!this.allowCue('meteor-impact', 0.06)) return;
-    const variation = this.vary('meteor-impact', 0.35);
     this.duckMusic(0.22, 0.55);
+    if (this.playSample({ name: 'meteor', gain: 0.68, spatial, reverb: 0.4, priority: 'critical' })) {
+      this.phoneTransient(spatial, 0.18, 3400, 0.028);
+      return;
+    }
+    const variation = this.vary('meteor-impact', 0.35);
     this.noise({ dur: 0.009, gain: 0.4, type: 'highpass', freq: 9000, freqEnd: 4800, spatial, reverb: 0.18, variation, priority: 'critical' });
     this.tone({ freq: 64, freqEnd: 22, dur: 0.76, type: 'sine', gain: 0.5, spatial, reverb: 0.26, variation, priority: 'critical' });
     this.noise({ dur: 0.55, gain: 0.24, type: 'lowpass', freq: 920, freqEnd: 65, spatial, reverb: 0.38, variation });
@@ -1005,6 +1460,15 @@ export class GameAudio {
 
   bossStep(spatial: SpatialInput = 0, intensity = 1) {
     if (!this.allowCue('boss-step', 0.16)) return;
+    if (this.playSample({
+      name: 'boss-step',
+      gain: Math.min(0.5, 0.26 + 0.16 * intensity),
+      spatial,
+      reverb: 0.27,
+    })) {
+      this.phoneTransient(spatial, 0.045 * intensity, 2100, 0.022);
+      return;
+    }
     const variation = this.vary('boss-step', 0.7);
     this.noise({ dur: 0.018, gain: 0.055 * intensity, type: 'highpass', freq: 5400, freqEnd: 2600, q: 1.6, spatial, reverb: 0.18, variation });
     this.tone({ freq: 196, freqEnd: 142, dur: 0.13, type: 'triangle', gain: 0.035 * intensity, spatial, reverb: 0.23, variation });
@@ -1012,7 +1476,10 @@ export class GameAudio {
   }
 
   chargeScrape(spatial: SpatialInput = 0) {
-    if (!this.allowCue('charge-scrape', 0.075)) return;
+    // The recording is ~0.63 s long; a 90 ms trigger cadence stacked seven
+    // tails and drove the limiter. This gate keeps at most two overlapping.
+    if (!this.allowCue('charge-scrape', 0.32)) return;
+    if (this.playSample({ name: 'charge-scrape', gain: 0.46, spatial, reverb: 0.28 })) return;
     const variation = this.vary('charge-scrape', 0.75, true);
     this.noise({ dur: 0.13, gain: 0.085, type: 'bandpass', freq: 920, freqEnd: 310, q: 1.7, spatial, reverb: 0.16, variation });
     this.tone({ freq: 114, freqEnd: 58, dur: 0.12, type: 'sawtooth', gain: 0.032, spatial, reverb: 0.12, variation });
@@ -1020,6 +1487,7 @@ export class GameAudio {
 
   stagger(spatial: SpatialInput = 0) {
     this.duckMusic(0.34, 0.52);
+    if (this.playSample({ name: 'stagger', gain: 0.62, spatial, reverb: 0.36, priority: 'critical' })) return;
     this.tone({ freq: 590, freqEnd: 1080, dur: 0.48, type: 'triangle', gain: 0.17, spatial, reverb: 0.34, priority: 'critical' });
     this.tone({ freq: 884, freqEnd: 1320, dur: 0.62, type: 'sine', gain: 0.075, spatial, reverb: 0.42, priority: 'critical' });
     this.noise({ dur: 0.15, gain: 0.2, type: 'highpass', freq: 4600, freqEnd: 1500, spatial, reverb: 0.28 });
@@ -1033,6 +1501,17 @@ export class GameAudio {
       meteor: [0.24, 0.55], ring: [0.28, 0.5], spiral: [0.2, 0.68],
     };
     this.duckMusic(...duck[cue]);
+    if (this.playSample({
+      name: `tele-${cue}`,
+      gain: cue === 'slam' || cue === 'ring' ? 0.54 : 0.46,
+      spatial,
+      reverb: 0.27,
+      priority: 'critical',
+    })) {
+      if (cue === 'meteor') this.phoneTransient(spatial, 0.07, 1750, 0.045);
+      else if (cue === 'slam') this.phoneTransient(spatial, 0.075, 2300, 0.032);
+      return;
+    }
     switch (cue) {
       case 'swipe':
         this.noise({ dur: 0.22, gain: 0.09, type: 'bandpass', freq: 1900, freqEnd: 3300, q: 2.4, spatial, reverb: 0.09, priority: 'critical' });
@@ -1067,6 +1546,7 @@ export class GameAudio {
 
   deathSting() {
     this.duckMusic(0.12, 1.9);
+    if (this.playSample({ name: 'death-sting', gain: 0.74, reverb: 0.44, priority: 'critical' })) return;
     this.tone({ freq: 110, freqEnd: 52, dur: 2.35, type: 'sawtooth', gain: 0.28, attack: 0.02, reverb: 0.32, priority: 'critical' });
     this.tone({ freq: 116.5, freqEnd: 56, dur: 2.35, type: 'sawtooth', gain: 0.21, attack: 0.02, detune: -5, reverb: 0.34 });
     this.noise({ dur: 1.8, gain: 0.11, type: 'lowpass', freq: 420, freqEnd: 55, attack: 0.1, reverb: 0.35 });
@@ -1090,10 +1570,107 @@ export class GameAudio {
 
   parrySpark(spatial: SpatialInput = 0) {
     this.duckMusic(0.16, 0.42);
+    if (this.playSample({ name: 'parry-spark', gain: 0.5, spatial, reverb: 0.27, priority: 'critical' })) return;
     const t0 = this.now();
     this.noise({ dur: 0.045, gain: 0.25, type: 'highpass', freq: 6200, freqEnd: 3600, q: 2.4, when: t0, spatial, reverb: 0.24, priority: 'critical' });
     this.tone({ freq: 1380, freqEnd: 2140, dur: 0.16, type: 'triangle', gain: 0.17, when: t0 + 0.025, spatial, reverb: 0.32, priority: 'critical' });
     this.tone({ freq: 690, freqEnd: 980, dur: 0.2, type: 'sine', gain: 0.09, when: t0 + 0.035, spatial, reverb: 0.28 });
+  }
+
+  /** Release accent kept separate from player swings for mono readability. */
+  bossRelease(cue: Exclude<BossAudioCue, 'ui'>, spatial: SpatialInput = 0) {
+    const sampleByCue: Partial<Record<Exclude<BossAudioCue, 'ui'>, string>> = {
+      slam: 'slam',
+      volley: 'projectile',
+      meteor: 'meteor',
+      ring: 'ring-release',
+      spiral: 'projectile',
+    };
+    const sample = sampleByCue[cue];
+    if (sample && this.playSample({
+      name: sample,
+      gain: cue === 'meteor' || cue === 'slam' ? 0.64 : 0.42,
+      rate: cue === 'spiral' ? 0.84 : 1,
+      spatial,
+      reverb: cue === 'meteor' || cue === 'slam' ? 0.38 : 0.24,
+      priority: 'critical',
+    })) {
+      this.phoneTransient(spatial, cue === 'meteor' || cue === 'slam' ? 0.15 : 0.085, 2600, 0.03);
+      return;
+    }
+
+    switch (cue) {
+      case 'swipe':
+        this.noise({ dur: 0.12, gain: 0.16, type: 'bandpass', freq: 1450, freqEnd: 3700, q: 1.2, spatial, reverb: 0.08, priority: 'critical' });
+        break;
+      case 'slam':
+      case 'meteor':
+        this.phoneTransient(spatial, 0.16, 3200, 0.032);
+        this.tone({ freq: 120, freqEnd: 46, dur: 0.32, type: 'sine', gain: 0.18, spatial, reverb: 0.2, priority: 'critical' });
+        break;
+      case 'charge':
+        this.noise({ dur: 0.16, gain: 0.12, type: 'bandpass', freq: 780, freqEnd: 2200, q: 1.1, spatial, reverb: 0.12, priority: 'critical' });
+        break;
+      case 'volley':
+      case 'spiral':
+        this.tone({ freq: cue === 'spiral' ? 520 : 760, freqEnd: 1280, dur: 0.2, type: 'triangle', gain: 0.08, spatial, reverb: 0.18, priority: 'critical' });
+        break;
+      case 'ring':
+        this.tone({ freq: 420, freqEnd: 860, dur: 0.32, type: 'sine', gain: 0.1, spatial, reverb: 0.26, priority: 'critical' });
+        break;
+    }
+  }
+
+  /** Riposte/execute body plus a phone-safe contact edge. */
+  execute(spatial: SpatialInput = 0) {
+    this.duckMusic(0.32, 0.78);
+    if (this.playSample({ name: 'execute-1', gain: 0.78, spatial, reverb: 0.36, priority: 'critical' })) {
+      this.phoneTransient(spatial, 0.2, 3300, 0.032);
+      return;
+    }
+    this.phoneTransient(spatial, 0.2, 3300, 0.032);
+    this.tone({ freq: 112, freqEnd: 34, dur: 0.52, type: 'sine', gain: 0.38, spatial, reverb: 0.2, priority: 'critical' });
+    this.metalResonance(118, true, spatial, this.vary('execute', 0.36));
+  }
+
+  /** Ceremonial blade draw; first cold launch intentionally has synthesis. */
+  bladeDraw() {
+    if (this.playSample({ name: 'blade-draw', gain: 0.62, reverb: 0.27, priority: 'critical' })) return;
+    this.metalResonance(164, true, 0, this.vary('blade-draw', 0.5));
+  }
+
+  flaskEmpty() {
+    if (!this.allowCue('flask-empty', 0.25)) return;
+    if (this.playSample({ name: 'flask-empty', gain: 0.44, reverb: 0.16 })) return;
+    this.tone({ freq: 960, freqEnd: 620, dur: 0.12, type: 'triangle', gain: 0.055, reverb: 0.12 });
+  }
+
+  playerStep(spatial: SpatialInput = 0) {
+    if (!this.allowCue('player-step', 0.22)) return;
+    if (this.playSample({ name: 'player-step-2', gain: 0.25, spatial, reverb: 0.1 })) return;
+    this.noise({ dur: 0.055, gain: 0.032, type: 'bandpass', freq: 1450, freqEnd: 620, q: 0.8, spatial, reverb: 0.06 });
+  }
+
+  nearMiss(spatial: SpatialInput = 0) {
+    if (!this.allowCue('near-miss', 0.3)) return;
+    if (this.playSample({ name: 'near-miss-1', gain: 0.36, spatial, reverb: 0.16 })) return;
+    this.noise({ dur: 0.15, gain: 0.075, type: 'highpass', freq: 3400, freqEnd: 1200, q: 0.65, spatial, reverb: 0.08 });
+  }
+
+  stamp(spatial: SpatialInput = 0) {
+    if (!this.allowCue('stamp', 0.4)) return;
+    if (this.playSample({ name: 'stamp', gain: 0.52, spatial, reverb: 0.3, priority: 'critical' })) {
+      this.phoneTransient(spatial, 0.08, 2200, 0.024);
+      return;
+    }
+    this.phoneTransient(spatial, 0.08, 2200, 0.024);
+    this.tone({ freq: 112, freqEnd: 38, dur: 0.38, type: 'sine', gain: 0.28, spatial, reverb: 0.22, priority: 'critical' });
+  }
+
+  wardChime(spatial: SpatialInput = 0) {
+    if (!this.allowCue('ward-chime', 0.3)) return;
+    if (this.playSample({ name: 'ward-chime', gain: 0.4, spatial, reverb: 0.3 })) return;
+    this.tone({ freq: 660, freqEnd: 990, dur: 0.4, type: 'sine', gain: 0.09, spatial, reverb: 0.3 });
   }
 
   // ---- ambient music --------------------------------------------------

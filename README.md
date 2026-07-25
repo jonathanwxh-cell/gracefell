@@ -8,22 +8,20 @@ rules are all decided by what works one-handed on a 390px screen.
 
 **Play it: [gracefell.alyoechosys.dev](https://gracefell.alyoechosys.dev)**
 
-Current gameplay release: **v2.21.2** — three independent game-menu specialists completed two
-review rounds over the v2.21.1 measured title foundation. The resulting Trial Seal gives difficulty
-one clear label, plain-language effects, and visible easier/harder paths; the screen has one primary
-**RAISE YOUR BLADE** action, a quieter **RECORDS** utility, compact key-first instructions, and
-subordinate safety settings. Saved results no longer cross the start prompt at 1280x800, the title
-settings plate and supporting copy scale together up to 1920x1080, and the wordmark fits a 360px
-touch viewport. Keyboard focus reveals one structured, veiled controls panel with native Combat
-tips instead of an uneven wrapped toolbar.
+Current gameplay release: **v2.22** — a four-role audio software-house pass turns the supplied
+Kimi/Moonshot combat library into a bounded, production-safe recorded-foley layer. Forty-five
+accepted cues load in critical/phase/cosmetic order with two to four workers, while every important
+verb keeps its existing synthesized fallback. Player and boss releases are distinct; charged heavy,
+damage weight, dry flask, footsteps, near misses, phase changes, execution, and all seven boss tells
+now have explicit ownership. Sustained charge audio is deduplicated and stops on release, damage,
+retry, title return, death, victory, or teardown.
 
-The release passed local lint, 19/19 unit tests, production build, clean-runner GitHub Actions, and
-complete local and public desktop/mobile/true-touch gates with `ok=true` and zero errors. Difficulty,
-combat, boss patterns, weather, audio, scoring, saves, touch hit targets, and runtime assets are
-unchanged.
-The two-round review method, reviewer roles, implementation ownership map, screenshots, invariants,
-GitHub receipts, exact-SHA deployment, and public acceptance are recorded in
-[`docs/releases/v2.21.2.md`](docs/releases/v2.21.2.md).
+The release preserves combat timing, damage, difficulty, score persistence, music, weather, input,
+and save schema v7. Four bass-led masters received conservative phone-clarity/headroom work; five
+weak alternates remain documented but cannot enter runtime rotation. Complete asset hashes and
+measurements live in [`public/audio/sfx/README.md`](public/audio/sfx/README.md), while the design,
+loader and lifecycle contract, local acceptance, GitHub receipts, exact-SHA deployment, and public
+verification are recorded in [`docs/releases/v2.22.md`](docs/releases/v2.22.md).
 
 The six v2.21 mastery and access features still form one coherent combat loop. Attack during a roll buffers a post-dodge slash without cancelling
 invulnerability; rear-arc hits earn a disclosed FLANK reward; terminal chronicles explain damage
@@ -44,15 +42,20 @@ CI, deployment, and public verification record is in
 [`docs/releases/v2.20.md`](docs/releases/v2.20.md), and the v2.19 navigation and score
 chronicle record remains in [`docs/releases/v2.19.md`](docs/releases/v2.19.md).
 
-Zero runtime art assets, three generated music tracks. Every character silhouette, sword, halo blade,
-stone in the floor, ember, cape, and combat cue is generated at runtime from code — canvas 2D for
-the visuals and Web Audio for the SFX. Documentation screenshots do not enter the production
-bundle. Three MiniMax Music 3.0 instrumentals supply the phase score, with the original procedural drone
-and phase-aware drums kept underneath and available as the offline fallback. The visual game
-remains one `<canvas>`; a focus-revealed semantic companion exposes controls and safety settings to
-keyboards and assistive technology without covering the playfield.
+Zero runtime art assets, three generated music tracks, and one compact recorded combat-SFX library.
+Every character silhouette, sword, halo blade, stone in the floor, ember, and cape is generated at
+runtime in Canvas 2D. Three MiniMax Music 3.0 instrumentals supply the phase score, with the original
+procedural drone and phase-aware drums kept underneath and available as the offline fallback.
+Recorded combat foley adds authored texture through the existing Web Audio spatial, reverb, ducking,
+voice-pressure, and limiter graph; synthesis remains the cold-start, network-failure, and held-back
+asset fallback. The visual game remains one `<canvas>`; a focus-revealed semantic companion exposes
+controls and safety settings to keyboards and assistive technology without covering the playfield.
 
-The sovereign has an audio language, not one generic warning: swipes whistle, charges rise, volleys crystallise, rings resonate, meteors fall and the spiral winds itself tight. Impacts are layered and positioned across the arena, the stone room supplies a generated reverb tail, and the whole score ducks and limits itself when phase three gets crowded. The shipped MP3 is music only; every combat sound, noise source and room impulse is still synthesized at startup.
+The sovereign has an audio language, not one generic warning: swipes whistle, charges rise, volleys
+crystallise, rings resonate, meteors fall and the spiral winds itself tight. Recorded bodies are
+layered selectively with phone-safe procedural contact edges, positioned across the arena, and
+placed inside the generated stone-room reverb. The score ducks and the master limits itself when
+phase three gets crowded; no downloaded cue is allowed to make a cold fight silent.
 
 ---
 
@@ -62,15 +65,18 @@ The sovereign has an audio language, not one generic warning: swipes whistle, ch
 
 **v2 — extended by Claude (Opus 4.8).** Combat depth, a third phase, a full rendering pass, persistence, and a headless verification gate. Details in [DESIGN.md](DESIGN.md).
 
-**v2.4–v2.21 — audio, responsiveness, combat integrity, character readability, progression, victory persistence, player-controlled pause, adaptive phase scoring, navigation/accessibility polish, fixed-pool phase weather, and mastery feedback extended by
+**v2.4–v2.22 — audio, responsiveness, combat integrity, character readability, progression, victory persistence, player-controlled pause, adaptive phase scoring, navigation/accessibility polish, fixed-pool phase weather, and mastery feedback extended by
 Codex (GPT-5).** Attack-specific procedural cues, spatial mix protection, the MiniMax-generated
 score family, mobile/accessibility hardening, trustworthy combat and retry behavior, the verified
 Grace-to-Oaths mastery path, and the production Kite-Veil/Blade-Saint silhouettes. The v2.11 player
 direction was selected from three independent design-house proposals. Kimi / OKComputer supplied
 the six original issue concept images and briefs (#10–#15); the shipped player and boss are
 Codex-authored procedural interpretations that only partially translate the selected #10 and #14
-images. The music generation prompt and file hash are recorded in
-[`public/audio/README.md`](public/audio/README.md).
+images. Kimi/OKComputer also supplied the v2.22 Moonshot combat masters; Codex's audio software-house
+pass audited, selectively remastered, integrated, load-hardened, and verified them. Music generation
+prompts and hashes are recorded in [`public/audio/README.md`](public/audio/README.md); combat-SFX
+prompts, measurements, hashes, exclusions, and processing truth are recorded in
+[`public/audio/sfx/README.md`](public/audio/sfx/README.md).
 
 Directed by [@jonathanwxh-cell](https://github.com/jonathanwxh-cell), who asked for "AAA grade" and meant it.
 
@@ -506,7 +512,7 @@ Production is a zero-dependency Node static server (`server.mjs`) in front of `d
 
 ```
 src/game/engine.ts   the entire game — Input, Player, Boss, Game + render layer (~3.3k lines)
-src/game/audio.ts    hybrid Web Audio: procedural SFX/fallback + generated score
+src/game/audio.ts    hybrid Web Audio: recorded SFX + procedural fallback + generated score
 public/audio/        MiniMax score and generation provenance
 docs/releases/       durable release acceptance and production evidence
 src/pages/Home.tsx   mounts the canvas + semantic companion controls

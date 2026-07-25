@@ -1904,3 +1904,126 @@ backdrop activation returns focus to the Canvas title.
 - This is a tested release candidate; deployment evidence belongs in
   `docs/releases/v2.21.2.md` and must not be inferred from the implementation
   commit.
+
+## v2.22 — Codex + audio software-house agents (GPT-5 / Codex Desktop), "the recorded-foley release" (2026-07-25)
+
+### Changed from v2.21.2
+
+v2.21.2 remains the title-menu foundation. This release changes combat sound
+texture and event ownership without changing damage, timing, AI, difficulty,
+music, weather, controls, scoring, persistence, layout, or save schema v7.
+
+Kimi/OKComputer supplied fifty Moonshot-generated, locally mastered combat
+masters. The tempting implementation was to replace each synthesized cue with
+its similarly named file. That was rejected for three reasons:
+
+1. first-load networking or decode failure would make important actions silent;
+2. five alternates were objectively weaker than their companion takes;
+3. several dramatic recordings contained mostly sub-250 Hz energy and became
+   ambiguous on a phone speaker.
+
+The accepted design treats recordings as authored bodies inside the existing
+Web Audio system. Synthesis remains a real fallback, not dead legacy code.
+
+### Four-role review and ownership
+
+The pass separated professional concerns before synthesis:
+
+- a runtime engineer audited decode scheduling, cache versioning, worker bounds,
+  teardown, spatial routing, voice pressure, and cold-start behavior;
+- a gameplay-audio integrator mapped player verbs, boss tells/releases, phase
+  punctuation, footsteps, dry flask, near miss, hurt weight, and sustained
+  charge ownership without changing combat timing;
+- an SFX mastering engineer decoded and measured all fifty MP3s, held back weak
+  alternates, rejected dishonest EQ, and remastered only four justified cues;
+- an acceptance engineer built a constrained Save-Data phone lane covering
+  loader order, truthful counters, procedural fallback, routing, cadence, and
+  every sustained-voice teardown edge.
+
+The roles converged on a hybrid release rather than either an all-sample
+replacement or a purely procedural status quo.
+
+### Bounded progressive loading
+
+The runtime manifest admits forty-five cues in three ordered tiers:
+
+- 15 critical cues cover the complete Phase 1/player survival vocabulary;
+- 24 phase cues add later boss attacks, reactions, alternates, and terminal
+  punctuation;
+- 6 cosmetic cues add footsteps, empty-flask, UI, ward, and near-miss texture.
+
+The loader begins only after the first user gesture, uses four workers by
+default, three on lower-core devices, and two for Save-Data/2G. A generation
+token plus `AbortController` prevents a destroyed or replaced audio context
+from publishing late buffers. Cache URLs carry `SFX_VERSION`; diagnostics expose
+expected/loaded tier counts, workers, queue, failures, and sustained ownership
+so acceptance reads runtime truth instead of inferring success from requests.
+
+The first complete gate exposed that the original critical list was longer
+than the natural intro. Reordering was not used to hide the problem: the
+critical tier was narrowed to the exact first-fight vocabulary and the full
+tier is now proven ready by the natural fight boundary under an artificial
+65 ms per-file delay and two workers.
+
+### Recorded body, procedural edge
+
+All accepted cues route through the established distance/pan, arena-send,
+ducking, voice-pressure, compressor, and peak-limiter graph. Exact-name lookup
+falls back to a stable no-immediate-repeat family. A missing or not-yet-decoded
+buffer falls directly through to the cue's existing synthesized implementation.
+
+Measurements showed that boss steps, slams, meteors, roars, execution, and
+other large bodies can be almost entirely low-frequency. Re-encoding could not
+invent missing performance detail. These cues keep their recorded body but add
+one short, restrained 1–5 kHz procedural contact edge so the action survives a
+mono phone speaker. This is deliberately not a second full effect.
+
+Only `charge-loop`, `ring-release`, `swing-1`, and `swing-heavy-2` received
+conservative headroom, sub-control, or loop-boundary work. The other accepted
+masters remain Kimi's bytes. Five weak alternates remain documented and hashed
+but cannot enter runtime rotation. This makes both authorship and processing
+truth auditable.
+
+### Sustained audio is gameplay state
+
+Charged heavy owns one loop with explicit start, intensity update, and stop
+operations. Duplicate starts cannot grow the node graph. Release, damage,
+retry/reset, title return, death, victory, and audio teardown all stop the
+voice. Boss charge scrape remains short state foley and now fires every
+0.36 seconds rather than stacking a roughly 0.6-second recording every
+90 milliseconds.
+
+Boss windup and boss release are separate semantics. A boss swipe no longer
+borrows the player's heavy-swing voice; phase changes receive a stamp, an
+execution receives its own body, and light/heavy wounds route separately after
+difficulty-adjusted damage is known. These changes improve recognition without
+changing the frame at which any attack begins or lands.
+
+### Protecting the first gesture
+
+Recorded-file work is deferred, but the full matrix retained the strict
+25 ms desktop and 20 ms fast-touch initialization budgets. The first complete
+run revealed that copying the reusable noise buffer synchronously could still
+tip an otherwise unchanged machine over those budgets. Noise and arena-IR data
+are now both copied into Web Audio buffers in the existing next task after
+unlock; oscillator/sample fallback remains available during that handoff.
+No timing threshold was widened to make the release pass.
+
+### Validation and durable evidence
+
+The complete local gate covers desktop, 390×844 mobile, true touch, a fast-touch
+audio context, and a constrained Save-Data phone. The v2.22 lane requires:
+
+- exactly 45 unique versioned audio requests with zero HTTP/decode/console
+  errors and truthful 15/24/6 counters;
+- two constrained workers, all 15 critical cues at the natural fight boundary,
+  and 45/45 buffers at completion;
+- one audible procedural charge fallback before samples arrive;
+- distinct player/boss release and light/heavy hurt routing;
+- safe charge-scrape cadence;
+- a single deduplicated sustained voice with zero leaks after every ownership
+  transition.
+
+Exact local, CI, merged-SHA, production, and public receipts belong in
+`docs/releases/v2.22.md`. Asset-level prompts, measurements, hashes, exclusions,
+and remaster details belong in `public/audio/sfx/README.md`.

@@ -42,17 +42,24 @@ async function installAudioSampleRate(context) {
     {
       const rootRes = await fetch(URL);
       const audioRes = await fetch(new globalThis.URL('/audio/gracefell-phase-1-quiet-ash.mp3?v=2.18', URL), { method: 'HEAD' });
+      const sfxRes = await fetch(new globalThis.URL('/audio/sfx/hit-light-1.mp3?v=2.22.0', URL), { method: 'HEAD' });
       const h = (r, k) => (r.headers.get(k) || '').toLowerCase();
       out.steps.serverHeaders = {
         nosniff: h(rootRes, 'x-content-type-options'),
         referrer: h(rootRes, 'referrer-policy'),
         frame: h(rootRes, 'x-frame-options'),
         audioCache: h(audioRes, 'cache-control'),
+        sfxStatus: sfxRes.status,
+        sfxType: h(sfxRes, 'content-type'),
+        sfxCache: h(sfxRes, 'cache-control'),
       };
       const sh = out.steps.serverHeaders;
       if (sh.nosniff !== 'nosniff') out.errors.push('v2.16 (#45): missing X-Content-Type-Options: nosniff (' + JSON.stringify(sh) + ')');
       if (!sh.referrer) out.errors.push('v2.16 (#45): missing Referrer-Policy header');
       if (!/immutable/.test(sh.audioCache)) out.errors.push('v2.16 (#46): /audio/ not served immutable (' + sh.audioCache + ')');
+      if (sh.sfxStatus !== 200 || !sh.sfxType.includes('audio/mpeg') || !/immutable/.test(sh.sfxCache)) {
+        out.errors.push('v2.22: versioned recorded SFX asset/header contract failed: ' + JSON.stringify(sh));
+      }
 
       // v2.17 (#39/#40): self-hosted fonts (no third-party CDN) + manifest/icons/meta.
       const html = await (await fetch(URL)).text();
@@ -2803,6 +2810,362 @@ async function installAudioSampleRate(context) {
         out.errors.push('touch: fast first-tap audio missed the 20ms budget: ' + JSON.stringify(out.steps.fastFirstTapAudio));
       }
       await fastCtx.close();
+    }
+
+    // v2.22 recorded-SFX acceptance. Run in an isolated save-data phone
+    // context so the two-worker contract, priority order, cold-start fallback,
+    // and cleanup paths are deterministic without weakening the main
+    // desktop/mobile/true-touch visual gates above.
+    {
+      const audioCtx = await browser.newContext({
+        viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 3,
+      });
+      await installAudioSampleRate(audioCtx);
+      await audioCtx.addInitScript(() => {
+        Object.defineProperty(navigator, 'connection', {
+          configurable: true,
+          value: { saveData: true, effectiveType: '4g' },
+        });
+        const nativeFetch = window.fetch.bind(window);
+        window.fetch = async (input, init) => {
+          const requestUrl = typeof input === 'string'
+            ? input
+            : input instanceof Request
+              ? input.url
+              : String(input);
+          if (requestUrl.includes('/audio/sfx/')) {
+            await new Promise((resolve) => setTimeout(resolve, 65));
+          }
+          return nativeFetch(input, init);
+        };
+      });
+
+      const audioPg = await audioCtx.newPage();
+      const sfxResponses = [];
+      const audioConsoleErrors = [];
+      audioPg.on('response', (response) => {
+        if (response.url().includes('/audio/sfx/')) {
+          sfxResponses.push({ url: response.url(), status: response.status() });
+        }
+      });
+      audioPg.on('console', (message) => {
+        if (message.type() === 'error') audioConsoleErrors.push(message.text());
+      });
+      audioPg.on('pageerror', (error) => audioConsoleErrors.push('pageerror: ' + error.message));
+
+      await audioPg.goto(URL, { waitUntil: 'load' });
+      await audioPg.waitForFunction(() => Boolean(window.__game), null, { timeout: 3000 });
+      await audioPg.touchscreen.tap(195, 300);
+      await audioPg.waitForFunction(() => {
+        const state = window.__game?.audio.debugState();
+        return state?.sfxSampleState === 'loading' && state.sfxLoadingCount > 0;
+      }, null, { timeout: 2000 }).catch(() => {});
+
+      const initialLoader = await audioPg.evaluate(() => window.__game.audio.debugState());
+      const coldFallback = await audioPg.evaluate(() => {
+        const audio = window.__game.audio;
+        const before = audio.debugState().activeVoices;
+        audio.chargeLoopStart();
+        audio.chargeLoopStart();
+        audio.chargeLoopSet(0.75);
+        const started = audio.debugState();
+        audio.chargeLoopStop();
+        return {
+          before,
+          started: {
+            activeVoices: started.activeVoices,
+            sustainedCueActive: started.sustainedCueActive,
+            sustainedCueFallback: started.sustainedCueFallback,
+          },
+          stopped: audio.debugState().sustainedCueActive,
+        };
+      });
+      await audioPg.waitForFunction((baseline) => (
+        !window.__game.audio.debugState().sustainedCueActive
+        && window.__game.audio.debugState().activeVoices <= baseline
+      ), coldFallback.before, { timeout: 1200 });
+
+      await audioPg.waitForFunction(() => window.__game.state === 'fight', null, { timeout: 8000 }).catch(() => {});
+      const fightBoundary = await audioPg.evaluate(() => window.__game.audio.debugState());
+      await audioPg.waitForFunction(() => {
+        const state = window.__game.audio.debugState();
+        return ['ready', 'partial', 'fallback'].includes(state.sfxSampleState)
+          && state.sfxLoadingCount === 0;
+      }, null, { timeout: 15000 }).catch(() => {});
+      const finalLoader = await audioPg.evaluate(() => window.__game.audio.debugState());
+
+      const uniqueAssets = [...new Set(sfxResponses.map((response) => {
+        const parsed = new globalThis.URL(response.url);
+        return parsed.pathname;
+      }))];
+      const versionedResponses = sfxResponses.filter((response) => (
+        new globalThis.URL(response.url).searchParams.get('v') === '2.22.0'
+      )).length;
+      const failedResponses = sfxResponses.filter((response) => response.status < 200 || response.status >= 300);
+      const tierSum = Object.values(finalLoader.sfxLoadedByTier).reduce((sum, value) => sum + value, 0);
+      const expectedTierSum = Object.values(finalLoader.sfxExpectedByTier).reduce((sum, value) => sum + value, 0);
+      out.steps.recordedSfxLoader = {
+        initial: {
+          state: initialLoader.sfxSampleState,
+          workers: initialLoader.sfxWorkerCount,
+          loading: initialLoader.sfxLoadingCount,
+          queued: initialLoader.sfxQueueRemaining,
+          total: initialLoader.sfxSamplesTotal,
+        },
+        coldFallback,
+        fightBoundary: {
+          state: fightBoundary.sfxSampleState,
+          loaded: fightBoundary.sfxSamplesLoaded,
+          failed: fightBoundary.sfxSamplesFailed,
+          critical: fightBoundary.sfxLoadedByTier.critical,
+          criticalExpected: fightBoundary.sfxExpectedByTier.critical,
+        },
+        final: {
+          state: finalLoader.sfxSampleState,
+          version: finalLoader.sfxVersion,
+          loaded: finalLoader.sfxSamplesLoaded,
+          failed: finalLoader.sfxSamplesFailed,
+          total: finalLoader.sfxSamplesTotal,
+          queued: finalLoader.sfxQueueRemaining,
+          loading: finalLoader.sfxLoadingCount,
+          workers: finalLoader.sfxWorkerCount,
+          tiers: finalLoader.sfxLoadedByTier,
+          expectedTiers: finalLoader.sfxExpectedByTier,
+        },
+        responses: {
+          count: sfxResponses.length,
+          uniqueAssets: uniqueAssets.length,
+          versioned: versionedResponses,
+          failed: failedResponses,
+        },
+        consoleErrors: audioConsoleErrors,
+      };
+
+      if (
+        initialLoader.sfxSampleState !== 'loading'
+        || initialLoader.sfxWorkerCount !== 2
+        || initialLoader.sfxLoadingCount < 1
+        || initialLoader.sfxLoadingCount > initialLoader.sfxWorkerCount
+        || initialLoader.sfxSamplesTotal !== Object.values(initialLoader.sfxExpectedByTier)
+          .reduce((sum, value) => sum + value, 0)
+      ) {
+        out.errors.push('v2.22: save-data SFX worker bound/manifest diagnostics failed: '
+          + JSON.stringify(out.steps.recordedSfxLoader.initial));
+      }
+      if (
+        !coldFallback.started.sustainedCueActive
+        || !coldFallback.started.sustainedCueFallback
+        || coldFallback.started.activeVoices !== coldFallback.before + 1
+        || coldFallback.stopped
+      ) {
+        out.errors.push('v2.22: cold-start charge fallback was silent, duplicated, or failed to stop: '
+          + JSON.stringify(coldFallback));
+      }
+      if (
+        fightBoundary.sfxSamplesFailed !== 0
+        || fightBoundary.sfxLoadedByTier.critical !== fightBoundary.sfxExpectedByTier.critical
+      ) {
+        out.errors.push('v2.22: critical SFX tier was not ready at the natural fight boundary: '
+          + JSON.stringify(out.steps.recordedSfxLoader.fightBoundary));
+      }
+      if (
+        finalLoader.sfxSampleState !== 'ready'
+        || finalLoader.sfxVersion !== '2.22.0'
+        || finalLoader.sfxSamplesLoaded !== expectedTierSum
+        || finalLoader.sfxSamplesFailed !== 0
+        || finalLoader.sfxSamplesTotal !== expectedTierSum
+        || finalLoader.sfxQueueRemaining !== 0
+        || finalLoader.sfxLoadingCount !== 0
+        || tierSum !== finalLoader.sfxSamplesLoaded
+        || finalLoader.sfxLoadedByTier.critical !== finalLoader.sfxExpectedByTier.critical
+        || finalLoader.sfxLoadedByTier.phase !== finalLoader.sfxExpectedByTier.phase
+        || finalLoader.sfxLoadedByTier.cosmetic !== finalLoader.sfxExpectedByTier.cosmetic
+      ) {
+        out.errors.push('v2.22: final SFX manifest/load counters are not truthful: '
+          + JSON.stringify(out.steps.recordedSfxLoader.final));
+      }
+      if (
+        uniqueAssets.length !== expectedTierSum
+        || sfxResponses.length !== expectedTierSum
+        || versionedResponses !== expectedTierSum
+        || failedResponses.length !== 0
+        || audioConsoleErrors.length !== 0
+      ) {
+        out.errors.push('v2.22: recorded SFX requests were missing, unversioned, duplicated, or errored: '
+          + JSON.stringify(out.steps.recordedSfxLoader.responses)
+          + ' console=' + JSON.stringify(audioConsoleErrors));
+      }
+
+      // Exercise gameplay ownership with method probes, then restore every
+      // function before testing the real sustained-voice lifecycle.
+      const cueRouting = await audioPg.evaluate(() => {
+        const g = window.__game;
+        const audio = g.audio;
+        const originalBossRelease = audio.bossRelease.bind(audio);
+        const originalSwingHeavy = audio.swingHeavy.bind(audio);
+        const originalPlayerHurt = audio.playerHurt.bind(audio);
+        const originalChargeScrape = audio.chargeScrape.bind(audio);
+        const releases = [];
+        const hurts = [];
+        const scrapeFrames = [];
+        try {
+          audio.bossRelease = (cue) => releases.push(`boss-${cue}`);
+          audio.swingHeavy = () => releases.push('player-heavy');
+          audio.playerHurt = (_spatial, heavy) => hurts.push(heavy ? 'heavy' : 'light');
+          audio.chargeScrape = () => scrapeFrames.push(g.__qaAudioFrame);
+
+          g.state = 'title';
+          g.setGrace(0);
+          g.resetFight();
+          g.state = 'fight';
+          g.input.reset();
+
+          g.player.state = 'move';
+          g.player.stam = 100;
+          g.input.bufferPress('heavy');
+          g.player.update(1 / 60, g.input, g);
+
+          for (const cue of ['swipe', 'charge', 'spiral']) {
+            g.boss.attack = cue;
+            g.boss.beginStrike(g);
+          }
+
+          g.player.state = 'move';
+          g.player.hp = g.player.maxHp;
+          g.player.iframes = 0;
+          g.player.takeDamage(10, g.boss.x, g.boss.y, g);
+          g.player.state = 'move';
+          g.player.hp = g.player.maxHp;
+          g.player.iframes = 0;
+          g.player.takeDamage(20, g.boss.x, g.boss.y, g);
+
+          g.resetFight();
+          g.state = 'fight';
+          g.arenaR = 99999;
+          g.player.x = 10000;
+          g.player.y = 10000;
+          g.boss.x = 0;
+          g.boss.y = 0;
+          g.boss.state = 'strike';
+          g.boss.attack = 'charge';
+          g.boss.chargeDir = 0;
+          g.boss.chargeTime = 2;
+          g.boss.chargeFoleyT = 0;
+          for (let frame = 0; frame < 66; frame++) {
+            g.__qaAudioFrame = frame;
+            g.boss.update(1 / 60, g);
+          }
+        } finally {
+          audio.bossRelease = originalBossRelease;
+          audio.swingHeavy = originalSwingHeavy;
+          audio.playerHurt = originalPlayerHurt;
+          audio.chargeScrape = originalChargeScrape;
+          delete g.__qaAudioFrame;
+        }
+        return { releases, hurts, scrapeFrames };
+      });
+      out.steps.recordedSfxRouting = cueRouting;
+      if (
+        cueRouting.releases.join(',') !== 'player-heavy,boss-swipe,boss-charge,boss-spiral'
+      ) {
+        out.errors.push('v2.22: player and boss release semantics are not distinct: ' + JSON.stringify(cueRouting));
+      }
+      if (cueRouting.hurts.join(',') !== 'light,heavy') {
+        out.errors.push('v2.22: light/heavy player damage did not route to distinct hurt cues: '
+          + JSON.stringify(cueRouting));
+      }
+      if (
+        cueRouting.scrapeFrames.length !== 3
+        || cueRouting.scrapeFrames.some((frame, index) => (
+          index > 0 && frame - cueRouting.scrapeFrames[index - 1] < 20
+        ))
+      ) {
+        out.errors.push('v2.22: boss charge scrape cadence can overload the mix: ' + JSON.stringify(cueRouting));
+      }
+
+      const sustainedLifecycle = await audioPg.evaluate(async () => {
+        const g = window.__game;
+        const audio = g.audio;
+        const settle = (ms = 260) => new Promise((resolve) => setTimeout(resolve, ms));
+        g.arenaR = 520;
+        g.resetFight();
+        g.state = 'fight';
+        await settle(700);
+        const baseline = audio.debugState().activeVoices;
+
+        audio.chargeLoopStart();
+        const first = audio.debugState();
+        audio.chargeLoopStart();
+        audio.chargeLoopSet(0.9);
+        const duplicate = audio.debugState();
+        audio.chargeLoopStop();
+        await settle();
+        const release = audio.debugState();
+
+        audio.chargeLoopStart();
+        g.player.state = 'move';
+        g.player.hp = g.player.maxHp;
+        g.player.iframes = 0;
+        g.player.takeDamage(10, g.boss.x, g.boss.y, g);
+        const damage = audio.debugState();
+        await settle(700);
+
+        audio.chargeLoopStart();
+        g.resetFight();
+        const reset = audio.debugState();
+
+        audio.chargeLoopStart();
+        g.state = 'fight';
+        g.returnToTitle();
+        const title = { state: g.state, ...audio.debugState() };
+
+        audio.chargeLoopStart();
+        audio.destroy();
+        await settle(350);
+        const destroyed = audio.debugState();
+        return {
+          baseline,
+          first: { active: first.sustainedCueActive, voices: first.activeVoices, fallback: first.sustainedCueFallback },
+          duplicate: { active: duplicate.sustainedCueActive, voices: duplicate.activeVoices },
+          release: { active: release.sustainedCueActive, voices: release.activeVoices },
+          damage: { active: damage.sustainedCueActive },
+          reset: { active: reset.sustainedCueActive },
+          title: { state: title.state, active: title.sustainedCueActive },
+          destroyed: {
+            active: destroyed.sustainedCueActive,
+            voices: destroyed.activeVoices,
+            sampleState: destroyed.sfxSampleState,
+            loaded: destroyed.sfxSamplesLoaded,
+            failed: destroyed.sfxSamplesFailed,
+            total: destroyed.sfxSamplesTotal,
+          },
+        };
+      });
+      out.steps.recordedSfxLifecycle = sustainedLifecycle;
+      if (
+        !sustainedLifecycle.first.active
+        || sustainedLifecycle.first.fallback
+        || sustainedLifecycle.first.voices !== sustainedLifecycle.baseline + 1
+        || sustainedLifecycle.duplicate.voices !== sustainedLifecycle.first.voices
+        || sustainedLifecycle.duplicate.active !== true
+        || sustainedLifecycle.release.active
+        || sustainedLifecycle.release.voices > sustainedLifecycle.baseline
+        || sustainedLifecycle.damage.active
+        || sustainedLifecycle.reset.active
+        || sustainedLifecycle.title.state !== 'title'
+        || sustainedLifecycle.title.active
+        || sustainedLifecycle.destroyed.active
+        || sustainedLifecycle.destroyed.voices !== 0
+        || sustainedLifecycle.destroyed.sampleState !== 'idle'
+        || sustainedLifecycle.destroyed.loaded !== 0
+        || sustainedLifecycle.destroyed.failed !== 0
+        || sustainedLifecycle.destroyed.total !== 0
+      ) {
+        out.errors.push('v2.22: sustained audio lifecycle leaked or duplicated a charge voice: '
+          + JSON.stringify(sustainedLifecycle));
+      }
+
+      await audioCtx.close();
     }
 
     out.ok = out.errors.length === 0;

@@ -402,6 +402,7 @@ export class Player {
   charge01 = 0; heavyChargeT = 0; heavyCharging = false; // hold-to-charge heavy
   queuedLightAttacks = 0;
   rollSlashQueued = false;
+  stepT = 0; // footstep cadence timer while moving
   trail: { x: number; y: number; a: number; life: number }[] = [];
   swordTip: { x: number; y: number }[] = [];
   capePhase = 0;
@@ -482,6 +483,9 @@ export class Player {
         this.flasks--;
         game.flasksUsed++;
         game.audio.flask();
+      } else if (this.flasks <= 0 && this.hp < this.maxHp && this.state === 'move' && input.consume('flask')) {
+        // Dry flask: the denial needs a voice too, not silence.
+        game.audio.flaskEmpty();
       }
     }
 
@@ -490,6 +494,16 @@ export class Player {
       this.vx = lerp(this.vx, ax.x * spd, 1 - Math.exp(-12 * dt));
       this.vy = lerp(this.vy, ax.y * spd, 1 - Math.exp(-12 * dt));
       if (Math.hypot(ax.x, ax.y) > 0.1) this.facing = Math.atan2(ax.y, ax.x);
+      const moveSpd = Math.hypot(this.vx, this.vy);
+      if (moveSpd > 70) {
+        this.stepT -= dt;
+        if (this.stepT <= 0) {
+          this.stepT = clamp(0.42 - moveSpd / 2400, 0.26, 0.4);
+          game.audio.playerStep(game.audioSpatial(this.x, this.y));
+        }
+      } else {
+        this.stepT = 0.08;
+      }
     } else if (this.state === 'roll') {
       const rollSpd = 370;
       this.vx = Math.cos(this.rollDir) * rollSpd;
@@ -546,12 +560,15 @@ export class Player {
       // hit check — a heavy can be charged by holding through the wind-up
       if (!this.attackHit && elapsed >= activeStart) {
         if (heavy && this.heavyChargeT < Player.HEAVY_MAX_CHARGE && game.heavyInputHeld()) {
+          if (!this.heavyCharging) game.audio.chargeLoopStart();
           this.heavyCharging = true;
           this.heavyChargeT = Math.min(Player.HEAVY_MAX_CHARGE, this.heavyChargeT + dt);
+          game.audio.chargeLoopSet(this.heavyChargeT / Player.HEAVY_MAX_CHARGE);
           this.t = 0.2;             // hold at the strike frame; 0.2 s recovery remains after release
           this.vx = 0; this.vy = 0; // rooted while charging
         } else {
           this.attackHit = true;
+          if (this.heavyCharging) game.audio.chargeLoopStop();
           this.heavyCharging = false;
           if (heavy) this.charge01 = clamp(this.heavyChargeT / Player.HEAVY_MAX_CHARGE, 0, 1);
           game.playerStrike(heavy, rollSlash);
@@ -620,11 +637,16 @@ export class Player {
       // perfect dodge: hit lands inside the early roll window
       if (this.state === 'roll' && this.rollIframes > 0 && this.t > 0.42 - 0.24 * game.mods.perfectWindow && this.perfectCd <= 0) {
         game.onPerfectDodge();
+      } else if (this.state === 'roll' && this.rollIframes > 0) {
+        // A close blade passing outside the perfect window still needs a quiet
+        // acknowledgement, without changing dodge timing or invulnerability.
+        game.audio.nearMiss(game.audioSpatial(sx, sy));
       }
       return false;
     }
     this.comboStep = 0; this.comboWindow = 0; this.queuedLightAttacks = 0; this.rollSlashQueued = false;
     game.breakPlayerChain();
+    game.audio.chargeLoopStop();
     game.lastDamageSource = source;
     this.rollIframes = 0;
     dmg = Math.max(1, Math.round(dmg * game.mods.dmgTaken));
@@ -633,7 +655,7 @@ export class Player {
     this.hurtFlash = 0.35;
     const a = angTo(sx, sy, this.x, this.y);
     this.vx = Math.cos(a) * 330; this.vy = Math.sin(a) * 330;
-    game.audio.playerHurt(game.audioSpatial(this.x, this.y));
+    game.audio.playerHurt(game.audioSpatial(this.x, this.y), dmg >= 20);
     game.vibrate(dmg >= 20 ? [24, 24, 38] : [18, 18, 24]);
     game.shake(10, 0.3);
     game.redFlash = 0.5;
@@ -999,7 +1021,10 @@ export class Boss {
           this.vy = Math.sin(this.chargeDir) * 880;
           if (this.chargeFoleyT <= 0) {
             game.audio.chargeScrape(game.audioSpatial(this.x, this.y));
-            this.chargeFoleyT = 0.09;
+            // The recorded scrape lasts roughly 627 ms. A 90 ms retrigger
+            // stacked seven tails and masked the collision; this cadence keeps
+            // motion continuous without flooding the combat limiter.
+            this.chargeFoleyT = 0.36;
           }
           game.addParticle({
             x: this.x - Math.cos(this.chargeDir) * this.r, y: this.y - Math.sin(this.chargeDir) * this.r,
@@ -1108,6 +1133,7 @@ export class Boss {
       this.state = 'windup'; this.attack = 'ring'; this.t = 1.1;
       this.currentWindup = 1.1;
       game.audio.setPhase(2);
+      game.audio.stamp(game.audioSpatial(this.x, this.y));
       game.audio.roar(true, game.audioSpatial(this.x, this.y));
       game.shake(20, 0.9);
       game.goldFlash = 0.4;
@@ -1128,6 +1154,7 @@ export class Boss {
       this.poise = this.maxPoise;
       for (const k of Object.keys(this.cooldowns) as BossAttack[]) this.cooldowns[k] = 0;
       game.audio.setPhase(3);
+      game.audio.stamp(game.audioSpatial(this.x, this.y));
       game.audio.roar(true, game.audioSpatial(this.x, this.y));
       game.shake(24, 1.1);
       game.redFlash = Math.max(game.redFlash, 0.3);
@@ -1277,13 +1304,13 @@ export class Boss {
   private beginStrike(game: Game) {
     this.state = 'strike';
     switch (this.attack) {
-      case 'swipe': this.t = 0.1; game.audio.swingHeavy(game.audioSpatial(this.x, this.y)); break;
+      case 'swipe': this.t = 0.1; game.audio.bossRelease('swipe', game.audioSpatial(this.x, this.y)); break;
       case 'slam': this.t = 0.06; break;
       case 'ring': this.t = 0.06; break;
-      case 'charge': this.chargeTime = 0.42; this.chargeFoleyT = 0; game.audio.swingHeavy(game.audioSpatial(this.x, this.y)); break;
+      case 'charge': this.chargeTime = 0.42; this.chargeFoleyT = 0; game.audio.bossRelease('charge', game.audioSpatial(this.x, this.y)); break;
       case 'volley': this.t = 0.02; break;
       case 'meteor': this.t = 999; this.vx = 0; this.vy = 0; break;
-      case 'spiral': this.t = 999; game.audio.swingHeavy(game.audioSpatial(this.x, this.y)); break;
+      case 'spiral': this.t = 999; game.audio.bossRelease('spiral', game.audioSpatial(this.x, this.y)); break;
     }
   }
 
@@ -2446,6 +2473,7 @@ export class Game {
 
   returnToTitle() {
     if (this.state === 'title') return;
+    this.audio.stopSustainedCues(true);
     this.manualPaused = false;
     this.uiFocused = false;
     this.uiAudioPreview = false;
@@ -2870,7 +2898,7 @@ export class Game {
           this.shake(14, 0.4);
           this.sparks(b.x, b.y, 24);
           this.addDamageNum(b.x, b.y - b.r - 48, 'EXECUTE', PAL.spirit, 24);
-          this.audio.stagger(this.audioSpatial(b.x, b.y));
+          this.audio.execute(this.audioSpatial(b.x, b.y));
         } else {
           const base = (heavy || finisher || rollSlash) ? dmg : dmg + Math.floor(rand(-2, 3));
           const dealt = b.takeDamage(base * (flank ? 1.25 : 1), this, p.x, p.y, impact);
@@ -2947,6 +2975,7 @@ export class Game {
     // Victory owns a same-frame trade. Do not persist a contradictory defeat
     // after the boss has already been felled and the win recorded.
     if (this.state === 'victory') return;
+    this.audio.stopSustainedCues();
     this.audio.deathSting();
     this.slowT = 1.2; this.timeScale = 0.3;
     this.projectiles = [];
@@ -2962,6 +2991,7 @@ export class Game {
   }
   onBossDeath() {
     if (this.state === 'dead' || this.state === 'victory') return;
+    this.audio.stopSustainedCues();
     this.boss.state = 'dying';
     this.slowT = 1.5; this.timeScale = 0.22;
     this.audio.roar(true, this.audioSpatial(this.boss.x, this.boss.y));
@@ -3016,6 +3046,9 @@ export class Game {
   }
 
   resetFight() {
+    // Reset owns every run-abandonment path, including retry and return to
+    // title. Stop held performance voices before replacing their state owner.
+    this.audio.stopSustainedCues(true);
     const wasManuallyPaused = this.manualPaused;
     this.manualPaused = false;
     this.input.clearCombatActions();
@@ -3244,7 +3277,7 @@ export class Game {
     // cannot immediately restart behind the newly selected Grace.
     this.terminalConfirmSequence = this.input.confirmSequence;
     this.input.consume('confirm');
-    this.audio.ui();
+    this.audio.wardChime();
     this.vibrate(12);
     return true;
   }
@@ -3309,6 +3342,7 @@ export class Game {
         this.state = 'intro'; this.stateT = 0;
         this.resetFight();
         this.audio.init();
+        this.audio.bladeDraw();
       }
     } else if (this.state === 'intro') {
       if (this.stateT > 2.6 || (this.stateT > 0.6 && this.input.consume('confirm'))) {
@@ -3316,7 +3350,8 @@ export class Game {
         this.state = 'fight'; this.stateT = 0;
         this.boss.state = 'stalk'; this.boss.t = 0.4;
         this.projectiles = []; this.rings = []; this.meteors = [];
-        this.audio.roar(true, this.audioSpatial(this.boss.x, this.boss.y));
+        // The first reveal is intimate; phase shifts retain the large roar.
+        this.audio.roar(false, this.audioSpatial(this.boss.x, this.boss.y));
         this.syncPauseState();
         if (this.paused) { this.input.endFrame(); return; }
       }
