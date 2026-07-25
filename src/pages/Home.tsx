@@ -14,6 +14,8 @@ const INITIAL_UI: GameUiSnapshot = {
   grace: -2,
   graceLabel: 'JOURNEY -2',
   graceSummary: 'recommended · 15% slower · 30% softer · 4 flasks',
+  graceMenuLabel: 'JOURNEY · GUIDED',
+  graceMenuSummary: 'Recommended for first victories · Slower foe · Less damage taken · 4 flasks',
   oathRank: 0,
   shakeEnabled: true,
   flashReduced: false,
@@ -93,6 +95,7 @@ export default function Home() {
   const [ui, setUi] = useState<GameUiSnapshot>(INITIAL_UI);
   const [dialog, setDialog] = useState<GameDialog>(null);
   const [shareStatus, setShareStatus] = useState('');
+  const [controlsFocused, setControlsFocused] = useState(false);
 
   const mixOpen = dialog === 'mix';
   const dialogOpen = dialog !== null;
@@ -137,6 +140,7 @@ export default function Home() {
   const focusGame = () => canvasRef.current?.focus({ preventScroll: true });
 
   const confirmFromUi = () => {
+    setControlsFocused(false);
     act((game) => {
       game.confirm();
       game.setUiFocused(false);
@@ -150,6 +154,7 @@ export default function Home() {
   };
 
   const openMix = () => {
+    setControlsFocused(false);
     setDialog('mix');
     act((game) => game.setUiFocused(true, true));
   };
@@ -161,6 +166,7 @@ export default function Home() {
   };
 
   const openBattleMenu = () => {
+    setControlsFocused(false);
     setDialog('battle-menu');
     act((game) => game.setUiFocused(true, false));
   };
@@ -249,6 +255,7 @@ export default function Home() {
   };
 
   const openScores = () => {
+    setControlsFocused(false);
     setDialog('scores');
     act((game) => game.setUiFocused(true, false));
   };
@@ -265,10 +272,16 @@ export default function Home() {
     else if (dialog === 'scores') closeScores();
   };
 
+  const closeControls = () => {
+    setControlsFocused(false);
+    act((game) => game.setUiFocused(false));
+    focusGame();
+  };
+
   const confirmLabel = ui.state === 'dead' ? 'Retry fight'
     : ui.state === 'victory' ? 'Fight again'
     : ui.state === 'intro' ? 'Skip introduction'
-    : 'Start fight';
+    : 'Raise your blade';
   const trialLocked = ui.state === 'intro' || ui.state === 'fight';
 
   return (
@@ -306,7 +319,7 @@ export default function Home() {
           tabIndex={dialogOpen ? -1 : undefined}
           onClick={openScores}
         >
-          SCORES
+          RECORDS
         </button>
       )}
 
@@ -363,25 +376,51 @@ export default function Home() {
         />
       )}
 
+      {controlsFocused && !dialogOpen && (
+        <div
+          className="game-controls-backdrop"
+          aria-hidden="true"
+          onPointerDown={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            closeControls();
+          }}
+        />
+      )}
+
       {(dialog === null || mixOpen) && (
         <section
           className={`game-accessibility${mixOpen ? ' is-mix-open' : ''}`}
           role={mixOpen ? 'dialog' : undefined}
           aria-modal={mixOpen || undefined}
           aria-label={mixOpen ? 'Combat mix' : 'Gracefell controls and accessibility settings'}
-          onFocusCapture={() => act((game) => game.setUiFocused(true, mixOpen))}
+          onFocusCapture={() => {
+            if (!mixOpen) setControlsFocused(true);
+            act((game) => game.setUiFocused(true, mixOpen));
+          }}
           onBlurCapture={(event) => {
             if (!mixOpen && !event.currentTarget.contains(event.relatedTarget as Node | null)) {
+              setControlsFocused(false);
               act((game) => game.setUiFocused(false));
             }
           }}
-          onKeyDownCapture={mixOpen ? trapDialogFocus : undefined}
+          onKeyDownCapture={mixOpen
+            ? trapDialogFocus
+            : (event) => {
+                if (event.key === 'Escape') {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  closeControls();
+                }
+              }}
         >
-          <h1>{mixOpen ? 'Combat mix' : 'Gracefell'}</h1>
+          <h1>{mixOpen ? 'Combat mix' : 'Game controls'}</h1>
           <p id="game-instructions">
             {mixOpen
               ? 'The fight is safely paused while the score keeps playing. Set the music behind the action, test the combat crack, then resume.'
-              : `Move with WASD or arrow keys, roll with Space, attack with J, use a heavy attack with K, drink a flask with F, and pause or resume with P or Escape. Press attack during a roll to slash safely after it ends. Striking from behind rewards positioning. On touch screens, steer on the ${ui.leftHanded ? 'right' : 'left'} and use actions on the ${ui.leftHanded ? 'left' : 'right'}.`}
+              : ui.touch
+                ? `${ui.leftHanded ? 'Right' : 'Left'} side moves. ${ui.leftHanded ? 'Left' : 'Right'} side fights and uses flasks.`
+                : 'WASD move · Space roll · J attack · K heavy · F flask · Esc pause'}
           </p>
           <p id="game-status" aria-live="polite">{ui.status}</p>
           {ui.state === 'fight' && (
@@ -401,13 +440,18 @@ export default function Home() {
             {!mixOpen && (
               <button
                 type="button"
+                className="game-accessibility__primary"
                 disabled={ui.state === 'fight'}
                 onClick={confirmFromUi}
               >
                 {confirmLabel}
               </button>
             )}
-            <button type="button" onClick={() => act((game) => game.toggleMuted())}>
+            <button
+              type="button"
+              className="game-accessibility__sound"
+              onClick={() => act((game) => game.toggleMuted())}
+            >
               Sound {ui.muted ? 'off' : 'on'}
             </button>
             <label className="game-accessibility__range">
@@ -446,26 +490,54 @@ export default function Home() {
               </>
             ) : (
               <>
-                <button type="button" disabled={trialLocked} onClick={() => act((game) => game.setGrace(game.grace - 1))}>
-                  More Grace
+                <button
+                  type="button"
+                  className="game-accessibility__trial-step"
+                  aria-label="Easier path, receive more Grace"
+                  disabled={trialLocked}
+                  onClick={() => act((game) => game.setGrace(game.grace - 1))}
+                >
+                  Easier path
                 </button>
-                <output aria-label="Current trial">{ui.graceLabel}</output>
-                <button type="button" disabled={trialLocked} onClick={() => act((game) => game.setGrace(game.grace + 1))}>
-                  More Oath
+                <output className="game-accessibility__trial" aria-label="Current difficulty">{ui.graceMenuLabel}</output>
+                <button
+                  type="button"
+                  className="game-accessibility__trial-step"
+                  aria-label="Harder path, take another Oath"
+                  disabled={trialLocked}
+                  onClick={() => act((game) => game.setGrace(game.grace + 1))}
+                >
+                  Harder path
                 </button>
-                <output aria-label="Trial effects">{ui.graceSummary}</output>
-                <button type="button" onClick={() => act((game) => game.toggleShake())}>
+                <output className="game-accessibility__trial-summary" aria-label="Difficulty effects">{ui.graceMenuSummary}</output>
+                <button
+                  type="button"
+                  className="game-accessibility__setting"
+                  onClick={() => act((game) => game.toggleShake())}
+                >
                   Screen shake {ui.shakeEnabled ? 'on' : 'off'}
                 </button>
-                <button type="button" onClick={() => act((game) => game.toggleFlashes())}>
+                <button
+                  type="button"
+                  className="game-accessibility__setting"
+                  onClick={() => act((game) => game.toggleFlashes())}
+                >
                   Flashes {ui.flashReduced ? 'reduced' : 'full'}
                 </button>
                 {ui.touch && (
                   <>
-                    <button type="button" onClick={() => act((game) => game.toggleHaptics())}>
+                    <button
+                      type="button"
+                      className="game-accessibility__setting"
+                      onClick={() => act((game) => game.toggleHaptics())}
+                    >
                       Haptics {ui.hapticsEnabled ? 'on' : 'off'}
                     </button>
-                    <button type="button" onClick={() => act((game) => game.toggleLeftHanded())}>
+                    <button
+                      type="button"
+                      className="game-accessibility__setting"
+                      onClick={() => act((game) => game.toggleLeftHanded())}
+                    >
                       Touch layout {ui.leftHanded ? 'left-handed' : 'right-handed'}
                     </button>
                   </>
@@ -473,6 +545,12 @@ export default function Home() {
               </>
             )}
           </div>
+          {!mixOpen && (
+            <details className="game-accessibility__tips">
+              <summary>Combat tips</summary>
+              <p>Attack during a roll to slash safely after it ends. Striking from behind rewards positioning.</p>
+            </details>
+          )}
         </section>
       )}
 

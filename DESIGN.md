@@ -1792,3 +1792,115 @@ execute.
   #66 as `6bc004d`, deployed to the active zero-restart user service, and passed
   both complete and v2.21-focused public QA with zero errors. Exact receipts are
   preserved in `docs/releases/v2.21.md`.
+
+## v2.21.1 — Codex, "fit the short phone" (2026-07-25)
+
+The released v2.21 title menu still let independently positioned text converge
+on short phone browser viewports once saved victory information appeared. The
+repair made the measured top of the settings plate authoritative for the saved
+result, prompt, touch guidance, and Journey/Oath summary, and shifted the whole
+five-row plate only when bottom clearance required it. Drawing and hit-testing
+continued to share `menuGeom()` and `menuRows()`.
+
+This was a presentation-only hotfix. Difficulty, boss behavior, combat timing,
+weather, audio, scoring, persistence, accessibility semantics, and touch hit
+targets remained unchanged. Local, CI, and public true-touch acceptance are
+recorded in `docs/releases/v2.21.1.md`.
+
+### Changed from v2.21
+
+- Compact title copy is anchored to the settings plate rather than independent
+  viewport percentages.
+- Short-phone bottom clearance moves the complete settings group as one unit.
+- True-touch QA now proves each vertical boundary through the footer.
+
+## v2.21.2 — Codex, "one desktop hierarchy" (2026-07-25)
+
+A live 1280x800 desktop audit with saved progress exposed the same architectural
+split outside the compact branch: saved results used one viewport percentage
+while the prompt and controls used others. Their baselines ended only six pixels
+apart. At 1920x1080, the fixed 600px settings plate and 14px row copy also read
+as a phone-sized utility beneath the cinematic wordmark.
+
+The title copy now anchors to `menuTop` on every viewport. Desktop widths at or
+above 1600px receive one capped scale, shared by plate width, row height, row
+copy, controls, summaries, saved results, and vertical rhythm. The cap is 1.2x,
+so large displays gain legibility without turning the menu into a full-width
+dashboard. The wordmark measures its actual font metrics and reduces only when
+needed to fit the available narrow-phone width.
+
+Keyboard focus still reveals the semantic companion and still owns Enter/Space
+without leaking input into the Canvas game. Its formerly free-wrapping buttons
+now form a six-column themed grid: start and sound share a row, both audio
+sliders use full width, the Journey/Oath chooser reads as one three-part row,
+the trial explanation uses full width, and safety settings share the final row.
+The panel remains scroll-bounded on short viewports.
+
+### Two autonomous review rounds: the Trial Seal
+
+Three independent game-menu reviewers covered art direction, player-facing
+information architecture, and interaction/accessibility. Round one agreed that
+the repaired layout still read as a logo followed by a settings dashboard: the
+difficulty row lacked a name, copy shifted between lore and utility voices, and
+the start prompt did not clearly dominate the secondary controls. Their shared
+direction was a single Trial Seal rather than a larger structural rewrite.
+
+The implementation gives the title one action hierarchy:
+
+- `RAISE YOUR BLADE` is the sole primary call to action, with a platform-aware
+  click, Enter, or touch hint.
+- `CHOOSE DIFFICULTY` names the desktop control explicitly; compact screens use
+  `DIFFICULTY`. `JOURNEY · GUIDED` and the other trial labels sit beside a
+  measured pip scale and plain effects such as `Less damage taken`.
+- Desktop guidance is key-first (`WASD MOVE · SPACE ROLL · J ATTACK · K HEAVY
+  · F FLASK`); the touch version names the left and right thumb roles.
+- Safety settings use open hairlines and lower emphasis so they remain available
+  without competing with the selected trial.
+- The wordmark is drawn once with measured letter spacing rather than literal
+  spaces, which gives desktop and mobile the same typographic voice.
+
+Round two retested the implementation on 1280x800, 1920x1080, and 390x844.
+All three reviewers found the hierarchy coherent and recommended no structural
+rewrite. The remaining interaction finding was precise: Enter on native
+`Combat tips` was reaching the game confirm handler, and the disclosure preceded
+the primary action in focus order. Native `summary`/`details` are now excluded
+from game input ownership, and Combat tips follows the primary action group.
+The focused controls panel also receives a real dismissible backdrop; Escape or
+backdrop activation returns focus to the Canvas title.
+
+### Validation
+
+- Live production audit reproduced the 1280x800 saved-score collision before
+  editing and found no console errors.
+- Local review covered fresh and saved title states at 1280x800, a saved state
+  at 1920x1080, the keyboard focus panel, and 390px/360px true-touch viewports.
+- Automated semantics prove the primary action precedes Combat tips, Enter
+  toggles the native disclosure without advancing the Canvas confirm sequence,
+  and backdrop/Escape dismissal restores game focus.
+- Geometry assertions prove the compact difficulty label, pip scale, and
+  selected trial do not collide, with zero desktop, mobile, or touch overflow.
+- `npm run lint`, 19/19 Vitest checks, and `npm run build` pass.
+- `npm run qa` passes with `ok=true` and zero errors, including title-copy
+  separation, narrow wordmark fit, semantic-grid alignment, panel clipping, and
+  a focused 1920x1080 title lane. The first isolated run exceeded only the
+  unchanged 25ms Web Audio cold-start budget at 31.1ms; the unchanged fresh
+  rerun passed the complete gate. No menu, semantic, gameplay, persistence,
+  layout, overflow, or console check failed in either run.
+
+### Changed from v2.21.1
+
+- The menu-anchored title rhythm now applies to desktop as well as compact and
+  touch viewports.
+- Wide desktop title utilities scale together up to 1.2x.
+- The narrow wordmark fits measured available width instead of clipping.
+- One Trial Seal replaces the formerly anonymous first settings row and explains
+  the selected Journey/Oath effects in plain language.
+- The title has one primary action and compact, platform-specific control copy;
+  safety settings are visibly secondary.
+- The focus-revealed semantic controls use intentional grid hierarchy rather
+  than flex wrapping, with a backdrop and native disclosure ownership.
+- Combat, difficulty, boss patterns, saves, score persistence, weather, audio,
+  input bindings, touch hit targets, and runtime assets are unchanged.
+- This is a tested release candidate; deployment evidence belongs in
+  `docs/releases/v2.21.2.md` and must not be inferred from the implementation
+  commit.
