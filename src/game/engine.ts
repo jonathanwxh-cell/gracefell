@@ -3070,7 +3070,14 @@ export class Game {
     const rowCount = this.input.isTouch ? 5 : 3;
     const gap = this.input.isTouch ? 40 : Math.max(30, Math.min(38, this.h * 0.045));
     const baseScale = this.input.isTouch ? 0.72 : this.w < 520 ? 0.735 : 0.70;
-    const baseY = this.h * baseScale - (rowCount - 3) * gap * 0.5;
+    const desiredBaseY = this.h * baseScale - (rowCount - 3) * gap * 0.5;
+    // Keep the final instruction above the bottom edge on short phones. The
+    // whole menu shifts as one unit, so rendering and hit targets stay aligned.
+    const bottomClearance = this.w < 520
+      ? Math.max(48, this.safeBottom + 44)
+      : Math.max(20, this.safeBottom + 16);
+    const maxBaseY = this.h - bottomClearance - 30 - (rowCount - 1) * gap;
+    const baseY = Math.min(desiredBaseY, maxBaseY);
     const rows = [
       { id: 'grace', y: baseY, label: 'PATH', value: this.graceLabel() },
       { id: 'shake', y: baseY + gap, label: 'SCREEN SHAKE', value: this.shakeEnabled ? 'on' : 'off' },
@@ -3108,6 +3115,44 @@ export class Game {
       pipX: (g: number) => cx - 18 + (g - 1) * pipStep,
       decZone: cx - halfW * 0.42,
       incZone: cx + halfW * 0.42,
+    };
+  }
+
+  titleTextLayout() {
+    const compact = this.w < 520;
+    const rows = this.menuRows();
+    const gm = this.menuGeom();
+    const menuTop = rows[0].y - gm.rowH / 2;
+
+    if (this.input.isTouch || compact) {
+      // Anchor the title copy above the settings plate instead of scattering it
+      // across viewport percentages. This prevents shorter mobile browser
+      // viewports from stacking the prompt, controls, summary, and first row.
+      const summaryY = menuTop - 12;
+      const compactKeyboard = !this.input.isTouch;
+      const controlsAltY = summaryY - 22;
+      const controlsY = controlsAltY - (compactKeyboard ? 19 : 0);
+      const promptY = controlsY - 24;
+      const statsY = promptY - 23;
+      return {
+        titleY: Math.min(this.h * 0.36, statsY - 84),
+        statsY,
+        promptY,
+        controlsY,
+        controlsAltY,
+        summaryY,
+        menuTop,
+      };
+    }
+
+    return {
+      titleY: this.h * 0.36,
+      statsY: this.h * 0.60 + 26,
+      promptY: this.h * 0.60,
+      controlsY: this.h * 0.64,
+      controlsAltY: this.h * 0.64,
+      summaryY: this.h * 0.666,
+      menuTop,
     };
   }
 
@@ -4034,7 +4079,8 @@ Game.prototype.drawTitle = function drawTitle(this: Game, ctx: CanvasRenderingCo
   ctx.fillStyle = 'rgba(5,4,3,0.55)';
   ctx.fillRect(0, 0, this.w, this.h);
   const cx = this.w / 2;
-  const cy = this.h * 0.36;
+  const titleLayout = this.titleTextLayout();
+  const cy = titleLayout.titleY;
 
   // grace glow
   const pulse = 0.6 + Math.sin(this.time * 1.8) * 0.25;
@@ -4099,7 +4145,11 @@ Game.prototype.drawTitle = function drawTitle(this: Game, ctx: CanvasRenderingCo
   ctx.globalAlpha = blink;
   ctx.font = serif(clamp(this.w * 0.018, 15, 20), 600);
   ctx.fillStyle = PAL.goldBright;
-  ctx.fillText(this.input.isTouch ? 'TOUCH TO RAISE YOUR BLADE' : 'CLICK TO RAISE YOUR BLADE', cx, this.h * 0.60);
+  ctx.fillText(
+    this.input.isTouch ? 'TOUCH TO RAISE YOUR BLADE' : 'CLICK TO RAISE YOUR BLADE',
+    cx,
+    titleLayout.promptY,
+  );
   ctx.globalAlpha = 1;
 
   // ---- settings dial: trial / shake / flashes
@@ -4164,19 +4214,19 @@ Game.prototype.drawTitle = function drawTitle(this: Game, ctx: CanvasRenderingCo
   ctx.font = body(this.input.isTouch && this.w < 520 ? 14 : compactKeyboard ? 13 : 15, 500);
   ctx.fillStyle = 'rgba(184,170,138,0.92)';
   if (compactKeyboard) {
-    ctx.fillText('WASD / arrows move \u00b7 SPACE rolls', cx, this.h * 0.64);
-    ctx.fillText('J attack \u00b7 K heavy \u00b7 F flask', cx, this.h * 0.662);
+    ctx.fillText('WASD / arrows move \u00b7 SPACE rolls', cx, titleLayout.controlsY);
+    ctx.fillText('J attack \u00b7 K heavy \u00b7 F flask', cx, titleLayout.controlsAltY);
   } else {
     ctx.fillText(
       this.input.isTouch
         ? 'left thumb steers \u00b7 right thumb strikes, rolls, drinks'
         : 'WASD move \u00b7 SPACE roll \u00b7 J slash \u00b7 K heavy \u00b7 F flask',
-      cx, this.h * 0.64,
+      cx, titleLayout.controlsY,
     );
   }
   ctx.font = body(11, 650);
   ctx.fillStyle = this.grace < 0 ? PAL.spirit : this.grace > 0 ? PAL.ember : PAL.goldBright;
-  ctx.fillText(this.graceSummary(), cx, this.h * (this.input.isTouch ? 0.655 : compactKeyboard ? 0.688 : 0.666));
+  ctx.fillText(this.graceSummary(), cx, titleLayout.summaryY);
   const selectedBest = this.trialBest();
   if (this.wins > 0 || selectedBest > 0) {
     const compactStats = this.w < 520;
@@ -4190,7 +4240,7 @@ Game.prototype.drawTitle = function drawTitle(this: Game, ctx: CanvasRenderingCo
     ctx.fillText(
       parts.join(compactStats ? '  \u00b7  ' : '   \u00b7   '),
       cx,
-      compactStats ? this.h * 0.575 : this.h * 0.60 + 26,
+      titleLayout.statsY,
       compactStats ? this.w - 36 : undefined,
     );
   }
