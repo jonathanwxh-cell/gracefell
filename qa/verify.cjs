@@ -1968,6 +1968,28 @@ async function installAudioSampleRate(context) {
       // 2. touch-appropriate copy, no keyboard bindings shown
       t.rows = await pg.evaluate(() => window.__game.menuRows().map((r) => r.id));
       if (!t.rows.includes('haptics')) out.errors.push('touch: haptics row missing from menu');
+      t.titleLayout = await pg.evaluate(() => {
+        const g = window.__game;
+        const layout = g.titleTextLayout();
+        const rows = g.menuRows();
+        return {
+          ...layout,
+          helpY: rows[rows.length - 1].y + 30,
+          footerY: g.h - 26,
+        };
+      });
+      if (t.titleLayout.titleY + 64 > t.titleLayout.statsY - 18) {
+        out.errors.push('touch: title divider overlaps saved-result summary: ' + JSON.stringify(t.titleLayout));
+      }
+      if (t.titleLayout.statsY > t.titleLayout.promptY - 18
+        || t.titleLayout.promptY > t.titleLayout.controlsY - 18
+        || t.titleLayout.controlsY > t.titleLayout.summaryY - 18
+        || t.titleLayout.summaryY > t.titleLayout.menuTop - 8) {
+        out.errors.push('touch: title copy overlaps the settings menu: ' + JSON.stringify(t.titleLayout));
+      }
+      if (t.titleLayout.helpY > t.titleLayout.footerY - 18) {
+        out.errors.push('touch: settings instruction overlaps the title footer: ' + JSON.stringify(t.titleLayout));
+      }
       await pg.screenshot({ path: path.join(ARTIFACT_DIR, 'touch-title.png') });
       t.forsakenTitle = await pg.evaluate(() => {
         const g = window.__game;
