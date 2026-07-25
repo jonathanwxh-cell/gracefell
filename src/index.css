@@ -466,6 +466,78 @@ html, body, #root {
   min-width: 0;
 }
 
+.game-terminal-chronicle {
+  position: fixed;
+  z-index: 8;
+  right: calc(18px + env(safe-area-inset-right, 0px));
+  bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  width: min(430px, calc(100vw - 36px));
+  padding: 14px;
+  color: #ece0c4;
+  background: rgba(8, 6, 4, 0.92);
+  border: 1px solid rgba(201, 169, 89, 0.66);
+  box-shadow: 0 12px 42px rgba(0, 0, 0, 0.55);
+}
+
+.game-terminal-chronicle__grid {
+  display: grid;
+  gap: 6px;
+}
+
+.game-terminal-chronicle__grid > div {
+  display: grid;
+  grid-template-columns: 92px 1fr;
+  gap: 10px;
+  font: 600 13px/1.25 "Cormorant Garamond", Georgia, serif;
+}
+
+.game-terminal-chronicle__grid strong {
+  color: #c9a959;
+}
+
+.game-terminal-chronicle__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.game-terminal-chronicle button {
+  min-height: 44px;
+  padding: 8px;
+  color: #ddd0b5;
+  background: #17120d;
+  border: 1px solid rgba(201, 169, 89, 0.62);
+  font: 700 12px "Cormorant Garamond", Georgia, serif;
+}
+
+.game-terminal-chronicle button:last-child,
+.game-terminal-chronicle__status {
+  grid-column: 1 / -1;
+}
+
+.game-terminal-chronicle button.is-primary,
+.game-terminal-chronicle button:focus-visible {
+  color: #f0d78c;
+  border-color: #f0d78c;
+}
+
+.game-terminal-chronicle button:focus-visible {
+  outline: 3px solid #f0d78c;
+  outline-offset: 2px;
+}
+
+.game-terminal-chronicle button:disabled {
+  opacity: 0.46;
+}
+
+.game-terminal-chronicle__status {
+  min-height: 16px;
+  margin: 7px 0 0;
+  color: #b9cdec;
+  font: 600 12px "Cormorant Garamond", Georgia, serif;
+}
+
 @media (max-width: 560px) {
   .game-menu-toggle {
     top: calc(64px + env(safe-area-inset-top, 0px));
@@ -495,5 +567,17 @@ html, body, #root {
 
   .game-score-history__list dt {
     font-size: 9px;
+  }
+
+  .game-terminal-chronicle {
+    right: 10px;
+    bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+    width: calc(100vw - 20px);
+    padding: 11px;
+  }
+
+  .game-terminal-chronicle__grid > div {
+    grid-template-columns: 78px 1fr;
+    font-size: 12px;
   }
 }

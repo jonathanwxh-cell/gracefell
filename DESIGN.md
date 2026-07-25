@@ -1710,3 +1710,81 @@ so action sounds and the phase score keep their established mix priority.
   `https://gracefell.alyoechosys.dev/` with `ok=true`, zero errors, and the
   weather, accessibility, audio, navigation, retry, victory, and score-history
   contracts intact.
+
+## v2.21 — Codex, "answer the opening" (2026-07-25)
+
+The six remaining enhancement issues described separate features, but they all
+asked the same question: can the player understand and express mastery without
+making a beginner's run less trustworthy? The implementation shares terminal,
+input, telemetry, and touch-layout foundations instead of adding six isolated
+systems.
+
+### Combat verbs preserve defensive truth
+
+ATK during a roll now buffers `rollSlashQueued`. The full 0.42-second roll and
+its iframe window finish first; only then does a 0.30-second, 10-stamina recovery
+slash begin. It deals 18 base damage, does not advance the standing three-hit
+chain, and cannot turn a panic press into an early loss of invulnerability.
+
+A rear hit beyond 110 degrees of Malakar's facing earns 1.25x damage and 1.5x
+poise pressure. It is disabled during windup and stagger, so the facing sample
+is stable and FLANK never compounds the once-per-stagger EXECUTE. FLANK and
+EXECUTE callouts use a higher lane than numeric damage. Terminal transitions
+clear remaining floating combat text so a final hit cannot cover the saved
+grade.
+
+### The chronicle teaches after combat
+
+Run-local telemetry records light, heavy, riposte, and flank damage; Phase 2/3
+entry times; and the final three received-hit sources. It resets with the fight
+and never drives damage, grade, AI, or saves. After the established score hold,
+a compact semantic terminal plate shows the damage mix, phase splits, recent
+wounds on defeat, or the next grade condition on victory. This places analytical
+detail where attention is available instead of adding another live HUD.
+
+Victory now exposes three deliberate DOM actions after 4.5 seconds: REMAIN
+replays the completed path, ASCEND advances exactly one step (including Grace
+toward Measured), and SHARE renders a 1080x1350 PNG locally. Web Share is used
+only when file sharing is supported; otherwise the same Blob downloads. The
+card includes grade, time, trial, date, damage, wounds, and attempt, makes no
+network request, and revokes its object URL.
+
+### One mirrored touch contract
+
+Save schema v7 adds `leftHanded`. `touchLayout()` mirrors the complete action
+cluster, while `Input.leftHanded` mirrors joystick acquisition; heavy-hold
+detection, rendering, fingertip hit-tests, title and semantic toggles, tutorial
+copy, and help copy all read those authorities. Older saves default to the
+established left-stick layout.
+
+### Difficulty disclosure, not retuning
+
+The nine numeric configurations remain unchanged. Positive path summaries now
+name incoming-damage pressure, exact two- versus three-beat chains, flask count,
+poise increase, and FORSAKEN's no-stagger rule. This fixes the observed clarity
+gap without invalidating records or changing what any path asks the player to
+execute.
+
+### Validation
+
+- 19 Vitest checks include the published difficulty table and rear-arc geometry.
+- The established desktop/mobile/true-touch suite passes with `ok=true` and
+  zero console, input, audio, layout, persistence, accessibility, or performance
+  errors.
+- `qa/v221.cjs` proves safe roll-to-slash sequencing, exact 30 versus 37.5
+  front/rear heavy damage, mirrored action/joystick geometry, save-v7
+  handedness, terminal fit at 390x844, a downloadable PNG over 10 KB, and
+  exactly one-step Ascension.
+- The expanded gate exposed an existing Web Audio edge: direct `.value`
+  assignment could overlap a still-ending equal-power curve. Transition
+  completion now holds/cancels automation before setting deck endpoints.
+
+### Changed from v2.20
+
+- Adds roll slash, flank reward, terminal mastery feedback, explicit Ascension,
+  offline victory sharing, and mirrored touch layout.
+- Save schema changes from v6 to v7 with a backward-compatible `leftHanded`
+  default.
+- Difficulty numbers, boss patterns, phase weather, music masters and mix
+  ceilings, standing combo timing, roll iframe duration, grading, and runtime
+  visual/audio assets are unchanged.

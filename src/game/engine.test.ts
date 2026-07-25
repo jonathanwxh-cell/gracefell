@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   clamp, lerp, dist, angTo, angDiff, TAU, seededRandom,
   difficultyForGrace, isScoreHistoryEntry, isVictoryScore,
+  isFlankHit,
   weatherForPhase, weatherMotionScale,
 } from './engine';
 
@@ -29,6 +30,14 @@ describe('math helpers', () => {
     expect(angDiff(0, Math.PI / 2)).toBeCloseTo(Math.PI / 2);
     expect(angDiff(0, TAU)).toBeCloseTo(0);
     expect(Math.abs(angDiff(0, Math.PI + 0.1))).toBeLessThanOrEqual(Math.PI + 1e-9);
+  });
+});
+
+describe('flank geometry', () => {
+  it('rewards the rear arc but not the front or side', () => {
+    expect(isFlankHit(0, 0, 0, -100, 0)).toBe(true);
+    expect(isFlankHit(0, 0, 0, 100, 0)).toBe(false);
+    expect(isFlankHit(0, 0, 0, 0, 100)).toBe(false);
   });
 });
 

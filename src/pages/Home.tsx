@@ -18,10 +18,20 @@ const INITIAL_UI: GameUiSnapshot = {
   shakeEnabled: true,
   flashReduced: false,
   hapticsEnabled: true,
+  leftHanded: false,
   touch: false,
+  terminalReady: false,
+  canAscend: false,
   wins: 0,
   attempts: 0,
+  lastScore: null,
   scoreHistory: [],
+  chronicle: {
+    damageMix: { light: 0, heavy: 0, riposte: 0, flank: 0 },
+    phaseSplits: [0, 0, 0],
+    lastHits: [],
+    gradeGap: '',
+  },
   combat: {
     playerHpPercent: 100,
     playerStaminaPercent: 100,
@@ -82,6 +92,7 @@ export default function Home() {
   const scoresToggleRef = useRef<HTMLButtonElement>(null);
   const [ui, setUi] = useState<GameUiSnapshot>(INITIAL_UI);
   const [dialog, setDialog] = useState<GameDialog>(null);
+  const [shareStatus, setShareStatus] = useState('');
 
   const mixOpen = dialog === 'mix';
   const dialogOpen = dialog !== null;
@@ -164,6 +175,77 @@ export default function Home() {
     setDialog(null);
     act((game) => game.returnToTitle());
     focusGame();
+  };
+
+  const shareVictory = async () => {
+    const score = ui.lastScore;
+    if (!score) return;
+    setShareStatus('Preparing victory card…');
+    const card = document.createElement('canvas');
+    card.width = 1080;
+    card.height = 1350;
+    const ctx = card.getContext('2d');
+    if (!ctx) return;
+    const gradient = ctx.createLinearGradient(0, 0, 1080, 1350);
+    gradient.addColorStop(0, '#241b13');
+    gradient.addColorStop(1, '#070605');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 1080, 1350);
+    ctx.strokeStyle = '#c9a959';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(56, 56, 968, 1238);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#c9a959';
+    ctx.font = '700 54px Cinzel, serif';
+    ctx.fillText('GRACEFELL', 540, 170);
+    ctx.fillStyle = '#f0dfb8';
+    ctx.font = '700 82px Cinzel, serif';
+    ctx.fillText('GREAT ENEMY FELLED', 540, 310);
+    ctx.strokeStyle = '#f0d78c';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.arc(540, 535, 154, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = '#f0d78c';
+    ctx.font = '900 230px Cinzel, serif';
+    ctx.fillText(score.grade, 540, 610);
+    ctx.fillStyle = '#ece0c4';
+    ctx.font = '600 48px "Cormorant Garamond", serif';
+    ctx.fillText(formatFightTime(score.time), 540, 790);
+    ctx.fillText(formatTrial(score.trial), 540, 865);
+    ctx.font = '600 34px "Cormorant Garamond", serif';
+    ctx.fillStyle = '#c7b99b';
+    ctx.fillText(`${Math.round(score.damageDealt)} damage · ${score.woundsTaken} wounds · attempt ${score.attempt}`, 540, 965);
+    const completedAt = ui.scoreHistory[0]?.completedAt;
+    ctx.fillText(formatCompletedAt(completedAt), 540, 1040);
+    ctx.fillStyle = '#c9a959';
+    ctx.font = '600 30px Cinzel, serif';
+    ctx.fillText('THE SOVEREIGN DOES NOT FORGIVE · GRACE ANSWERS', 540, 1190);
+    const blob = await new Promise<Blob | null>((resolve) => card.toBlob(resolve, 'image/png'));
+    if (!blob) {
+      setShareStatus('The card could not be rendered.');
+      return;
+    }
+    const file = new File([blob], `gracefell-${score.grade}-${Math.round(score.time)}s.png`, { type: 'image/png' });
+    try {
+      if (navigator.share && navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ title: 'GRACEFELL victory', text: `Grade ${score.grade} in ${formatFightTime(score.time)}`, files: [file] });
+        setShareStatus('Victory card shared.');
+        return;
+      }
+    } catch (error) {
+      if ((error as DOMException).name === 'AbortError') {
+        setShareStatus('Sharing cancelled.');
+        return;
+      }
+    }
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = file.name;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    setShareStatus('Victory card downloaded.');
   };
 
   const openScores = () => {
@@ -299,7 +381,7 @@ export default function Home() {
           <p id="game-instructions">
             {mixOpen
               ? 'The fight is safely paused while the score keeps playing. Set the music behind the action, test the combat crack, then resume.'
-              : 'Move with WASD or arrow keys, roll with Space, attack with J, use a heavy attack with K, drink a flask with F, and pause or resume with P or Escape. Roll through an attack for a perfect dodge; perfect dodges, heavy attacks, and combo finishers break poise so a staggered Malakar takes extra damage. On touch screens, steer on the left and use the action buttons on the right.'}
+              : `Move with WASD or arrow keys, roll with Space, attack with J, use a heavy attack with K, drink a flask with F, and pause or resume with P or Escape. Press attack during a roll to slash safely after it ends. Striking from behind rewards positioning. On touch screens, steer on the ${ui.leftHanded ? 'right' : 'left'} and use actions on the ${ui.leftHanded ? 'left' : 'right'}.`}
           </p>
           <p id="game-status" aria-live="polite">{ui.status}</p>
           {ui.state === 'fight' && (
@@ -379,13 +461,59 @@ export default function Home() {
                   Flashes {ui.flashReduced ? 'reduced' : 'full'}
                 </button>
                 {ui.touch && (
-                  <button type="button" onClick={() => act((game) => game.toggleHaptics())}>
-                    Haptics {ui.hapticsEnabled ? 'on' : 'off'}
-                  </button>
+                  <>
+                    <button type="button" onClick={() => act((game) => game.toggleHaptics())}>
+                      Haptics {ui.hapticsEnabled ? 'on' : 'off'}
+                    </button>
+                    <button type="button" onClick={() => act((game) => game.toggleLeftHanded())}>
+                      Touch layout {ui.leftHanded ? 'left-handed' : 'right-handed'}
+                    </button>
+                  </>
                 )}
               </>
             )}
           </div>
+        </section>
+      )}
+
+      {dialog === null && ui.terminalReady && (ui.state === 'dead' || ui.state === 'victory') && (
+        <section className="game-terminal-chronicle" aria-label="Fight chronicle">
+          <p className="game-dialog__eyebrow">Fight chronicle</p>
+          <div className="game-terminal-chronicle__grid">
+            <div>
+              <strong>Damage mix</strong>
+              <span>
+                {Object.entries(ui.chronicle.damageMix)
+                  .filter(([, value]) => value > 0)
+                  .map(([kind, value]) => `${kind} ${Math.round(value)}`)
+                  .join(' · ') || 'No damage recorded'}
+              </span>
+            </div>
+            <div>
+              <strong>Phase splits</strong>
+              <span>{ui.chronicle.phaseSplits.map((seconds, index) => `P${index + 1} ${formatFightTime(seconds)}`).join(' · ')}</span>
+            </div>
+            <div>
+              <strong>{ui.state === 'victory' ? 'Next seal' : 'Last wounds'}</strong>
+              <span>
+                {ui.state === 'victory'
+                  ? ui.chronicle.gradeGap
+                  : ui.chronicle.lastHits.map((hit) => `${hit.source} at ${formatFightTime(hit.at)}`).join(' · ') || 'No wounds recorded'}
+              </span>
+            </div>
+          </div>
+          {ui.state === 'victory' && (
+            <div className="game-terminal-chronicle__actions">
+              <button type="button" className="is-primary" onClick={() => act((game) => game.replayVictory(false))}>
+                REMAIN · FIGHT AGAIN
+              </button>
+              <button type="button" disabled={!ui.canAscend} onClick={() => act((game) => game.replayVictory(true))}>
+                {ui.canAscend ? 'ASCEND · NEXT OATH' : 'OATH SUMMIT REACHED'}
+              </button>
+              <button type="button" onClick={shareVictory}>SHARE VICTORY</button>
+            </div>
+          )}
+          <p className="game-terminal-chronicle__status" aria-live="polite">{shareStatus}</p>
         </section>
       )}
 
