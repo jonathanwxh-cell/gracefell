@@ -1788,3 +1788,7 @@ execute.
 - Difficulty numbers, boss patterns, phase weather, music masters and mix
   ceilings, standing combo timing, roll iframe duration, grading, and runtime
   visual/audio assets are unchanged.
+- The implementation passed GitHub Actions run 30139153859, merged through PR
+  #66 as `6bc004d`, deployed to the active zero-restart user service, and passed
+  both complete and v2.21-focused public QA with zero errors. Exact receipts are
+  preserved in `docs/releases/v2.21.md`.
