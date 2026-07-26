@@ -46,6 +46,7 @@ function runScript(script) {
     }
     await runScript('qa/verify.cjs');
     await runScript('qa/v221.cjs');
+    await runScript('qa/v224.cjs');
     await runScript('qa/perf.cjs');
   } finally {
     if (server) server.kill();

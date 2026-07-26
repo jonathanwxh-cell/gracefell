@@ -4,6 +4,7 @@ import {
   difficultyForGrace, isScoreHistoryEntry, isVictoryScore,
   isFlankHit,
   weatherForPhase, weatherMotionScale,
+  attackStretchImpulse, ATTACK_STRETCH_DURATION,
 } from './engine';
 
 describe('math helpers', () => {
@@ -148,5 +149,35 @@ describe('isScoreHistoryEntry — save-schema v6 history validator', () => {
     expect(isScoreHistoryEntry(valid)).toBe(false);
     expect(isScoreHistoryEntry({ ...valid, completedAt: '' })).toBe(false);
     expect(isScoreHistoryEntry({ ...valid, completedAt: 'after the battle' })).toBe(false);
+  });
+});
+
+describe('attack stretch impulse (v2.24 impact frames)', () => {
+  it('is zero for every non-attacking state', () => {
+    for (const s of ['move', 'roll', 'flask', 'stagger', 'dead']) {
+      expect(attackStretchImpulse(s, 0)).toBe(0);
+      expect(attackStretchImpulse(s, 0.05)).toBe(0);
+    }
+  });
+  it('peaks at the start of a swing and decays to zero', () => {
+    expect(attackStretchImpulse('light', 0)).toBe(1);
+    expect(attackStretchImpulse('light', ATTACK_STRETCH_DURATION / 2)).toBeCloseTo(0.5);
+    expect(attackStretchImpulse('light', ATTACK_STRETCH_DURATION)).toBe(0);
+  });
+  it('never returns a negative impulse once the window has passed', () => {
+    expect(attackStretchImpulse('heavy', ATTACK_STRETCH_DURATION * 5)).toBe(0);
+    expect(attackStretchImpulse('rollSlash', 99)).toBe(0);
+  });
+  it('applies to all three attack verbs', () => {
+    for (const s of ['light', 'heavy', 'rollSlash']) {
+      expect(attackStretchImpulse(s, 0)).toBeGreaterThan(0);
+    }
+  });
+  it('stays inside 0..1 so callers can scale it directly', () => {
+    for (let t = -0.1; t < 1; t += 0.01) {
+      const v = attackStretchImpulse('light', t);
+      expect(v).toBeGreaterThanOrEqual(0);
+      expect(v).toBeLessThanOrEqual(1);
+    }
   });
 });

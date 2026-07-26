@@ -848,7 +848,20 @@ export class Player {
     if (rolling) ctx.rotate(rollSpin * 0.9);
 
     if (!blink) {
-      this.drawKiteVeilBody(ctx, rolling);
+      // Impact frame: stretch along facing, squash across it, for the first
+      // 0.16 s of a swing. Applied to the transform around the authored
+      // silhouette so the state shapes themselves are unchanged.
+      const stretch = attackStretchImpulse(this.state, this.t);
+      if (stretch > 0) {
+        ctx.save();
+        ctx.rotate(this.facing);
+        ctx.scale(1 + 0.17 * stretch, 1 - 0.11 * stretch);
+        ctx.rotate(-this.facing);
+        this.drawKiteVeilBody(ctx, rolling);
+        ctx.restore();
+      } else {
+        this.drawKiteVeilBody(ctx, rolling);
+      }
       // The seal hands the completed flask animation to the existing heal ring.
       if (this.healPulse > 0) {
         ctx.globalAlpha = this.healPulse;
@@ -868,19 +881,40 @@ export class Player {
       const len = inAtk ? (this.state === 'heavy' ? 88 : 74) : 34;
       const a = inAtk ? sw : this.facing + 0.9;
       // trail ribbon
-      if (inAtk && this.swordTip.length > 1) {
+      // One continuously tapered strip instead of up to nine constant-width
+      // segments. The old loop stepped lineWidth and alpha per segment, so the
+      // arc showed banding at its joins; a single polygon tapers smoothly and
+      // costs one fill rather than nine strokes.
+      if (inAtk && this.swordTip.length > 2) {
+        const pts = this.swordTip;
+        const last = pts.length - 1;
+        const maxHalf = this.state === 'heavy' ? 4 : 3.2;
+        // Half-width at point i, tapering to nothing at the oldest sample.
+        const halfAt = (i: number) => (i / last) * maxHalf;
+        // Normal from a central difference, so the edge follows the swing arc.
+        const normalAt = (i: number) => {
+          const prev = pts[Math.max(0, i - 1)];
+          const next = pts[Math.min(last, i + 1)];
+          const dx = next.x - prev.x, dy = next.y - prev.y;
+          const len = Math.hypot(dx, dy) || 1;
+          const h = halfAt(i);
+          return { nx: (-dy / len) * h, ny: (dx / len) * h };
+        };
         ctx.save();
-        ctx.globalAlpha = 0.55;
-        ctx.strokeStyle = this.state === 'heavy' ? PAL.goldBright : '#dfe6ee';
-        ctx.lineCap = 'round';
-        for (let i = 1; i < this.swordTip.length; i++) {
-          ctx.lineWidth = (i / this.swordTip.length) * 7;
-          ctx.globalAlpha = (i / this.swordTip.length) * 0.5;
-          ctx.beginPath();
-          ctx.moveTo(this.swordTip[i - 1].x, this.swordTip[i - 1].y);
-          ctx.lineTo(this.swordTip[i].x, this.swordTip[i].y);
-          ctx.stroke();
+        ctx.globalAlpha = 0.5;
+        ctx.fillStyle = this.state === 'heavy' ? PAL.goldBright : '#dfe6ee';
+        ctx.beginPath();
+        for (let i = 0; i <= last; i++) {
+          const { nx, ny } = normalAt(i);
+          if (i === 0) ctx.moveTo(pts[i].x + nx, pts[i].y + ny);
+          else ctx.lineTo(pts[i].x + nx, pts[i].y + ny);
         }
+        for (let i = last; i >= 0; i--) {
+          const { nx, ny } = normalAt(i);
+          ctx.lineTo(pts[i].x - nx, pts[i].y - ny);
+        }
+        ctx.closePath();
+        ctx.fill();
         ctx.restore();
       }
       ctx.save();
@@ -938,6 +972,9 @@ export class Boss {
   executeConsumed = false; // one stagger execution (riposte) per poise break
   cooldowns: Record<BossAttack, number> = { swipe: 0, slam: 0, charge: 0, volley: 0, meteor: 0, ring: 0, spiral: 0 };
   aura = 0; hurtFlash = 0;
+  // Visual-only knockback: the drawn body gives ground on a hit while the
+  // collision circle, position and AI stay exactly where they were.
+  recoil = 0; recoilAng = 0;
   meteorQueue: Meteor[] = [];
   swordAng = 0;
   embers = 0;
@@ -961,6 +998,7 @@ export class Boss {
     this.t -= dt;
     this.aura = Math.max(0, this.aura - dt);
     this.hurtFlash = Math.max(0, this.hurtFlash - dt);
+    this.recoil = Math.max(0, this.recoil - dt * 40);
     this.embers += dt;
     this.foleyT -= dt;
     this.chargeFoleyT -= dt;
@@ -1334,6 +1372,9 @@ export class Boss {
     const heavyImpact = impact === 'heavy' || (impact === undefined && dmg > 20);
     game.audio.hit(heavyImpact, game.audioSpatial(this.x, this.y), game.player.comboStep);
     const a = angTo(fromX, fromY, this.x, this.y);
+    // Give ground along the blow. Render-only — see the field declaration.
+    this.recoil = dmg > 20 ? 6.5 : 3.5;
+    this.recoilAng = a;
     game.sparks(this.x - Math.cos(a) * this.r * 0.5, this.y - Math.sin(a) * this.r * 0.5, dmg > 20 ? 16 : 9);
     const damageColor = impact === 'finisher' ? PAL.spirit : dmg > 20 ? PAL.goldBright : PAL.parchment;
     game.addDamageNum(this.x + rand(-16, 16), this.y - this.r - 8, Math.round(final).toString(), damageColor, dmg > 20 ? 26 : 19);
@@ -1421,7 +1462,9 @@ export class Boss {
     ctx.beginPath(); ctx.ellipse(x, y + this.r * 0.85, this.r * 1.15, this.r * 0.45, 0, 0, TAU); ctx.fill();
 
     ctx.save();
-    ctx.translate(x, y);
+    // The shadow above stays planted; only the body gives ground.
+    ctx.translate(x + Math.cos(this.recoilAng) * this.recoil,
+      y + Math.sin(this.recoilAng) * this.recoil);
     if (this.state === 'staggered') ctx.rotate(Math.sin(game.time * 3) * 0.05 + 0.12);
 
     // aura
@@ -1801,6 +1844,18 @@ export function isFlankHit(
 // Thumb cluster, measured in "base" units out from the bottom-right corner.
 // ox/oy are centre offsets (left/up from the corner), ur is radius x base.
 // ATK sits under the thumb; ROLL is the next most-used so it's adjacent.
+// v2.24 impact frames. A swing briefly stretches the body along its facing and
+// squashes it across. The anticipation lives in the transform, not in the
+// silhouette, so the authored Kite-Veil state shapes are untouched and the
+// design-qa.md macro-shape contract still holds at the 0.55 mobile camera.
+// Visual only: it reads from `state`/`t` and feeds nothing back into combat.
+export const ATTACK_STRETCH_DURATION = 0.16;
+const STRETCH_STATES = new Set(['light', 'heavy', 'rollSlash']);
+export function attackStretchImpulse(state: string, t: number): number {
+  if (!STRETCH_STATES.has(state)) return 0;
+  return clamp(1 - t / ATTACK_STRETCH_DURATION, 0, 1);
+}
+
 const TOUCH_BTNS = [
   { id: 'light', label: 'ATK', ox: 1.05, oy: 1.05, ur: 1.00 },
   { id: 'roll', label: 'ROLL', ox: 3.00, oy: 0.95, ur: 0.80 },
