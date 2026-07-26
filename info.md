@@ -1,7 +1,7 @@
 # GRACEFELL project facts
 
-- Current package: `gracefell@2.25.0`
-- Current release: `v2.25`, accepted on GitHub and production
+- Current package: `gracefell@2.26.0`
+- Current release candidate: `v2.26` combat-audio consequence pass
 - Visual release: Blender-authored cached arena + Canvas-first Malakar
 - Character foundation: Kite-Veil Penitent + Fallen Blade-Saint
 - Production: <https://gracefell.alyoechosys.dev>
@@ -32,6 +32,8 @@ npm run qa
 
 `npm run qa` is the acceptance gate. It builds the app, starts an isolated server on
 `127.0.0.1:8492`, and drives desktop, mobile, and real-touch Chromium paths. See
+[`docs/releases/v2.26.md`](docs/releases/v2.26.md) for charged-heavy,
+hurt-tier, closest-pass, denial, ward, and grade-seal audio ownership,
 [`docs/releases/v2.25.md`](docs/releases/v2.25.md) for Blender source assets,
 Canvas-first runtime integration, fallback behavior, visual QA, and release
 evidence,
@@ -65,6 +67,7 @@ original Journey/Oaths, teaching, death-recovery, visible-combo, and save-v4 des
 - [`design-qa.md`](design-qa.md) — source-normalized mobile/desktop character comparisons
 - [`docs/visual-upgrade/BLENDER_2_5D_VISUAL_SPEC.md`](docs/visual-upgrade/BLENDER_2_5D_VISUAL_SPEC.md) — v2.25 art direction, budgets, renderer decision, and acceptance contract
 - [`docs/visual-upgrade/ASSET_PIPELINE.md`](docs/visual-upgrade/ASSET_PIPELINE.md) — reproducible Blender generation, optimisation, cache, and fallback instructions
+- [`docs/releases/v2.26.md`](docs/releases/v2.26.md) — v2.26 combat-audio consequence contracts and release evidence
 - [`docs/releases/v2.25.md`](docs/releases/v2.25.md) — v2.25 implementation, QA, and deployment record
 - [`docs/releases/v2.20.md`](docs/releases/v2.20.md) — v2.20 fixed-pool Ash Gale weather and production acceptance
 - [`docs/releases/v2.21.md`](docs/releases/v2.21.md) — v2.21 combat mastery, terminal actions, sharing, handedness, and save-v7 acceptance

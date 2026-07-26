@@ -141,7 +141,11 @@ interface Particle {
   shape: 'circle' | 'spark' | 'wisp';
 }
 interface DamageNum { x: number; y: number; vy: number; life: number; maxLife: number; text: string; color: string; size: number; }
-interface Projectile { x: number; y: number; vx: number; vy: number; r: number; dmg: number; life: number; hostile: boolean; hue: string; source?: BossAttack; }
+interface Projectile {
+  x: number; y: number; vx: number; vy: number; r: number; dmg: number; life: number;
+  hostile: boolean; hue: string; source?: BossAttack;
+  nearMissed?: boolean; closestPlayerDist?: number;
+}
 interface RingWave { x: number; y: number; r: number; speed: number; thickness: number; dmg: number; maxR: number; hostile: boolean; hitDone: boolean; }
 interface Meteor { x: number; y: number; fuse: number; maxFuse: number; r: number; dmg: number; }
 type PlayerImpact = 'light' | 'finisher' | 'heavy';
@@ -413,6 +417,7 @@ export class Player {
   queuedLightAttacks = 0;
   rollSlashQueued = false;
   stepT = 0; // footstep cadence timer while moving
+  wardContact = false;
   trail: { x: number; y: number; a: number; life: number }[] = [];
   swordTip: { x: number; y: number }[] = [];
   capePhase = 0;
@@ -455,7 +460,19 @@ export class Player {
     // state transitions
     if (this.state === 'move' || this.state === 'flask') {
       const queuedLight = this.queuedLightAttacks > 0;
-      if (this.state === 'move' && queuedLight && this.stam < 12) this.queuedLightAttacks = 0;
+      if (this.state === 'move' && queuedLight && this.stam < 12) {
+        game.audio.staminaEmpty(game.audioSpatial(this.x, this.y));
+        this.queuedLightAttacks = 0;
+      }
+      if (this.state === 'move' && (
+        (input.hasBuffered('roll') && this.stam < 20)
+        || (input.hasBuffered('light') && this.stam < 12)
+        || (input.hasBuffered('heavy') && this.stam < 26)
+      )) {
+        // Warn without consuming the command: the established 260 ms input
+        // buffer can still execute it if regeneration crosses the threshold.
+        game.audio.staminaEmpty(game.audioSpatial(this.x, this.y));
+      }
       if (this.stam >= 20 && this.state !== 'flask' && input.consume('roll')) {
         this.state = 'roll'; this.t = 0.42;
         this.comboStep = 0; this.comboWindow = 0; this.queuedLightAttacks = 0; this.rollSlashQueued = false;
@@ -487,7 +504,6 @@ export class Player {
         const b = game.boss;
         if (b && b.hp > 0) this.facing = angTo(this.x, this.y, b.x, b.y);
         this.lungeVx = Math.cos(this.facing) * 300; this.lungeVy = Math.sin(this.facing) * 300;
-        game.audio.swingHeavy(game.audioSpatial(this.x, this.y));
       } else if (this.flasks > 0 && this.hp < this.maxHp && this.state === 'move' && input.consume('flask')) {
         this.state = 'flask'; this.t = 1.0;
         this.flasks--;
@@ -581,6 +597,7 @@ export class Player {
           if (this.heavyCharging) game.audio.chargeLoopStop();
           this.heavyCharging = false;
           if (heavy) this.charge01 = clamp(this.heavyChargeT / Player.HEAVY_MAX_CHARGE, 0, 1);
+          if (heavy) game.audio.swingHeavy(game.audioSpatial(this.x, this.y), this.charge01);
           game.playerStrike(heavy, rollSlash);
         }
       }
@@ -610,7 +627,19 @@ export class Player {
     const impulseDecay = Math.exp(-8 * dt);
     this.impulseVx *= impulseDecay;
     this.impulseVy *= impulseDecay;
-    game.clampArena(this);
+    const radialDistance = Math.hypot(this.x, this.y);
+    const outwardSpeed = radialDistance > 0
+      ? (this.vx * this.x + this.vy * this.y) / radialDistance
+      : 0;
+    const clamped = game.clampArena(this);
+    if (clamped) {
+      if (!this.wardContact && outwardSpeed > 70) {
+        game.audio.wardChime(game.audioSpatial(this.x, this.y));
+      }
+      this.wardContact = true;
+    } else {
+      this.wardContact = false;
+    }
     this.updateTrail(dt);
   }
 
@@ -656,7 +685,7 @@ export class Player {
     }
     this.comboStep = 0; this.comboWindow = 0; this.queuedLightAttacks = 0; this.rollSlashQueued = false;
     game.breakPlayerChain();
-    game.audio.chargeLoopStop();
+    game.audio.chargeLoopStop(true);
     game.lastDamageSource = source;
     this.rollIframes = 0;
     dmg = Math.max(1, Math.round(dmg * game.mods.dmgTaken));
@@ -665,7 +694,7 @@ export class Player {
     this.hurtFlash = 0.35;
     const a = angTo(sx, sy, this.x, this.y);
     this.vx = Math.cos(a) * 330; this.vy = Math.sin(a) * 330;
-    game.audio.playerHurt(game.audioSpatial(this.x, this.y), dmg >= 20);
+    game.audio.playerHurt(game.audioSpatial(this.x, this.y), dmg);
     game.vibrate(dmg >= 20 ? [24, 24, 38] : [18, 18, 24]);
     game.shake(10, 0.3);
     game.redFlash = 0.5;
@@ -1367,7 +1396,7 @@ export class Boss {
     this.vx *= 0.2; this.vy *= 0.2;
   }
 
-  takeDamage(dmg: number, game: Game, fromX: number, fromY: number, impact?: PlayerImpact): number {
+  takeDamage(dmg: number, game: Game, fromX: number, fromY: number, impact?: PlayerImpact, charge = 0): number {
     if (game.state !== 'fight') return 0;
     if (this.state === 'dying' || this.state === 'spawn') return 0;
     const staggered = this.state === 'staggered';
@@ -1380,7 +1409,7 @@ export class Boss {
     if (dmg > 20) game.zoomPunch = Math.max(game.zoomPunch, 0.045);
     game.shake(dmg > 20 ? 7 : 4, 0.2);
     const heavyImpact = impact === 'heavy' || (impact === undefined && dmg > 20);
-    game.audio.hit(heavyImpact, game.audioSpatial(this.x, this.y), game.player.comboStep);
+    game.audio.hit(heavyImpact, game.audioSpatial(this.x, this.y), game.player.comboStep, charge);
     const a = angTo(fromX, fromY, this.x, this.y);
     // Give ground along the blow. Render-only — see the field declaration.
     this.recoil = dmg > 20 ? 6.5 : 3.5;
@@ -1996,6 +2025,7 @@ export class Game {
   private trialMods: DifficultyMods | null = null;
   // persistence
   bestTime = 0; wins = 0; newRecord = false; grade = '';
+  gradeStampPlayed = false;
   bests: Record<string, number> = {};
   lastScore: VictoryScore | null = null;
   bestScores: Record<string, VictoryScore> = {};
@@ -2212,10 +2242,15 @@ export class Game {
   };
 
   // ------------------------------------------------------------ helpers
-  clampArena(e: { x: number; y: number; r: number }) {
+  clampArena(e: { x: number; y: number; r: number }): boolean {
     const d = Math.hypot(e.x, e.y);
     const max = this.arenaR - e.r - 6;
-    if (d > max) { e.x = (e.x / d) * max; e.y = (e.y / d) * max; }
+    if (d > max) {
+      e.x = (e.x / d) * max;
+      e.y = (e.y / d) * max;
+      return true;
+    }
+    return false;
   }
   audioSpatial(x: number, y: number): SpatialAudio {
     const dx = x - this.player.x;
@@ -3206,7 +3241,14 @@ export class Game {
           this.audio.execute(this.audioSpatial(b.x, b.y));
         } else {
           const base = (heavy || finisher || rollSlash) ? dmg : dmg + Math.floor(rand(-2, 3));
-          const dealt = b.takeDamage(base * (flank ? 1.25 : 1), this, p.x, p.y, impact);
+          const dealt = b.takeDamage(
+            base * (flank ? 1.25 : 1),
+            this,
+            p.x,
+            p.y,
+            impact,
+            heavy ? p.charge01 : 0,
+          );
           const kind: DamageKind = flank ? 'flank' : heavy ? 'heavy' : 'light';
           this.damageMix[kind] += dealt;
           if (flank) {
@@ -3309,6 +3351,7 @@ export class Game {
     this.dmgNums = [];
     this.terminalConfirmSequence = this.input.confirmSequence;
     this.state = 'victory'; this.stateT = 0;
+    this.gradeStampPlayed = false;
     this.goldFlash = 0.8;
     this.audio.victoryChord();
     this.wins++;
@@ -3359,6 +3402,7 @@ export class Game {
     this.input.clearCombatActions();
     this.player = new Player();
     this.boss = new Boss();
+    this.gradeStampPlayed = false;
     const m = this.difficultyForGrace(this.grace);
     this.trialMods = { ...m };
     this.boss.extraSpeed = m.bossSpeed;
@@ -3692,6 +3736,10 @@ export class Game {
         this.state = 'intro'; this.stateT = 0;
       }
     } else if (this.state === 'victory') {
+      if (!this.gradeStampPlayed && this.stateT >= 1.5) {
+        this.gradeStampPlayed = true;
+        this.audio.gradeStamp(this.grade);
+      }
       // Do not let a celebratory double-click queue a restart behind the
       // reveal. The scorecard owns the screen until the prompt appears, then
       // requires one fresh confirmation.
@@ -3815,7 +3863,10 @@ export class Game {
   private updateProjectiles(dt: number) {
     const p = this.player;
     for (const pr of this.projectiles) {
+      const before = dist(pr.x, pr.y, p.x, p.y);
       pr.x += pr.vx * dt; pr.y += pr.vy * dt; pr.life -= dt;
+      const after = dist(pr.x, pr.y, p.x, p.y);
+      pr.closestPlayerDist = Math.min(pr.closestPlayerDist ?? before, before, after);
       if (Math.random() < dt * 30) {
         this.addParticle({
           x: pr.x, y: pr.y, vx: rand(-20, 20), vy: rand(-20, 20), life: 0.3, maxLife: 0.3,
@@ -3823,7 +3874,17 @@ export class Game {
         });
       }
       if (pr.hostile && dist(pr.x, pr.y, p.x, p.y) < pr.r + p.r) {
+        pr.nearMissed = true;
         if (p.takeDamage(pr.dmg, pr.x - pr.vx * 0.1, pr.y - pr.vy * 0.1, this, pr.source ?? 'volley')) pr.life = 0;
+      } else if (
+        pr.hostile
+        && !pr.nearMissed
+        && after > before + 0.25
+        && (pr.closestPlayerDist ?? Infinity) > pr.r + p.r + 2
+        && (pr.closestPlayerDist ?? Infinity) <= pr.r + p.r + 44
+      ) {
+        pr.nearMissed = true;
+        this.audio.nearMiss(this.audioSpatial(pr.x, pr.y));
       }
       if (Math.hypot(pr.x, pr.y) > this.arenaR + 40) pr.life = 0;
     }

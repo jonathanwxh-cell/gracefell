@@ -1166,8 +1166,8 @@ export class GameAudio {
     );
   }
 
-  chargeLoopStop() {
-    this.stopSustainedCues(false);
+  chargeLoopStop(immediate = false) {
+    this.stopSustainedCues(immediate);
   }
 
   stopSustainedCues(immediate = false) {
@@ -1178,8 +1178,8 @@ export class GameAudio {
     try {
       voice.gain.gain.cancelScheduledValues(now);
       if (immediate) voice.gain.gain.setValueAtTime(0.0001, now);
-      else voice.gain.gain.setTargetAtTime(0.0001, now, 0.04);
-      voice.source.stop(now + (immediate ? 0 : 0.18));
+      else voice.gain.gain.setTargetAtTime(0.0001, now, 0.018);
+      voice.source.stop(now + (immediate ? 0 : 0.09));
       if (immediate) voice.cleanup();
     } catch {
       voice.cleanup();
@@ -1309,39 +1309,49 @@ export class GameAudio {
     this.tone({ freq: 280 + lift * 38, freqEnd: 150 + lift * 24, dur: 0.11, type: 'triangle', gain: 0.045, spatial, variation, priority: 'critical' });
   }
 
-  swingHeavy(spatial: SpatialInput = 0) {
+  swingHeavy(spatial: SpatialInput = 0, charge = 0) {
     if (!this.allowCue('swing-heavy', 0.055)) return;
-    this.duckMusic(0.36, 0.4);
-    if (this.playSample({ name: 'swing-heavy', gain: 0.5, spatial, reverb: 0.28, priority: 'critical' })) {
-      this.phoneTransient(spatial, 0.105, 2800, 0.025);
-      return;
-    }
-    const variation = this.vary('swing-heavy', 0.72);
-    this.noise({ dur: 0.31, gain: 0.23, freq: 1650, freqEnd: 210, q: 1.15, spatial, reverb: 0.08, variation, priority: 'critical' });
-    this.tone({ freq: 180, freqEnd: 62, dur: 0.25, type: 'triangle', gain: 0.11, spatial, variation, priority: 'critical' });
-  }
-
-  hit(heavy = false, spatial: SpatialInput = 0, variant = 0) {
-    const key = heavy ? 'hit-heavy' : 'hit';
-    if (!this.allowCue(key, 0.035)) return;
-    this.duckMusic(heavy ? 0.5 : 0.62, heavy ? 0.34 : 0.2);
+    const amount = Math.max(0, Math.min(1, charge));
+    this.duckMusic(0.36 - amount * 0.06, 0.4 + amount * 0.08);
     if (this.playSample({
-      name: heavy ? 'hit-heavy' : 'hit-light',
-      gain: heavy ? 0.56 : 0.44,
+      name: 'swing-heavy',
+      gain: 0.5 + amount * 0.09,
+      rate: 1 - amount * 0.16,
       spatial,
-      reverb: heavy ? 0.27 : 0.18,
+      reverb: 0.28 + amount * 0.07,
       priority: 'critical',
     })) {
-      if (heavy) this.phoneTransient(spatial, 0.16, 3100, 0.022);
+      this.phoneTransient(spatial, 0.105 + amount * 0.025, 2800 - amount * 500, 0.025);
       return;
     }
-    const variation = this.vary(`${key}-${variant % 3}`, 0.7, true);
+    const variation = this.vary(`swing-heavy-${Math.round(amount * 2)}`, 0.72);
+    this.noise({ dur: 0.31 + amount * 0.08, gain: 0.23 + amount * 0.035, freq: 1650 - amount * 340, freqEnd: 210 - amount * 45, q: 1.15, spatial, reverb: 0.08 + amount * 0.04, variation, priority: 'critical' });
+    this.tone({ freq: 180 - amount * 34, freqEnd: 62 - amount * 15, dur: 0.25 + amount * 0.09, type: 'triangle', gain: 0.11 + amount * 0.035, spatial, variation, priority: 'critical' });
+  }
+
+  hit(heavy = false, spatial: SpatialInput = 0, variant = 0, charge = 0) {
+    const amount = heavy ? Math.max(0, Math.min(1, charge)) : 0;
+    const key = heavy ? 'hit-heavy' : 'hit';
+    if (!this.allowCue(key, 0.035)) return;
+    this.duckMusic(heavy ? 0.5 - amount * 0.08 : 0.62, heavy ? 0.34 + amount * 0.08 : 0.2);
+    if (this.playSample({
+      name: heavy ? 'hit-heavy' : 'hit-light',
+      gain: heavy ? 0.56 + amount * 0.1 : 0.44,
+      rate: heavy ? 1 - amount * 0.18 : 1,
+      spatial,
+      reverb: heavy ? 0.27 + amount * 0.06 : 0.18,
+      priority: 'critical',
+    })) {
+      if (heavy) this.phoneTransient(spatial, 0.16 + amount * 0.025, 3100 - amount * 500, 0.022);
+      return;
+    }
+    const variation = this.vary(`${key}-${variant % 3}-${Math.round(amount * 2)}`, 0.7, true);
     // Keep one phone-speaker contact crack inside the reserved critical budget.
     // This replaces the expendable >9 kHz light transient rather than adding a
     // new layer or voice.
     this.noise({
       dur: heavy ? 0.009 : 0.014,
-      gain: heavy ? 0.34 : 0.29,
+      gain: heavy ? 0.34 + amount * 0.04 : 0.29,
       type: heavy ? 'highpass' : 'bandpass',
       freq: heavy ? 7600 : 3200,
       freqEnd: heavy ? 5200 : 1450,
@@ -1351,14 +1361,14 @@ export class GameAudio {
       variation,
       priority: 'critical',
     });
-    this.noise({ dur: heavy ? 0.19 : 0.11, gain: heavy ? 0.3 : 0.22, type: 'bandpass', freq: heavy ? 620 : 880, freqEnd: heavy ? 190 : 310, q: 0.9, spatial, reverb: heavy ? 0.16 : 0.08, variation, priority: heavy ? 'critical' : 'normal' });
+    this.noise({ dur: heavy ? 0.19 + amount * 0.06 : 0.11, gain: heavy ? 0.3 + amount * 0.04 : 0.22, type: 'bandpass', freq: heavy ? 620 - amount * 100 : 880, freqEnd: heavy ? 190 - amount * 35 : 310, q: 0.9, spatial, reverb: heavy ? 0.16 + amount * 0.04 : 0.08, variation, priority: heavy ? 'critical' : 'normal' });
     const now = this.now();
-    const subDur = heavy ? 0.38 : 0.19;
+    const subDur = heavy ? 0.38 + amount * 0.1 : 0.19;
     if (now >= this.subGateUntil) {
       this.subGateUntil = now + subDur * 0.92;
-      this.tone({ freq: heavy ? 92 : 118, freqEnd: heavy ? 30 : 46, dur: subDur, type: 'sine', gain: heavy ? 0.43 : 0.24, spatial, reverb: heavy ? 0.14 : 0.04, variation, priority: heavy ? 'critical' : 'normal' });
+      this.tone({ freq: heavy ? 92 - amount * 16 : 118, freqEnd: heavy ? 30 - amount * 5 : 46, dur: subDur, type: 'sine', gain: heavy ? 0.43 + amount * 0.07 : 0.24, spatial, reverb: heavy ? 0.14 + amount * 0.03 : 0.04, variation, priority: heavy ? 'critical' : 'normal' });
     }
-    this.metalResonance(heavy ? 122 : 164, heavy, spatial, variation);
+    this.metalResonance(heavy ? 122 - amount * 16 : 164, heavy, spatial, variation);
   }
 
   dodge(spatial: SpatialInput = 0) {
@@ -1370,23 +1380,29 @@ export class GameAudio {
     this.tone({ freq: 150, freqEnd: 82, dur: 0.16, type: 'sine', gain: 0.045, spatial, variation, priority: 'critical' });
   }
 
-  playerHurt(spatial: SpatialInput = 0, heavy = true) {
-    this.duckMusic(0.28, 0.46);
+  playerHurt(spatial: SpatialInput = 0, damage = 24) {
+    if (!this.allowCue('player-hurt', 0.11)) return;
+    const severity = damage <= 12 ? 'light' : damage <= 20 ? 'medium' : 'heavy';
+    const heavy = severity === 'heavy';
+    const medium = severity === 'medium';
+    this.duckMusic(heavy ? 0.24 : medium ? 0.32 : 0.42, heavy ? 0.54 : medium ? 0.44 : 0.32);
     if (this.playSample({
-      name: heavy ? 'hurt-heavy-1' : 'hurt-light-1',
-      gain: heavy ? 0.54 : 0.42,
+      name: severity === 'light' ? 'hurt-light-1' : 'hurt-heavy-1',
+      gain: heavy ? 0.57 : medium ? 0.48 : 0.38,
+      rate: heavy ? 0.88 : medium ? 1.02 : 1.1,
       spatial,
-      reverb: heavy ? 0.23 : 0.16,
+      reverb: heavy ? 0.25 : medium ? 0.2 : 0.13,
       priority: 'critical',
     })) {
-      this.phoneTransient(spatial, heavy ? 0.11 : 0.07, heavy ? 1900 : 2300, 0.03);
+      this.phoneTransient(spatial, heavy ? 0.12 : medium ? 0.09 : 0.06, heavy ? 1750 : medium ? 2050 : 2450, heavy ? 0.034 : 0.026);
+      if (heavy) this.tone({ freq: 68, freqEnd: 36, dur: 0.3, type: 'sine', gain: 0.16, when: this.now() + 0.06, spatial, reverb: 0.1, priority: 'critical' });
       return;
     }
-    const variation = this.vary(`player-hurt-${heavy ? 'heavy' : 'light'}`, 0.52, true);
-    this.noise({ dur: 0.007, gain: 0.2, type: 'highpass', freq: 7200, freqEnd: 4300, spatial, reverb: 0.035, variation, priority: 'critical' });
-    this.noise({ dur: 0.075, gain: 0.31, type: 'bandpass', freq: 1050, freqEnd: 680, q: 2.1, spatial, reverb: 0.08, variation, priority: 'critical' });
-    this.tone({ freq: 218, freqEnd: 74, dur: 0.27, type: 'square', gain: 0.15, spatial, reverb: 0.07, variation, priority: 'critical' });
-    this.tone({ freq: 72, freqEnd: 42, dur: 0.32, type: 'sine', gain: 0.22, spatial, variation, priority: 'critical' });
+    const variation = this.vary(`player-hurt-${severity}`, 0.52, true);
+    this.noise({ dur: 0.007, gain: heavy ? 0.22 : medium ? 0.18 : 0.14, type: 'highpass', freq: heavy ? 6500 : 7600, freqEnd: heavy ? 3900 : 4700, spatial, reverb: 0.035, variation, priority: 'critical' });
+    this.noise({ dur: heavy ? 0.09 : medium ? 0.075 : 0.055, gain: heavy ? 0.32 : medium ? 0.27 : 0.21, type: 'bandpass', freq: heavy ? 870 : medium ? 1050 : 1320, freqEnd: heavy ? 520 : medium ? 680 : 920, q: 2.1, spatial, reverb: 0.08, variation, priority: 'critical' });
+    this.tone({ freq: heavy ? 178 : medium ? 218 : 264, freqEnd: heavy ? 58 : medium ? 74 : 112, dur: heavy ? 0.31 : medium ? 0.25 : 0.18, type: 'square', gain: heavy ? 0.16 : medium ? 0.13 : 0.09, spatial, reverb: 0.07, variation, priority: 'critical' });
+    if (heavy) this.tone({ freq: 68, freqEnd: 36, dur: 0.34, type: 'sine', gain: 0.21, when: this.now() + 0.06, spatial, reverb: 0.09, variation, priority: 'critical' });
   }
 
   flask() {
@@ -1654,6 +1670,13 @@ export class GameAudio {
     this.tone({ freq: 960, freqEnd: 620, dur: 0.12, type: 'triangle', gain: 0.055, reverb: 0.12 });
   }
 
+  staminaEmpty(spatial: SpatialInput = 0) {
+    if (!this.allowCue('stamina-empty', 0.35)) return;
+    const variation = this.vary('stamina-empty', 0.28);
+    this.noise({ dur: 0.16, gain: 0.045, type: 'lowpass', freq: 760, freqEnd: 280, q: 0.7, spatial, reverb: 0.06, variation });
+    this.tone({ freq: 210, freqEnd: 128, dur: 0.14, type: 'triangle', gain: 0.045, spatial, reverb: 0.05, variation });
+  }
+
   playerStep(spatial: SpatialInput = 0) {
     if (!this.allowCue('player-step', 0.22)) return;
     if (this.playSample({ name: 'player-step-2', gain: 0.25, spatial, reverb: 0.1 })) return;
@@ -1674,6 +1697,19 @@ export class GameAudio {
     }
     this.phoneTransient(spatial, 0.08, 2200, 0.024);
     this.tone({ freq: 112, freqEnd: 38, dur: 0.38, type: 'sine', gain: 0.28, spatial, reverb: 0.22, priority: 'critical' });
+  }
+
+  gradeStamp(grade: string) {
+    if (!this.allowCue('grade-stamp', 0.8)) return;
+    if (this.playSample({ name: 'stamp', gain: 0.48, reverb: 0.34, priority: 'critical' })) {
+      this.phoneTransient(0, 0.075, 2200, 0.024);
+    } else {
+      this.phoneTransient(0, 0.075, 2200, 0.024);
+      this.tone({ freq: 108, freqEnd: 36, dur: 0.36, type: 'sine', gain: 0.25, reverb: 0.24, priority: 'critical' });
+    }
+    if (grade === 'S') {
+      this.tone({ freq: 740, freqEnd: 1110, dur: 0.38, type: 'sine', gain: 0.055, attack: 0.035, when: this.now() + 0.07, reverb: 0.34 });
+    }
   }
 
   wardChime(spatial: SpatialInput = 0) {

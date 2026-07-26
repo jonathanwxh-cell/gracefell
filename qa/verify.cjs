@@ -3097,8 +3097,10 @@ async function installAudioSampleRate(context) {
         const scrapeFrames = [];
         try {
           audio.bossRelease = (cue) => releases.push(`boss-${cue}`);
-          audio.swingHeavy = () => releases.push('player-heavy');
-          audio.playerHurt = (_spatial, heavy) => hurts.push(heavy ? 'heavy' : 'light');
+          audio.swingHeavy = (_spatial, charge) => releases.push(`player-heavy-${Math.round(charge * 10)}`);
+          audio.playerHurt = (_spatial, damage) => {
+            hurts.push(damage <= 12 ? 'light' : damage <= 20 ? 'medium' : 'heavy');
+          };
           audio.chargeScrape = () => scrapeFrames.push(g.__qaAudioFrame);
 
           g.state = 'title';
@@ -3110,6 +3112,16 @@ async function installAudioSampleRate(context) {
           g.player.state = 'move';
           g.player.stam = 100;
           g.input.bufferPress('heavy');
+          g.player.update(1 / 60, g.input, g);
+          g.player.t = 0.2;
+          g.player.update(1 / 60, g.input, g);
+
+          g.player.state = 'heavy';
+          g.player.t = 0.2;
+          g.player.attackHit = false;
+          g.player.heavyCharging = true;
+          g.player.heavyChargeT = 0.5;
+          g.input.reset();
           g.player.update(1 / 60, g.input, g);
 
           for (const cue of ['swipe', 'charge', 'spiral']) {
@@ -3124,7 +3136,11 @@ async function installAudioSampleRate(context) {
           g.player.state = 'move';
           g.player.hp = g.player.maxHp;
           g.player.iframes = 0;
-          g.player.takeDamage(20, g.boss.x, g.boss.y, g);
+          g.player.takeDamage(16, g.boss.x, g.boss.y, g);
+          g.player.state = 'move';
+          g.player.hp = g.player.maxHp;
+          g.player.iframes = 0;
+          g.player.takeDamage(24, g.boss.x, g.boss.y, g);
 
           g.resetFight();
           g.state = 'fight';
@@ -3153,12 +3169,13 @@ async function installAudioSampleRate(context) {
       });
       out.steps.recordedSfxRouting = cueRouting;
       if (
-        cueRouting.releases.join(',') !== 'player-heavy,boss-swipe,boss-charge,boss-spiral'
+        cueRouting.releases.join(',') !== 'player-heavy-0,player-heavy-10,boss-swipe,boss-charge,boss-spiral'
       ) {
-        out.errors.push('v2.22: player and boss release semantics are not distinct: ' + JSON.stringify(cueRouting));
+        out.errors.push('v2.26: charged/uncharged player releases or boss release semantics are not distinct: '
+          + JSON.stringify(cueRouting));
       }
-      if (cueRouting.hurts.join(',') !== 'light,heavy') {
-        out.errors.push('v2.22: light/heavy player damage did not route to distinct hurt cues: '
+      if (cueRouting.hurts.join(',') !== 'light,medium,heavy') {
+        out.errors.push('v2.26: light/medium/heavy player damage did not route to distinct hurt tiers: '
           + JSON.stringify(cueRouting));
       }
       if (
@@ -3168,6 +3185,221 @@ async function installAudioSampleRate(context) {
         ))
       ) {
         out.errors.push('v2.22: boss charge scrape cadence can overload the mix: ' + JSON.stringify(cueRouting));
+      }
+
+      const v226Contracts = await audioPg.evaluate(() => {
+        const g = window.__game;
+        const audio = g.audio;
+        const originalHit = audio.hit.bind(audio);
+        const originalNearMiss = audio.nearMiss.bind(audio);
+        const originalStaminaEmpty = audio.staminaEmpty.bind(audio);
+        const originalWardChime = audio.wardChime.bind(audio);
+        const originalGradeStamp = audio.gradeStamp.bind(audio);
+        const chargedContacts = [];
+        const gradeStamps = [];
+        let nearMisses = 0;
+        let staminaWarnings = 0;
+        let wardContacts = 0;
+        const wasPaused = g.paused;
+        cancelAnimationFrame(g.raf);
+        g.raf = 0;
+        g.paused = true;
+        try {
+          audio.hit = (heavy, _spatial, _variant, charge) => {
+            chargedContacts.push({ heavy, charge: Math.round((charge ?? 0) * 10) / 10 });
+          };
+          audio.nearMiss = () => { nearMisses++; };
+          audio.staminaEmpty = () => { staminaWarnings++; };
+          audio.wardChime = () => { wardContacts++; };
+          audio.gradeStamp = (grade) => gradeStamps.push(grade);
+
+          g.setGrace(0);
+          g.resetFight();
+          g.state = 'fight';
+          g.boss.state = 'stalk';
+          g.boss.takeDamage(10, g, g.player.x, g.player.y, 'heavy', 0);
+          g.boss.takeDamage(10, g, g.player.x, g.player.y, 'heavy', 1);
+
+          g.resetFight();
+          g.state = 'fight';
+          g.input.reset();
+          g.player.stam = 0;
+          g.input.bufferPress('heavy');
+          g.player.update(1 / 60, g.input, g);
+          const stamina = {
+            warnings: staminaWarnings,
+            buffered: g.input.hasBuffered('heavy'),
+            state: g.player.state,
+          };
+
+          g.resetFight();
+          g.state = 'fight';
+          g.arenaR = 120;
+          g.input.reset();
+          g.player.x = 98;
+          g.player.y = 0;
+          g.player.vx = 240;
+          g.player.vy = 0;
+          g.player.update(1 / 60, g.input, g);
+          const firstWardX = g.player.x;
+          g.player.update(1 / 60, g.input, g);
+          const ward = {
+            contacts: wardContacts,
+            firstWardX,
+            maxX: g.arenaR - g.player.r - 6,
+            latched: g.player.wardContact,
+          };
+
+          g.resetFight();
+          g.state = 'fight';
+          g.arenaR = 520;
+          g.player.x = 0;
+          g.player.y = 0;
+          g.projectiles = [{
+            x: -10, y: 40, vx: 600, vy: 0, r: 6, dmg: 10,
+            life: 2, hostile: true, hue: '#fff', source: 'volley',
+          }];
+          g.updateProjectiles(1 / 30);
+          g.updateProjectiles(1 / 30);
+          g.updateProjectiles(1 / 30);
+          const missCount = nearMisses;
+
+          g.player.hp = g.player.maxHp;
+          g.player.iframes = 0;
+          g.player.state = 'move';
+          g.projectiles = [{
+            x: -30, y: 0, vx: 600, vy: 0, r: 6, dmg: 10,
+            life: 2, hostile: true, hue: '#fff', source: 'volley',
+          }];
+          g.updateProjectiles(1 / 30);
+          const projectile = {
+            missCount,
+            afterHitMissCount: nearMisses,
+            hitRemoved: g.projectiles.length === 0,
+            hp: g.player.hp,
+          };
+
+          g.state = 'victory';
+          g.stateT = 1.49;
+          g.timeScale = 1;
+          g.hitstop = 0;
+          g.grade = 'S';
+          g.gradeStampPlayed = false;
+          g.frame(0.02);
+          g.frame(0.02);
+
+          return {
+            chargedContacts,
+            stamina,
+            ward,
+            projectile,
+            gradeStamps,
+            gradeStampPlayed: g.gradeStampPlayed,
+          };
+        } finally {
+          audio.hit = originalHit;
+          audio.nearMiss = originalNearMiss;
+          audio.staminaEmpty = originalStaminaEmpty;
+          audio.wardChime = originalWardChime;
+          audio.gradeStamp = originalGradeStamp;
+          g.paused = wasPaused;
+          if (!wasPaused) {
+            g.lastTs = performance.now();
+            g.startLoop();
+          }
+        }
+      });
+      out.steps.v226AudioGameplayContracts = v226Contracts;
+      if (
+        JSON.stringify(v226Contracts.chargedContacts) !== JSON.stringify([
+          { heavy: true, charge: 0 },
+          { heavy: true, charge: 1 },
+        ])
+      ) {
+        out.errors.push('v2.26: charged contact weight was not passed through the boss impact boundary: '
+          + JSON.stringify(v226Contracts));
+      }
+      if (
+        v226Contracts.stamina.warnings !== 1
+        || !v226Contracts.stamina.buffered
+        || v226Contracts.stamina.state !== 'move'
+      ) {
+        out.errors.push('v2.26: stamina denial warning consumed or mutated the buffered command: '
+          + JSON.stringify(v226Contracts.stamina));
+      }
+      if (
+        v226Contracts.ward.contacts !== 1
+        || Math.abs(v226Contracts.ward.firstWardX - v226Contracts.ward.maxX) > 0.001
+        || !v226Contracts.ward.latched
+      ) {
+        out.errors.push('v2.26: arena-ward contact cue is missing, repeated, or detached from clamping: '
+          + JSON.stringify(v226Contracts.ward));
+      }
+      if (
+        v226Contracts.projectile.missCount !== 1
+        || v226Contracts.projectile.afterHitMissCount !== 1
+        || !v226Contracts.projectile.hitRemoved
+        || v226Contracts.projectile.hp >= 110
+      ) {
+        out.errors.push('v2.26: projectile closest-pass cue repeated or fired on damaging contact: '
+          + JSON.stringify(v226Contracts.projectile));
+      }
+      if (
+        v226Contracts.gradeStamps.join(',') !== 'S'
+        || !v226Contracts.gradeStampPlayed
+      ) {
+        out.errors.push('v2.26: victory grade seal did not stamp exactly once at its reveal: '
+          + JSON.stringify(v226Contracts));
+      }
+
+      const v226MixProfiles = await audioPg.evaluate(() => {
+        const audio = window.__game.audio;
+        const originalPlaySample = audio.playSample.bind(audio);
+        const samples = [];
+        let label = '';
+        try {
+          audio.playSample = (opts) => {
+            samples.push({
+              label,
+              name: opts.name,
+              gain: opts.gain,
+              rate: opts.rate ?? 1,
+              reverb: opts.reverb,
+            });
+            return true;
+          };
+          const capture = (nextLabel, cue) => {
+            label = nextLabel;
+            audio.lastCue.clear();
+            cue();
+          };
+          capture('heavy-release-0', () => audio.swingHeavy(0, 0));
+          capture('heavy-release-1', () => audio.swingHeavy(0, 1));
+          capture('heavy-hit-0', () => audio.hit(true, 0, 0, 0));
+          capture('heavy-hit-1', () => audio.hit(true, 0, 0, 1));
+          capture('hurt-light', () => audio.playerHurt(0, 10));
+          capture('hurt-medium', () => audio.playerHurt(0, 16));
+          capture('hurt-heavy', () => audio.playerHurt(0, 24));
+          capture('grade-s', () => audio.gradeStamp('S'));
+          return samples;
+        } finally {
+          audio.playSample = originalPlaySample;
+          audio.lastCue.clear();
+        }
+      });
+      out.steps.v226MixProfiles = v226MixProfiles;
+      const mixByLabel = Object.fromEntries(v226MixProfiles.map((sample) => [sample.label, sample]));
+      if (
+        !(mixByLabel['heavy-release-1']?.rate < mixByLabel['heavy-release-0']?.rate)
+        || !(mixByLabel['heavy-hit-1']?.rate < mixByLabel['heavy-hit-0']?.rate)
+        || mixByLabel['hurt-light']?.name !== 'hurt-light-1'
+        || mixByLabel['hurt-medium']?.name !== 'hurt-heavy-1'
+        || mixByLabel['hurt-heavy']?.name !== 'hurt-heavy-1'
+        || !(mixByLabel['hurt-heavy']?.rate < mixByLabel['hurt-medium']?.rate)
+        || mixByLabel['grade-s']?.name !== 'stamp'
+      ) {
+        out.errors.push('v2.26: authored charge, hurt-tier, or grade-seal mix profiles regressed: '
+          + JSON.stringify(v226MixProfiles));
       }
 
       const sustainedLifecycle = await audioPg.evaluate(async () => {
