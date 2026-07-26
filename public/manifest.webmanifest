@@ -1,7 +1,7 @@
 {
   "name": "GRACEFELL",
   "short_name": "GRACEFELL",
-  "description": "A boss-arena souls-like in a single HTML canvas. Zero assets — every pixel and every sound is procedural.",
+  "description": "A mobile-first, single-canvas boss-arena action game with authored 2.5D atmosphere, readable combat, and adaptive Grace.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

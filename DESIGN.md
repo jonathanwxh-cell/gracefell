@@ -2189,3 +2189,61 @@ i-frames, boss AI, difficulty, input, scoring, persistence, save schema v7,
 weather, music, or sound effects. Per-frame gradient, `shadowBlur`, and
 draw-call counts are unchanged from the v2.23 baseline; the trail is strictly
 cheaper than what it replaced.
+
+## v2.25 — Codex (GPT-5), "Blender-assisted visual depth" (2026-07-26)
+
+The goal was not to turn Gracefell into a different game. It was to make the
+arena and Malakar feel authored and dimensional while keeping the simulation,
+one-canvas architecture, mobile input, telegraphs, and reliable fallback that
+already work.
+
+### The renderer decision
+
+Blender became an authoring tool, not the owner of combat. It produces a quiet
+2048px arena base, two transparent phase masks, and a very small reference GLB.
+The shipping arena is copied once into the existing adaptive floor cache; the
+phase masks stamp only when `deepenArena()` reaches an authored boundary. The
+accepted Malakar treatment remains Canvas and consumes a read-only presentation
+snapshot.
+
+A vanilla Three.js proof was implemented behind `?boss=blender-three`, not
+hand-waved away. It renders the compressed 332-triangle GLB into a private
+256px surface and composites it into the visible Canvas without a second RAF or
+DOM canvas. Native-size review still found its body darker, flatter, and less
+legible than the Canvas treatment. It also requires a separately downloaded
+dynamic chunk and WebGL-to-Canvas readback. The proof therefore stays an
+explicit development comparison; it is not a hidden quality tier or a
+production default.
+
+### Load-bearing boundaries
+
+- Simulation and hit geometry remain in `engine.ts`. Renderers receive values,
+  never authority.
+- A baked base that arrives during combat waits for a reset or other safe
+  boundary. Phase-mask completion never paints by itself.
+- Floor replacement is atomic. Allocation or `drawImage` failure preserves the
+  procedural floor instead of leaving a half-rendered cache.
+- GLB failure falls back to Canvas and releases the unused renderer. Real
+  context loss falls back temporarily and can restore.
+- Runtime art URLs carry `VISUAL_ASSET_VERSION` because `/art/` is immutable.
+- Visual work begins after the first audio gesture, in a later task, so image
+  decode cannot consume the strict sound-unlock budget. Canvas, keyboard, and
+  semantic-button starts share this path.
+
+### What surprised us
+
+The WebP and GLB payloads were not the hard part: the complete default arena
+payload is about 125 KiB and the GLB is about 11 KiB. Timing and ownership were
+harder. A slow base decode can finish during a live dodge; an immutable URL can
+silently preserve old art; a semantically correct Start button can bypass a
+Canvas-only gesture hook; and a technically cheap WebGL model can still be the
+worse picture. The release gate exercises those failure modes directly.
+
+### Changed from v2.24
+
+Presentation and asset delivery only. The v2.23 operation census and v2.24
+impact frames remain intact. No combat timing, damage, poise, stamina, i-frame,
+boss-pattern, difficulty, score, save-v7, music, SFX, weather-pool, or control
+geometry value changed. The unused one-route React Router wrapper was removed
+after the release audit found no advisory-free Node-20-compatible line; `App`
+still renders the same sole `Home` page directly.

@@ -14,6 +14,10 @@ const MIME = {
   '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
+  '.webp': 'image/webp',
+  '.avif': 'image/avif',
+  '.glb': 'model/gltf-binary',
+  '.gltf': 'model/gltf+json',
   '.mp3': 'audio/mpeg',
   '.ico': 'image/x-icon',
   '.json': 'application/json',
@@ -28,7 +32,8 @@ const SECURITY = {
 };
 
 const server = http.createServer((req, res) => {
-  const url = (req.url || '/').split('?')[0];
+  const requestUrl = new URL(req.url || '/', 'http://127.0.0.1');
+  const url = requestUrl.pathname;
   if (url === '/health') {
     res.writeHead(200, { 'content-type': 'application/json', ...SECURITY });
     res.end(JSON.stringify({ ok: true, app: 'gracefell' }));
@@ -43,8 +48,10 @@ const server = http.createServer((req, res) => {
   const ext = extname(file);
   // Classify caching from the URL path, not the platform-normalized filesystem path.
   // On Windows, path.normalize() changes "/" to "\", which previously made
-  // real /assets/ and /audio/ requests fall through to no-cache.
-  const immutable = url.startsWith('/assets/') || url.startsWith('/audio/');
+  // real /assets/, /audio/, and versioned /art/ requests keep immutable caching.
+  const immutable = url.startsWith('/assets/')
+    || url.startsWith('/audio/')
+    || (url.startsWith('/art/') && Boolean(requestUrl.searchParams.get('v')));
   try {
     const body = readFileSync(file);
     res.writeHead(200, {

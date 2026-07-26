@@ -1,0 +1,56 @@
+{
+  "generator": "scripts/art/generate_assets.py",
+  "blender": "5.2.0 LTS",
+  "seed": 75157009,
+  "arena": {
+    "radiusMeters": 5.6,
+    "quietCentralRadiusMeters": 3.6399999999999997,
+    "quietCentralPercent": 65,
+    "camera": {
+      "type": "ORTHO",
+      "location": [
+        0.0,
+        -2.0,
+        15.0
+      ],
+      "orthoScale": 13.2
+    },
+    "baseResolution": [
+      2048,
+      2048
+    ],
+    "overlayResolution": [
+      1024,
+      1024
+    ],
+    "decorativeGeometryMinRadiusMeters": 3.66,
+    "maxForegroundHeightMeters": 0.78,
+    "dangerRedUsed": false,
+    "palette": {
+      "abyss": "#050403",
+      "charcoal": "#0b0907",
+      "smoke": "#17120f",
+      "stone": "#211b17",
+      "stone_lift": "#2b241f",
+      "bronze": "#665231",
+      "muted_gold": "#9b7a3d",
+      "parchment": "#c0ae79",
+      "soot_violet": "#292332",
+      "phase2_amber": "#c1863f",
+      "phase3_grace": "#b7b6a1"
+    }
+  },
+  "malakar": {
+    "proofOnly": true,
+    "materials": [
+      "MAT_Malakar_CharcoalBronze",
+      "MAT_Malakar_AmberCore"
+    ],
+    "root": "Malakar_Root",
+    "pivotRole": "ground_contact",
+    "forwardAxisBlender": "+Y",
+    "rootMotion": false,
+    "halo": "Halo_Fragment_Prototype is authored once for runtime instancing",
+    "animations": []
+  }
+}
