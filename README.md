@@ -8,7 +8,7 @@ rules are all decided by what works one-handed on a 390px screen.
 
 **Play it: [gracefell.alyoechosys.dev](https://gracefell.alyoechosys.dev)**
 
-Current release candidate: **v2.26** — clearer combat consequences without a
+Current release: **v2.26** — clearer combat consequences without a
 larger asset or render budget. Heavy swings now speak on the actual release
 frame, with bounded charge-scaled release and contact weight; received damage
 has light, medium, and heavy tiers; close projectile passes, denied low-stamina

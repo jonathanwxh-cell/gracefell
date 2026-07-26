@@ -1,7 +1,7 @@
 # GRACEFELL project facts
 
 - Current package: `gracefell@2.26.0`
-- Current release candidate: `v2.26` combat-audio consequence pass
+- Current release: `v2.26` combat-audio consequence pass
 - Visual release: Blender-authored cached arena + Canvas-first Malakar
 - Character foundation: Kite-Veil Penitent + Fallen Blade-Saint
 - Production: <https://gracefell.alyoechosys.dev>
