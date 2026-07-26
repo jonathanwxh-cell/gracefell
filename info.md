@@ -1,7 +1,7 @@
 # GRACEFELL project facts
 
 - Current package: `gracefell@2.25.0`
-- Release candidate: `v2.25`, based on the parallel v2.24 impact-frame candidate
+- Current release: `v2.25`, accepted on GitHub and production
 - Visual release: Blender-authored cached arena + Canvas-first Malakar
 - Character foundation: Kite-Veil Penitent + Fallen Blade-Saint
 - Production: <https://gracefell.alyoechosys.dev>
