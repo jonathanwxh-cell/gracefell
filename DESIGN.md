@@ -2070,3 +2070,68 @@ rectangle, overlaps a peer, leaves the viewport, or is smaller than 44×44.
 It also captures `touch-hud-utilities.png` at the point of assertion. Focused
 checks cover 320×700, 390×844, and 1280×800 so the mobile repair cannot disturb
 the established desktop header.
+
+## v2.23 — Claude (Opus 5), "the render-cost gate" (2026-07-26)
+
+Goal: find performance headroom to spend on graphics polish.
+
+Result: there was none to find, and proving that is the release.
+
+### What the numbers looked like before measuring properly
+
+A per-frame op census showed 41 `createRadialGradient` calls, 9 `shadowBlur`
+sets, and only 2 `drawImage` calls — almost nothing cached beyond the baked
+floor. Tight-loop micro-benchmarks suggested 2–3 ms/frame was recoverable on
+mobile. Four optimisations followed from that reading: pre-baked glow sprites
+for particles and for the projectile glow, offset double-draw instead of
+`shadowBlur` on combat text, and a baked static vignette.
+
+All four were implemented. All four were rejected.
+
+### Why the estimate was wrong
+
+Tight-loop micro-benchmarks saturate the fill pipeline and force a GPU flush per
+iteration, so they measure a pathological case rather than a frame. Three
+rounds gave three contradictory answers — including a `drawImage`-versus-`fill`
+relationship that inverted between headless software raster and a real GPU.
+Extrapolating from them overstated the win by roughly an order of magnitude.
+
+### The method that worked
+
+Serve every candidate build at once, open every page at once, and alternate
+measurement blocks between them so drift moves all variants together. Measure a
+second copy of the *same* build alongside as a control, so the noise floor is
+observed rather than assumed.
+
+The control came in at +0.5%. Glow-particle sprites came in at **+17.6% slower**
+with non-overlapping interquartile ranges — a real regression, and the only
+result outside the noise. The projectile sprite (−1.5%/−3.5%), the text change
+(−1.4%), and the baked vignette (+1.9%) were all indistinguishable from
+measuring the same build twice.
+
+A worst-case phase-three frame costs about 1.7 ms on a desktop GPU at 390×844
+dpr2. That is a tenth of the 16.7 ms budget. **The draw path is not the
+constraint, and new visual work should not be gated on making it cheaper.** The
+open risks are per-frame allocation causing GC pauses on phones, and low-end
+mobile GPUs — neither of which a desktop timing run can see.
+
+### What shipped
+
+`qa/perf.cjs`. It asserts a deterministic op census instead of a duration,
+because canvas call counts for a pinned scene do not vary with machine load,
+whereas the existing v2.20 weather budget asserts a 0.5 ms delta against ±20%
+measured drift and cannot detect what it claims to.
+
+The load-bearing assertion is the slope, not the ceiling: the scene is censused
+with 32 projectiles and again with none, and gradients-per-projectile must stay
+at or under 1.2. A new effect that builds a gradient per entity trips that even
+while the absolute count still fits under the cap.
+
+The two-consecutive-frame determinism check caught a lazily-built sprite cache
+allocating only on its first frame — a single-frame census would have called it
+clean.
+
+### Changed from v2.22
+
+Nothing in `src/`. `git diff v2.22.1 -- src/` is empty. This pass adds a QA lane,
+an `npm run perf` script, and documentation.

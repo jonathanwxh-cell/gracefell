@@ -2,7 +2,7 @@
   "name": "gracefell",
   "private": true,
   "license": "UNLICENSED",
-  "version": "2.22.1",
+  "version": "2.23.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,6 +10,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "qa": "npm run build && node qa/run.cjs",
+    "perf": "node qa/perf.cjs --timings",
     "preview": "vite preview"
   },
   "dependencies": {
