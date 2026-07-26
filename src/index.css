@@ -632,9 +632,10 @@ html, body, #root {
 }
 
 @media (max-width: 560px) {
+  .game-mix-toggle,
+  .game-pause-toggle,
   .game-menu-toggle {
-    top: calc(64px + env(safe-area-inset-top, 0px));
-    right: calc(12px + env(safe-area-inset-right, 0px));
+    top: calc(82px + env(safe-area-inset-top, 0px));
   }
 
   .game-dialog {

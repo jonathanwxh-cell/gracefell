@@ -2182,6 +2182,54 @@ async function installAudioSampleRate(context) {
       t.stateAfterTap = await pg.evaluate(() => window.__game.state);
       if (t.stateAfterTap !== 'fight') out.errors.push('touch: tap did not start the fight (' + t.stateAfterTap + ')');
 
+      // The player-resource HUD is Canvas content while the utilities mix DOM
+      // and Canvas targets. Protect the actual cross-layer geometry so a valid
+      // fingertip button cannot obscure HP, stamina, or flasks on a phone.
+      await pg.waitForSelector('.game-mix-toggle', { timeout: 1200 }).catch(() => {});
+      t.combatUtilityLayout = await pg.evaluate(() => {
+        const g = window.__game;
+        const hud = g.playerHudRect();
+        const domRect = (selector) => {
+          const rect = document.querySelector(selector)?.getBoundingClientRect();
+          return rect
+            ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+            : null;
+        };
+        const utilities = {
+          menu: domRect('.game-menu-toggle'),
+          mix: domRect('.game-mix-toggle'),
+          pause: domRect('.game-pause-toggle'),
+          sound: g.soundButtonRect(),
+        };
+        return { w: g.w, h: g.h, hud, utilities };
+      });
+      const rectsOverlap = (a, b) => Boolean(a && b
+        && a.x < b.x + b.width && a.x + a.width > b.x
+        && a.y < b.y + b.height && a.y + a.height > b.y);
+      const utilityEntries = Object.entries(t.combatUtilityLayout.utilities);
+      for (const [id, rect] of utilityEntries) {
+        if (!rect
+          || rect.width < 44
+          || rect.height < 44
+          || rect.x < 0
+          || rect.y < 0
+          || rect.x + rect.width > t.combatUtilityLayout.w
+          || rect.y + rect.height > t.combatUtilityLayout.h) {
+          out.errors.push(`touch: ${id} utility is not a valid on-screen fingertip target: ${JSON.stringify(rect)}`);
+        } else if (rectsOverlap(rect, t.combatUtilityLayout.hud)) {
+          out.errors.push(`touch: ${id} utility obscures the player HUD: `
+            + JSON.stringify({ utility: rect, hud: t.combatUtilityLayout.hud }));
+        }
+      }
+      for (let i = 0; i < utilityEntries.length; i++) {
+        for (let j = i + 1; j < utilityEntries.length; j++) {
+          const [aId, a] = utilityEntries[i];
+          const [bId, b] = utilityEntries[j];
+          if (rectsOverlap(a, b)) out.errors.push(`touch: ${aId} and ${bId} utilities overlap`);
+        }
+      }
+      await pg.screenshot({ path: path.join(ARTIFACT_DIR, 'touch-hud-utilities.png') });
+
       // 5. the persistent pause control must work through a real phone tap,
       // stop simulation/audio, and resume without replaying paused input.
       const touchPause = pg.locator('.game-pause-toggle');
