@@ -43,6 +43,18 @@ const server = http.createServer((req, res) => {
   if (path === '/' || path === '\\') path = '/index.html';
   let file = join(DIST, path);
   if (!file.startsWith(DIST) || !existsSync(file) || !statSync(file).isFile()) {
+    const staticNamespace = url.startsWith('/assets/')
+      || url.startsWith('/audio/')
+      || url.startsWith('/art/');
+    if (staticNamespace) {
+      res.writeHead(404, {
+        'content-type': 'text/plain; charset=utf-8',
+        'cache-control': 'no-store, max-age=0',
+        ...SECURITY,
+      });
+      res.end('not found');
+      return;
+    }
     file = join(DIST, 'index.html'); // SPA fallback
   }
   const ext = extname(file);
@@ -52,11 +64,21 @@ const server = http.createServer((req, res) => {
   const immutable = url.startsWith('/assets/')
     || url.startsWith('/audio/')
     || (url.startsWith('/art/') && Boolean(requestUrl.searchParams.get('v')));
+  const unversionedArt = url.startsWith('/art/') && !immutable;
   try {
     const body = readFileSync(file);
     res.writeHead(200, {
       'content-type': MIME[ext] || 'application/octet-stream',
-      'cache-control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache',
+      // Cloudflare's default four-hour Browser Cache TTL can raise `no-cache`
+      // on static extensions to max-age=14400. Unversioned art is a debug and
+      // fallback path, so make its non-retention contract explicit at both the
+      // browser and CDN layers. Runtime art always uses a versioned URL.
+      'cache-control': immutable
+        ? 'public, max-age=31536000, immutable'
+        : unversionedArt
+          ? 'no-store, max-age=0'
+          : 'no-cache',
+      ...(unversionedArt ? { 'cloudflare-cdn-cache-control': 'no-store' } : {}),
       ...SECURITY,
     });
     res.end(body);
