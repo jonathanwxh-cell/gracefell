@@ -234,6 +234,8 @@ export class GameAudio {
   private subGateUntil = 0;
   private maxObservedDistance = 0;
   private initCostMs = 0;
+  private contextCreateCostMs = 0;
+  private graphInitCostMs = 0;
   private soundtrackStartCostMs = 0;
   private irBuildCostMs = 0;
   private adaptive = { tension: 0, intensity: 0, staggered: false };
@@ -281,6 +283,8 @@ export class GameAudio {
     const initStartedAt = performance.now();
 
     this.ctx = new AC();
+    this.contextCreateCostMs = performance.now() - initStartedAt;
+    const graphStartedAt = performance.now();
     this.master = this.ctx.createGain();
     this.master.gain.value = this.muted ? 0 : 0.78;
 
@@ -341,6 +345,7 @@ export class GameAudio {
     this.reverbWet = this.ctx.createGain();
     this.reverbWet.gain.value = 0.19;
     this.reverb.connect(this.reverbWet).connect(this.master);
+    this.graphInitCostMs = performance.now() - graphStartedAt;
     this.initCostMs = performance.now() - initStartedAt;
 
     // Noise-based combat cannot occur until after the intro. Copy both prepared
@@ -429,6 +434,8 @@ export class GameAudio {
     this.subGateUntil = 0;
     this.maxObservedDistance = 0;
     this.initCostMs = 0;
+    this.contextCreateCostMs = 0;
+    this.graphInitCostMs = 0;
     this.soundtrackStartCostMs = 0;
     this.irBuildCostMs = 0;
     this.duckCount = 0;
@@ -530,6 +537,8 @@ export class GameAudio {
       variationKinds: this.variations.size,
       maxObservedDistance: this.maxObservedDistance,
       initCostMs: this.initCostMs,
+      contextCreateCostMs: this.contextCreateCostMs,
+      graphInitCostMs: this.graphInitCostMs,
       soundtrackStartCostMs: this.soundtrackStartCostMs,
       irBuildCostMs: this.irBuildCostMs,
       adaptive: { ...this.adaptive },

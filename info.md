@@ -1,15 +1,18 @@
 # GRACEFELL project facts
 
-- Current package: `gracefell@2.22.0`
-- Gameplay release: `v2.22`, merged, deployed, and publicly verified
-- Character release: Kite-Veil Penitent + Fallen Blade-Saint
+- Current package: `gracefell@2.25.0`
+- Release candidate: `v2.25`, based on the parallel v2.24 impact-frame candidate
+- Visual release: Blender-authored cached arena + Canvas-first Malakar
+- Character foundation: Kite-Veil Penitent + Fallen Blade-Saint
 - Production: <https://gracefell.alyoechosys.dev>
 - Repository: <https://github.com/jonathanwxh-cell/gracefell>
 
-GRACEFELL is a mobile-first, single-arena boss game rendered in Canvas 2D. React mounts the
-canvas and provides focus-revealed semantic controls; the combat engine lives in
-`src/game/engine.ts`, the bounded recorded-SFX layer, procedural fallback, and three streamed MiniMax
-phase cues are managed by `src/game/audio.ts`, and `server.mjs` serves the production build.
+GRACEFELL is a mobile-first, single-arena boss game with an authoritative Canvas
+simulation and one visible Canvas. React mounts the canvas and provides
+focus-revealed semantic controls; `src/game/engine.ts` owns combat and
+presentation; `src/game/render/` owns the v2.25 cached-arena and boss treatments;
+`src/game/audio.ts` manages bounded recorded SFX, procedural fallback, and three
+streamed MiniMax phase cues; and `server.mjs` serves the production build.
 
 ## Runtime and commands
 
@@ -29,6 +32,9 @@ npm run qa
 
 `npm run qa` is the acceptance gate. It builds the app, starts an isolated server on
 `127.0.0.1:8492`, and drives desktop, mobile, and real-touch Chromium paths. See
+[`docs/releases/v2.25.md`](docs/releases/v2.25.md) for Blender source assets,
+Canvas-first runtime integration, fallback behavior, visual QA, and release
+evidence,
 [`docs/releases/v2.22.md`](docs/releases/v2.22.md) for recorded-foley integration, priority loading,
 sustained-cue lifecycle, asset mastering, and release evidence,
 [`docs/releases/v2.20.md`](docs/releases/v2.20.md) for the current fixed-pool phase-weather
@@ -57,6 +63,9 @@ original Journey/Oaths, teaching, death-recovery, visible-combo, and save-v4 des
 - [`public/audio/README.md`](public/audio/README.md) — generated music provenance
 - [`public/audio/sfx/README.md`](public/audio/sfx/README.md) — combat-SFX prompts, mastering truth, measurements, exclusions, and hashes
 - [`design-qa.md`](design-qa.md) — source-normalized mobile/desktop character comparisons
+- [`docs/visual-upgrade/BLENDER_2_5D_VISUAL_SPEC.md`](docs/visual-upgrade/BLENDER_2_5D_VISUAL_SPEC.md) — v2.25 art direction, budgets, renderer decision, and acceptance contract
+- [`docs/visual-upgrade/ASSET_PIPELINE.md`](docs/visual-upgrade/ASSET_PIPELINE.md) — reproducible Blender generation, optimisation, cache, and fallback instructions
+- [`docs/releases/v2.25.md`](docs/releases/v2.25.md) — v2.25 implementation, QA, and deployment record
 - [`docs/releases/v2.20.md`](docs/releases/v2.20.md) — v2.20 fixed-pool Ash Gale weather and production acceptance
 - [`docs/releases/v2.21.md`](docs/releases/v2.21.md) — v2.21 combat mastery, terminal actions, sharing, handedness, and save-v7 acceptance
 - [`docs/releases/v2.22.md`](docs/releases/v2.22.md) — v2.22 recorded combat foley, loader/lifecycle acceptance, and production evidence

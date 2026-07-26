@@ -8,14 +8,14 @@ rules are all decided by what works one-handed on a 390px screen.
 
 **Play it: [gracefell.alyoechosys.dev](https://gracefell.alyoechosys.dev)**
 
-Current gameplay release: **v2.22.1** — a mobile HUD hotfix gives player resources and battle
-utilities separate, stable lanes. HP, stamina, and flasks remain unobstructed while MENU, MIX,
-PAUSE, and SOUND form one consistent 44px-tall rail beneath them on compact screens. The
-390×844 true-touch gate now measures the shared Canvas/DOM geometry and fails if a utility
-obscures the HUD, overlaps another utility, leaves the viewport, or falls below fingertip size.
-The repair is presentation-only: combat, difficulty, scoring, persistence, weather, music, and
-sound design are unchanged. Evidence is recorded in
-[`docs/releases/v2.22.1.md`](docs/releases/v2.22.1.md).
+Current release: **v2.25** — Blender-assisted visual depth without replacing the
+authoritative Canvas simulation. A compact Ashen Reliquary plate occupies the existing cached-floor
+slot, phase masks stamp only at real phase transitions, and the default Canvas Malakar has a
+stronger knight/cape/core/halo silhouette. The measured Three.js proof remains opt-in because it is
+less readable and 3–6× more expensive than Canvas at native play size. The v2.23 render-cost gate,
+v2.24 impact frames, v2.22.1 separated phone HUD, and every existing gameplay/save/audio contract
+remain intact. Evidence is recorded in
+[`docs/releases/v2.25.md`](docs/releases/v2.25.md).
 
 The **v2.22** audio foundation remains a four-role software-house pass that turns the supplied
 Kimi/Moonshot combat library into a bounded, production-safe recorded-foley layer. Forty-five
@@ -53,10 +53,12 @@ CI, deployment, and public verification record is in
 [`docs/releases/v2.20.md`](docs/releases/v2.20.md), and the v2.19 navigation and score
 chronicle record remains in [`docs/releases/v2.19.md`](docs/releases/v2.19.md).
 
-Zero runtime art assets, three generated music tracks, and one compact recorded combat-SFX library.
-Every character silhouette, sword, halo blade, stone in the floor, ember, and cape is generated at
-runtime in Canvas 2D. Three MiniMax Music 3.0 instrumentals supply the phase score, with the original
-procedural drone and phase-aware drums kept underneath and available as the offline fallback.
+Three compact Canvas art textures, one query-only low-poly proof, three generated music tracks,
+and one bounded recorded combat-SFX library. Character combat presentation, swords, halo state,
+telegraphs, weather, and effects remain driven at runtime by Canvas 2D; the Blender-authored arena
+base and phase masks occupy existing cached surfaces instead of adding a render loop. Three MiniMax
+Music 3.0 instrumentals supply the phase score, with the original procedural drone and phase-aware
+drums kept underneath and available as the offline fallback.
 Recorded combat foley adds authored texture through the existing Web Audio spatial, reverb, ducking,
 voice-pressure, and limiter graph; synthesis remains the cold-start, network-failure, and held-back
 asset fallback. The visual game remains one `<canvas>`; a focus-revealed semantic companion exposes
@@ -88,6 +90,16 @@ pass audited, selectively remastered, integrated, load-hardened, and verified th
 prompts and hashes are recorded in [`public/audio/README.md`](public/audio/README.md); combat-SFX
 prompts, measurements, hashes, exclusions, and processing truth are recorded in
 [`public/audio/sfx/README.md`](public/audio/sfx/README.md).
+
+**v2.23–v2.24 — measured and authored by Claude (Opus 5).** The deterministic
+render-operation census established real visual headroom, rejected four noisy optimisations on
+evidence, and added presentation-only impact frames without changing hit geometry.
+
+**v2.25 — implemented and verified by Codex (GPT-5) with specialist agents.**
+Codex generated the new concept boards, built the reproducible Blender-to-Canvas asset lane,
+integrated the accepted arena and boss treatment, implemented and measured the rejected Three.js
+comparison, and ran independent code, player, performance, failure, and release QA. These v2.25
+boards and Blender assets are Codex work and must not be attributed to Kimi.
 
 Directed by [@jonathanwxh-cell](https://github.com/jonathanwxh-cell), who asked for "AAA grade" and meant it.
 
@@ -508,6 +520,37 @@ No image, video, fog surface, shader, particle pool, audio loop, dependency,
 network request, save field, or gameplay value was added. Full rationale and
 evidence: [`docs/releases/v2.20.md`](docs/releases/v2.20.md).
 
+## Added by Codex and specialist agents — v2.25 Blender-assisted visual depth
+
+- **A dimensional arena without a second render loop.** The default fight now
+  uses a Blender-authored 2048px Ashen Reliquary plate copied into the existing
+  adaptive floor cache. The old procedural arena remains the automatic failure
+  fallback and the explicit `?visual=procedural&boss=current` comparison.
+- **Phase art stays on combat boundaries.** Two compact transparent masks stamp
+  once into the existing scorch surface at the Phase 2 and Phase 3 transitions.
+  Late assets wait for a safe reset instead of appearing during a dodge.
+- **Malakar reads as a knight.** The accepted Canvas treatment strengthens his
+  cape, helm, core, halo, windup, stagger, second sword, and recoil silhouettes
+  while consuming only read-only presentation state.
+- **Three.js was measured, not assumed better.** `?boss=blender-three` retains
+  an offscreen low-poly GLB comparison for development. It is dynamically
+  imported, never starts a second animation loop or visible canvas, and falls
+  back to Canvas on GLB, renderer, or WebGL failure. Native-size player review
+  did not justify making it the production default.
+- **Small shipping payload.** The arena is about 84 KB, both phase masks about
+  41 KB combined, and the proof GLB about 11 KB. Versioned immutable URLs prevent
+  stale art without changing save schema v7.
+- **Failure and performance gates.** Automated QA covers native mobile/desktop
+  captures, quiet/severe weather tells, delayed and corrupt assets, atomic floor
+  replacement, phase-stamp failure, Canvas/WebGL fallback, renderer disposal,
+  operation census, and existing gameplay invariants.
+
+The complete specification, concept boards, asset regeneration instructions,
+and QA contract live under
+[`docs/visual-upgrade/`](docs/visual-upgrade/BLENDER_2_5D_VISUAL_SPEC.md).
+Combat, difficulty, saves, scoring, audio, input, and telegraph geometry are
+unchanged.
+
 ## Running it
 
 ```bash
@@ -526,6 +569,10 @@ src/game/engine.ts   the entire game — Input, Player, Boss, Game + render laye
 src/game/audio.ts    hybrid Web Audio: recorded SFX + procedural fallback + generated score
 public/audio/        MiniMax score and generation provenance
 docs/releases/       durable release acceptance and production evidence
+docs/visual-upgrade/ Blender-assisted 2.5D specification and concept boards
+art/blender/          reproducible Blender sources, review proof, and receipts
+public/art/           optimized versioned runtime arena and Malakar assets
+scripts/art/          deterministic Blender build and asset validator
 src/pages/Home.tsx   mounts the canvas + semantic companion controls
 qa/run.cjs           starts an isolated 127.0.0.1:8492 QA server
 qa/verify.cjs        portable headless Playwright gate — the thing that decides "done"

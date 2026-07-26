@@ -1,5 +1,15 @@
 // GRACEFELL — boss-arena ARPG engine (canvas 2D, procedural, no assets)
 import { GameAudio, type SpatialAudio } from './audio';
+import {
+  ArenaBakeAssets,
+  type ArenaBakePhase,
+} from './render/arenaBake';
+import { drawMalakarCanvasProof } from './render/malakarCanvas';
+import type { MalakarThreeProof } from './render/malakarThree';
+import {
+  parseVisualProofFlags,
+  type MalakarVisualSnapshot,
+} from './render/visualModes';
 
 declare global {
   interface Window {
@@ -1461,6 +1471,26 @@ export class Boss {
     ctx.fillStyle = 'rgba(0,0,0,0.5)';
     ctx.beginPath(); ctx.ellipse(x, y + this.r * 0.85, this.r * 1.15, this.r * 0.45, 0, 0, TAU); ctx.fill();
 
+    if (game.visualFlags.boss !== 'current') {
+      game.drawMalakarVisualProof(ctx, {
+        x,
+        y,
+        r: this.r,
+        facing: this.facing,
+        phase: this.phase,
+        state: this.state,
+        attack: this.attack,
+        windupProgress: clamp(windupP, 0, 1),
+        hurtFlash: this.hurtFlash,
+        haloSpent: this.haloSpent,
+        secondSwordDraw: this.secondSwordDraw,
+        recoil: this.recoil,
+        recoilAng: this.recoilAng,
+        time: game.time,
+      });
+      return;
+    }
+
     ctx.save();
     // The shadow above stays planted; only the body gives ground.
     ctx.translate(x + Math.cos(this.recoilAng) * this.recoil,
@@ -1947,6 +1977,18 @@ export class Game {
   scorchCanvas: HTMLCanvasElement | null = null;
   scorchCtx: CanvasRenderingContext2D | null = null;
   floorSize = 0;
+  readonly visualFlags = parseVisualProofFlags(window.location.search);
+  private arenaBakeAssets: ArenaBakeAssets | null = null;
+  private pendingArenaBase: HTMLImageElement | null = null;
+  private arenaBaseApplied = false;
+  private arenaOverlayStamps = new Set<ArenaBakePhase>();
+  private arenaOverlayErrors: Record<ArenaBakePhase, string | null> = { 2: null, 3: null };
+  private bossVisualActive: 'current' | 'blender-canvas' | 'blender-three' | 'blender-canvas-fallback' = 'current';
+  private malakarThree: MalakarThreeProof | null = null;
+  private malakarThreeState: 'disabled' | 'loading' | 'ready' | 'fallback' = 'disabled';
+  private malakarThreeError: string | null = null;
+  private visualProofsPrepared = false;
+  private visualProofStartTimer: number | null = null;
   motes: { x: number; y: number; spd: number; drift: number; size: number; par: number; kind: 'ash' | 'grace' }[] = [];
   zoomPunch = 0;
   hbT = 0;
@@ -1980,7 +2022,7 @@ export class Game {
     this.ctx = canvas.getContext('2d')!;
     this.input = new Input(
       canvas,
-      () => { this.audio.init(); if (this.audio.muted) this.audio.setMuted(true); },
+      () => this.unlockFirstInteraction(),
       () => this.togglePause(),
     );
     this.audio.prepare();
@@ -2064,6 +2106,13 @@ export class Game {
     cancelAnimationFrame(this.raf);
     this.input.destroy();
     this.audio.destroy();
+    this.arenaBakeAssets?.destroy();
+    this.arenaBakeAssets = null;
+    this.pendingArenaBase = null;
+    if (this.visualProofStartTimer !== null) window.clearTimeout(this.visualProofStartTimer);
+    this.visualProofStartTimer = null;
+    this.malakarThree?.destroy();
+    this.malakarThree = null;
     window.removeEventListener('resize', this.resize);
     window.removeEventListener('blur', this.pauseForInterruption);
     window.removeEventListener('focus', this.resumeFromInterruption);
@@ -2331,6 +2380,7 @@ export class Game {
     }
     this.phaseDecay = phase - 1;
     this.emberDensityMul = phase >= 3 ? 2 : 1.5;
+    if (phase === 2 || phase === 3) this.stampArenaPhaseOverlay(phase);
     const stamps = phase >= 3 ? 10 : 6;
     for (let i = 0; i < stamps; i++) {
       const a = (i / stamps) * TAU + rand(-0.25, 0.25);
@@ -2474,6 +2524,7 @@ export class Game {
   }
 
   toggleMuted() {
+    this.unlockFirstInteraction();
     this.audio.setMuted(!this.audio.muted);
     this.persist();
   }
@@ -2491,6 +2542,7 @@ export class Game {
   }
 
   previewSfx() {
+    this.unlockFirstInteraction();
     this.audio.hit(false, { pan: 0, distance: 0 }, 1);
   }
 
@@ -2522,7 +2574,7 @@ export class Game {
   }
 
   confirm() {
-    this.audio.init();
+    this.unlockFirstInteraction();
     this.input.bufferPress('confirm');
   }
 
@@ -2796,6 +2848,204 @@ export class Game {
     this.scorchCanvas = sc;
     this.scorchCtx = sc.getContext('2d')!;
     this.scorchCtx.translate(S / 2, S / 2);
+  }
+
+  private prepareVisualProofs() {
+    if (this.visualFlags.arena === 'arena-bake') {
+      this.arenaBakeAssets = new ArenaBakeAssets({
+        onBaseReady: (image) => this.onArenaBaseReady(image),
+        // Phase masks only stamp from deepenArena(), at the authored phase
+        // boundary. A late decode waits for the next run rather than mutating
+        // the cache during a live dodge decision.
+        onPhaseReady: () => undefined,
+      });
+    }
+    this.bossVisualActive = this.visualFlags.boss === 'blender-canvas'
+      ? 'blender-canvas'
+      : this.visualFlags.boss === 'blender-three'
+        ? 'blender-canvas-fallback'
+        : 'current';
+    if (this.visualFlags.boss === 'blender-three') {
+      this.malakarThreeState = 'loading';
+      void import('./render/malakarThree')
+        .then(({ MalakarThreeProof: Proof }) => {
+          if (this.destroyed) return;
+          try {
+            this.malakarThree = new Proof();
+            this.malakarThreeState = 'ready';
+            this.malakarThreeError = null;
+          } catch (error) {
+            this.malakarThreeState = 'fallback';
+            this.malakarThreeError = error instanceof Error ? error.message : String(error);
+          }
+        })
+        .catch((error: unknown) => {
+          if (this.destroyed) return;
+          this.malakarThreeState = 'fallback';
+          this.malakarThreeError = error instanceof Error ? error.message : String(error);
+        });
+    }
+  }
+
+  private unlockFirstInteraction() {
+    this.audio.init();
+    if (this.audio.muted) this.audio.setMuted(true);
+    this.scheduleVisualProofsAfterFirstGesture();
+  }
+
+  private scheduleVisualProofsAfterFirstGesture() {
+    if (this.destroyed || this.visualProofsPrepared || this.visualProofStartTimer !== null) return;
+    // Audio owns the strict first-gesture budget. Start image/GLB networking in
+    // a later task, after its synchronous unlock and first deferred buffer work
+    // have had priority. The intro is long enough for the 84 KiB arena to land.
+    this.visualProofStartTimer = window.setTimeout(() => {
+      this.visualProofStartTimer = null;
+      if (this.destroyed || this.visualProofsPrepared) return;
+      this.visualProofsPrepared = true;
+      this.prepareVisualProofs();
+    }, 120);
+  }
+
+  private onArenaBaseReady(image: HTMLImageElement) {
+    if (this.destroyed) return;
+    if (this.state === 'title' || this.state === 'intro' || this.paused) {
+      this.applyArenaBake(image);
+      return;
+    }
+    // Never decode-and-copy a 2048px surface into the arena during combat.
+    // The next reset/return boundary will apply it safely.
+    this.pendingArenaBase = image;
+  }
+
+  private flushPendingArenaBase() {
+    if (!this.pendingArenaBase) return;
+    const image = this.pendingArenaBase;
+    this.pendingArenaBase = null;
+    this.applyArenaBake(image);
+  }
+
+  private applyArenaBake(image: HTMLImageElement) {
+    const canvas = this.floorCanvas;
+    if (!canvas || this.destroyed || this.visualFlags.arena !== 'arena-bake') return;
+    // Draw into a replacement surface and swap only after success. If upload
+    // or drawImage fails under memory pressure, the procedural floor remains
+    // intact and the loader truthfully reports fallback.
+    const replacement = document.createElement('canvas');
+    replacement.width = canvas.width;
+    replacement.height = canvas.height;
+    const ctx = replacement.getContext('2d');
+    if (!ctx) {
+      this.arenaBakeAssets?.markBaseFallback(new Error('Unable to create baked arena surface'));
+      return;
+    }
+    const size = this.floorSize;
+    const scale = replacement.width / size;
+    try {
+      ctx.save();
+      try {
+        ctx.setTransform(scale, 0, 0, scale, replacement.width / 2, replacement.height / 2);
+        ctx.beginPath();
+        ctx.arc(0, 0, this.arenaR + 100, 0, TAU);
+        ctx.clip();
+        ctx.drawImage(image, -size / 2, -size / 2, size, size);
+      } finally {
+        ctx.restore();
+      }
+    } catch (error) {
+      this.arenaBakeAssets?.markBaseFallback(error);
+      return;
+    }
+    this.floorCanvas = replacement;
+    this.arenaBaseApplied = true;
+    this.arenaBakeAssets?.releaseBase();
+  }
+
+  private stampArenaPhaseOverlay(phase: ArenaBakePhase) {
+    if (this.visualFlags.arena !== 'arena-bake' || this.arenaOverlayStamps.has(phase)) return;
+    const image = this.arenaBakeAssets?.getPhaseImage(phase);
+    const ctx = this.scorchCtx;
+    const canvas = this.scorchCanvas;
+    if (!image || !ctx || !canvas) return;
+    const size = this.floorSize;
+    ctx.save();
+    try {
+      ctx.setTransform(1, 0, 0, 1, canvas.width / 2, canvas.height / 2);
+      ctx.globalCompositeOperation = 'screen';
+      ctx.globalAlpha = phase === 3 ? 0.72 : 0.58;
+      ctx.drawImage(image, -size / 2, -size / 2, size, size);
+      this.arenaOverlayStamps.add(phase);
+      this.arenaOverlayErrors[phase] = null;
+    } catch (error) {
+      // Phase art is optional. Preserve combat and retry the mask next run
+      // instead of allowing a presentation upload failure to break the loop.
+      this.arenaOverlayErrors[phase] = error instanceof Error ? error.message : String(error);
+    } finally {
+      ctx.restore();
+    }
+  }
+
+  drawMalakarVisualProof(ctx: CanvasRenderingContext2D, snapshot: MalakarVisualSnapshot) {
+    if (this.visualFlags.boss === 'blender-three' && this.malakarThree) {
+      const proof = this.malakarThree;
+      try {
+        if (proof.render(ctx, snapshot)) {
+          this.malakarThreeState = 'ready';
+          this.bossVisualActive = 'blender-three';
+          return;
+        }
+        this.malakarThreeState = 'fallback';
+        const diagnostic = proof.diagnostics();
+        if (diagnostic.modelState === 'procedural-fallback') {
+          // A permanent GLB failure must not leave an unused WebGL context,
+          // scene, and dynamically imported renderer resident behind Canvas.
+          this.malakarThreeError = diagnostic.error;
+          proof.destroy();
+          if (this.malakarThree === proof) this.malakarThree = null;
+        }
+      } catch (error) {
+        this.malakarThreeState = 'fallback';
+        this.malakarThreeError = error instanceof Error ? error.message : String(error);
+        proof.destroy();
+        if (this.malakarThree === proof) this.malakarThree = null;
+      }
+    }
+    drawMalakarCanvasProof(ctx, snapshot);
+    this.bossVisualActive = this.visualFlags.boss === 'blender-three'
+      ? 'blender-canvas-fallback'
+      : 'blender-canvas';
+  }
+
+  visualDebugState() {
+    return {
+      requested: { ...this.visualFlags },
+      prepared: this.visualProofsPrepared,
+      arena: this.visualFlags.arena === 'arena-bake'
+        ? {
+          applied: this.arenaBaseApplied,
+          pending: this.pendingArenaBase !== null,
+          stampedPhases: [...this.arenaOverlayStamps].sort(),
+          overlayErrors: { ...this.arenaOverlayErrors },
+          assets: this.arenaBakeAssets?.diagnostics() ?? null,
+        }
+        : {
+          applied: false,
+          pending: false,
+          stampedPhases: [],
+          overlayErrors: { 2: null, 3: null },
+          assets: null,
+        },
+      boss: {
+        active: this.bossVisualActive,
+        three: this.visualFlags.boss === 'blender-three'
+          ? {
+            state: this.malakarThreeState,
+            error: this.malakarThreeError,
+            released: this.malakarThreeState === 'fallback' && this.malakarThree === null,
+            renderer: this.malakarThree?.diagnostics() ?? null,
+          }
+          : null,
+      },
+    };
   }
 
   addScorch(x: number, y: number, r: number, color: string, alpha: number, cracks = 0) {
@@ -3146,6 +3396,9 @@ export class Game {
       this.scorchCtx.clearRect(0, 0, this.scorchCanvas.width, this.scorchCanvas.height);
       this.scorchCtx.restore();
     }
+    this.arenaOverlayStamps.clear();
+    this.arenaOverlayErrors = { 2: null, 3: null };
+    this.flushPendingArenaBase();
     if (wasManuallyPaused) this.syncPauseState();
   }
 
@@ -3416,7 +3669,7 @@ export class Game {
       if (!ateTap && this.input.consume('confirm')) {
         this.state = 'intro'; this.stateT = 0;
         this.resetFight();
-        this.audio.init();
+        this.unlockFirstInteraction();
         this.audio.bladeDraw();
       }
     } else if (this.state === 'intro') {

@@ -1,0 +1,69 @@
+{
+  "generatedAt": "2026-07-26T08:39:10.242Z",
+  "validator": "scripts/art/validate_assets.mjs",
+  "limits": {
+    "baseBytes": 716800,
+    "overlayBytes": 409600,
+    "glbBytes": 512000,
+    "materials": 2,
+    "proofTriangles": 5000
+  },
+  "assets": {
+    "base": {
+      "file": "public/art/arena/arena-base.webp",
+      "bytes": 83872,
+      "sha256": "9836a84842e03e72a22eb6b817cce14b3a791ccd88519322467df9d32d1df98c",
+      "width": 2048,
+      "height": 2048,
+      "alpha": false,
+      "encoding": "VP8 "
+    },
+    "phase2": {
+      "file": "public/art/arena/phase-2-mask.webp",
+      "bytes": 16904,
+      "sha256": "e784218ad350b793828551784ed46e0a95ac046423046ee3746cff5e825d877b",
+      "width": 1024,
+      "height": 1024,
+      "alpha": true,
+      "encoding": "VP8X"
+    },
+    "phase3": {
+      "file": "public/art/arena/phase-3-mask.webp",
+      "bytes": 23698,
+      "sha256": "1860d021ec066965eec6589982ed932d9f250a6cbb314c49cf33b8ae9baa7565",
+      "width": 1024,
+      "height": 1024,
+      "alpha": true,
+      "encoding": "VP8X"
+    },
+    "overlaysCombinedBytes": 40602,
+    "malakar": {
+      "file": "public/art/models/malakar.glb",
+      "bytes": 10972,
+      "sha256": "6858f9da83d7b76822a1c824c44336f2599762af219e7d274cff92cdef97f5d7",
+      "materials": 2,
+      "meshes": 3,
+      "nodes": [
+        "Halo_Fragment_Prototype",
+        "Malakar_Body",
+        "Malakar_Core",
+        "Malakar_Root"
+      ],
+      "triangles": 332,
+      "extensionsUsed": [
+        "EXT_meshopt_compression",
+        "KHR_mesh_quantization"
+      ]
+    }
+  },
+  "constraints": {
+    "quietCentralPercent": 65,
+    "decorativeGeometryMinRadiusMeters": 3.66,
+    "dangerRedUsed": false,
+    "runtimeIntegration": {
+      "arena": "v2.25 default cached-floor replacement",
+      "canvasBoss": "v2.25 default presentation treatment",
+      "threeBoss": "query-gated experimental comparison"
+    }
+  }
+}

@@ -178,3 +178,22 @@ No remaining P0, P1, or P2 fidelity issues were found.
 ## Final result
 
 final result: passed
+
+## v2.25 Blender-assisted visual-depth addendum
+
+The v2.11 source-normalized character contract still governs the player and the
+original Kimi attribution above remains unchanged. v2.25 adds Codex-generated
+environment concept boards, reproducible Blender source assets, and a new
+Canvas Malakar presentation treatment; none of those are Kimi-authored images.
+
+The accepted runtime path was reviewed at native `390x844` true-touch DPR2 and
+`1280x800` desktop size across title, intro, all three combat phases, pause,
+death/retry, and return-to-title. The cached floor keeps the telegraph centre
+quiet, boss and player bars stay outside the protected control regions, and
+the Canvas boss remains more readable than the separately measured Three.js
+proof.
+
+The durable specification, five-state comparison protocol, exact asset
+measurements, fallback cases, and physical-device limit are recorded in
+[`docs/visual-upgrade/BLENDER_2_5D_VISUAL_SPEC.md`](docs/visual-upgrade/BLENDER_2_5D_VISUAL_SPEC.md)
+and [`docs/releases/v2.25.md`](docs/releases/v2.25.md).
