@@ -91,8 +91,9 @@ damage or halo count.
 - Decode, upload, GLB, renderer, or WebGL-context failures retain or return to
   Canvas without changing simulation.
 - Runtime `/art/` URLs include `VISUAL_ASSET_VERSION`; the production server
-  gives only those versioned requests immutable caching. Unversioned art stays
-  `no-cache` so a debug URL cannot pin stale content for a year.
+  gives only those versioned requests immutable caching. Unversioned art uses
+  `no-store, max-age=0` plus `Cloudflare-CDN-Cache-Control: no-store` so the
+  zone-wide four-hour browser TTL cannot pin a stale debug or fallback URL.
 
 ## Validation
 

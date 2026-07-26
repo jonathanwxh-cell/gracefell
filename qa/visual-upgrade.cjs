@@ -2131,17 +2131,60 @@ function validatePerf(viewportName, baseline, candidate) {
       out.assets[asset.id] = { spec: asset, receipt };
       validateAsset(asset, receipt);
     }
+    const cacheProbeUrl = new URL('/art/arena/arena-base.webp', BASE_URL);
+    cacheProbeUrl.searchParams.set('cacheQa', `${Date.now()}-${Math.random().toString(16).slice(2)}`);
     out.unversionedArtCache = await assetPage.evaluate(async (url) => {
-      const response = await fetch(url, { cache: 'no-store' });
-      return {
-        status: response.status,
-        cacheControl: response.headers.get('cache-control') || '',
+      const inspect = async () => {
+        const response = await fetch(url);
+        return {
+          status: response.status,
+          cacheControl: response.headers.get('cache-control') || '',
+          cloudflareCacheControl: response.headers.get('cloudflare-cdn-cache-control') || '',
+          cloudflareStatus: response.headers.get('cf-cache-status') || '',
+          age: response.headers.get('age') || '',
+        };
       };
-    }, new URL('/art/arena/arena-base.webp', BASE_URL).href);
-    if (out.unversionedArtCache.status !== 200
-      || !/\bno-cache\b/i.test(out.unversionedArtCache.cacheControl)
-      || /\bimmutable\b/i.test(out.unversionedArtCache.cacheControl)) {
-      addError(`unversioned art must remain revalidatable: ${JSON.stringify(out.unversionedArtCache)}`);
+      return { first: await inspect(), second: await inspect() };
+    }, cacheProbeUrl.href);
+    const cacheReceipts = [
+      out.unversionedArtCache.first,
+      out.unversionedArtCache.second,
+    ];
+    if (cacheReceipts.some((receipt) => receipt.status !== 200
+      || !/\bno-store\b/i.test(receipt.cacheControl)
+      || /\bimmutable\b/i.test(receipt.cacheControl))) {
+      addError(`unversioned art must not be retained: ${JSON.stringify(out.unversionedArtCache)}`);
+    }
+    const cacheHost = new URL(BASE_URL).hostname;
+    const localCacheProbe = cacheHost === '127.0.0.1' || cacheHost === 'localhost';
+    if (localCacheProbe) {
+      if (cacheReceipts.some((receipt) => !/\bno-store\b/i.test(receipt.cloudflareCacheControl))) {
+        addError(`origin omitted the Cloudflare no-store contract: ${JSON.stringify(out.unversionedArtCache)}`);
+      }
+    } else if (cacheReceipts.some((receipt) => /\bHIT\b/i.test(receipt.cloudflareStatus) || receipt.age)) {
+      addError(`public unversioned art was retained at the edge: ${JSON.stringify(out.unversionedArtCache)}`);
+    }
+    out.missingStatic = {};
+    for (const [namespace, pathname] of Object.entries({
+      art: '/art/__qa-missing__.webp?v=missing',
+      assets: '/assets/__qa-missing__.js',
+      audio: '/audio/__qa-missing__.mp3',
+    })) {
+      const receipt = await assetPage.evaluate(async (url) => {
+        const response = await fetch(url);
+        return {
+          status: response.status,
+          contentType: response.headers.get('content-type') || '',
+          cacheControl: response.headers.get('cache-control') || '',
+        };
+      }, new URL(pathname, BASE_URL).href);
+      out.missingStatic[namespace] = receipt;
+      if (receipt.status !== 404
+        || !/\bno-store\b/i.test(receipt.cacheControl)
+        || /\bimmutable\b/i.test(receipt.cacheControl)
+        || /\btext\/html\b/i.test(receipt.contentType)) {
+        addError(`missing ${namespace} must return 404 no-store rather than immutable SPA HTML: ${JSON.stringify(receipt)}`);
+      }
     }
     const overlays = ARENA_ASSETS.slice(1)
       .map((asset) => out.assets[asset.id].receipt)

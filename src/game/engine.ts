@@ -4331,12 +4331,16 @@ Game.prototype.drawHUD = function drawHUD(this: Game, ctx: CanvasRenderingContex
       combatCue = `OATH CHAIN  ${this.boss.chainStep}/${this.boss.chainTotal}`;
       combatCueColor = PAL.ember;
     }
+    // On compact touch screens the original floating cue crossed the player's
+    // lower silhouette at the exact dodge decision. Reuse the boss-title lane
+    // instead: it is stable HUD space, above the bar and outside the controls.
+    const compactCueInTitleLane = Boolean(combatCue) && this.input.isTouch && this.w <= 560;
     if (combatCue) {
       ctx.textAlign = 'center';
       ctx.font = body(this.input.isTouch ? 13 : 12, 800);
       const cueW = Math.min(bw, ctx.measureText(combatCue).width + 34);
       const cueX = (this.w - cueW) / 2;
-      const cueY = by - 53;
+      const cueY = compactCueInTitleLane ? by - 30 : by - 53;
       ctx.fillStyle = 'rgba(8,6,4,0.88)';
       ctx.fillRect(cueX, cueY, cueW, 25);
       ctx.strokeStyle = combatCueColor;
@@ -4368,7 +4372,7 @@ Game.prototype.drawHUD = function drawHUD(this: Game, ctx: CanvasRenderingContex
       nameSize -= 1;
       ctx.font = serif(nameSize, 600);
     }
-    ctx.fillText(name, bx + 2, by - 10);
+    if (!compactCueInTitleLane) ctx.fillText(name, bx + 2, by - 10);
     ctx.shadowBlur = 0;
     ctx.fillStyle = 'rgba(8,6,4,0.8)';
     ctx.fillRect(bx - 2, by - 2, bw + 4, 16);

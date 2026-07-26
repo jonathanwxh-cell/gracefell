@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-26T08:39:10.242Z",
+  "generatedAt": "2026-07-26T09:29:22.003Z",
   "validator": "scripts/art/validate_assets.mjs",
   "limits": {
     "baseBytes": 716800,

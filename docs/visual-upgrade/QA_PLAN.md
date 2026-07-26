@@ -66,8 +66,11 @@ Cache-Control: public, max-age=31536000, immutable
 ```
 
 The lane verifies both direct asset receipts and URLs disclosed by arena/Three
-diagnostics. It also requests one unversioned art URL and requires `no-cache`
-without `immutable`, so a debug URL cannot pin stale art for a year.
+diagnostics. It requests the same unique unversioned art URL twice and requires
+`no-store`, the origin-only Cloudflare no-store directive, and no public
+`CF-Cache-Status: HIT` or `Age`, so a debug URL cannot pin stale art. Missing
+versioned art, asset, and audio URLs must return `404 no-store` rather than
+immutable SPA fallback HTML.
 
 ### Diagnostics
 
