@@ -2301,9 +2301,24 @@ seal. A run-local flag makes it exact-once; S receives one restrained upper
 tone. Scoring, persistence, result input ownership, and replay pacing do not
 change.
 
+### A clean runner found an audio-quantum edge
+
+The first GitHub Linux run exercised the established Phase 2 pause/resume
+crossfade and exposed a fractional scheduling race: Chromium observed the
+transition deadline, then rejected a final `setValueAtTime(currentTime)` because
+that clock sample still fell inside the 720 ms `setValueCurveAtTime` interval
+by less than one audio quantum.
+
+Finalization now commits the already-reached endpoints 5 ms beyond both the
+authored curve end and the observed audio clock. There is no audible gap: the
+curves already end at those values. This changes neither crossfade duration nor
+phase timing; it only makes the cleanup write legal across browser schedulers.
+The existing full phase-score QA is the regression.
+
 ### Changed from v2.25
 
 - Audio event routing and bounded mix parameters change.
+- Phase-crossfade endpoint cleanup receives a cross-platform scheduling margin.
 - The projectile object gains optional closest-pass state.
 - `clampArena` reports its unchanged clamp result.
 - Deterministic real-browser QA expands around these contracts.

@@ -1907,16 +1907,24 @@ export class GameAudio {
       return;
     }
     from?.element.pause();
+    // Chrome may report currentTime a fraction of an audio quantum before a
+    // value curve's mathematical end even after the transition deadline has
+    // been observed. Writing at that measured time can overlap the curve and
+    // throw. Commit the already-reached endpoints just beyond both clocks.
+    const settleAt = Math.max(
+      this.ctx.currentTime + 0.005,
+      transition.endAt + 0.005,
+    );
     if (from) {
       try { from.element.currentTime = 0; } catch { /* media may not be seekable yet */ }
       if (from.gain) {
-        this.holdAudioParam(from.gain.gain, this.ctx.currentTime);
-        from.gain.gain.setValueAtTime(0.0001, this.ctx.currentTime);
+        from.gain.gain.cancelScheduledValues(settleAt);
+        from.gain.gain.setValueAtTime(0.0001, settleAt);
       }
     }
     if (to?.gain) {
-      this.holdAudioParam(to.gain.gain, this.ctx.currentTime);
-      to.gain.gain.setValueAtTime(1, this.ctx.currentTime);
+      to.gain.gain.cancelScheduledValues(settleAt);
+      to.gain.gain.setValueAtTime(1, settleAt);
     }
     this.activeSoundtrackDeck = transition.to;
     this.soundtrackPhase = transition.phase;
