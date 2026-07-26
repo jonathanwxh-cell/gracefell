@@ -2247,3 +2247,81 @@ boss-pattern, difficulty, score, save-v7, music, SFX, weather-pool, or control
 geometry value changed. The unused one-route React Router wrapper was removed
 after the release audit found no advisory-free Node-20-compatible line; `App`
 still renders the same sole `Home` page directly.
+
+## v2.26 — Codex (GPT-5), "consequences speak once" (2026-07-26)
+
+The recorded library already contained suitable heavy, hurt, closest-pass,
+ward, and stamp material. The missing polish was event ownership, not more
+assets.
+
+### Sound follows the visible action
+
+The heavy swing used to start when HVY entered the state machine, roughly
+420 ms before the active frame. It now starts at release. The existing charge
+fraction passes through release and boss contact to continuously lower and
+weight the same recorded/procedural families. This avoids both failure modes:
+an uncharged and fully charged hit no longer sound identical, while a charged
+hit does not stack another full effect on top of the established impact.
+
+The held charge remains one sustained voice. Its release fade is shortened from
+180 to 90 ms; damage takes the immediate cleanup path. No attack time, lunge,
+hitbox, damage, stamina, or poise value changed.
+
+### Severity comes from final damage
+
+A boolean heavy flag collapsed very different received hits at the 20-damage
+boundary. `Player.takeDamage` now passes adjusted numeric damage to `GameAudio`.
+The mix maps `<=12`, `13..20`, and `>=21` to light, medium, and heavy profiles.
+The profiles differ in pitch, body, phone transient, room, and ducking. Only
+heavy adds one delayed sub tail.
+
+### Closest pass is a one-shot state
+
+A cooldown alone cannot decide whether the same projectile should speak twice
+or whether a damaging collision should also whoosh. Each projectile therefore
+tracks its closest sampled player distance and one ownership flag. It may voice
+only after receding from a safe band just outside collision. Collision resolves
+ownership first. This is two optional scalar fields on an existing short-lived
+object, with no new pool, query, or render work.
+
+### Denial and boundary cues preserve control
+
+Low-stamina roll/light/heavy input calls a restrained warning but deliberately
+does not consume the command. The 260 ms buffer keeps its existing chance to
+execute after regeneration.
+
+`clampArena` reports its existing clamp result. The player uses that result,
+outward radial speed, and a contact latch to voice the ward once on entry rather
+than every frame of boundary sliding. Boss behavior ignores the return value.
+
+### The terminal sound waits for the terminal picture
+
+The grade stamp is owned by the same 1.5-second reveal already used to pop the
+seal. A run-local flag makes it exact-once; S receives one restrained upper
+tone. Scoring, persistence, result input ownership, and replay pacing do not
+change.
+
+### A clean runner found an audio-quantum edge
+
+The first GitHub Linux run exercised the established Phase 2 pause/resume
+crossfade and exposed a fractional scheduling race: Chromium observed the
+transition deadline, then rejected a final `setValueAtTime(currentTime)` because
+that clock sample still fell inside the 720 ms `setValueCurveAtTime` interval
+by less than one audio quantum.
+
+Finalization now commits the already-reached endpoints 5 ms beyond both the
+authored curve end and the observed audio clock. There is no audible gap: the
+curves already end at those values. This changes neither crossfade duration nor
+phase timing; it only makes the cleanup write legal across browser schedulers.
+The existing full phase-score QA is the regression.
+
+### Changed from v2.25
+
+- Audio event routing and bounded mix parameters change.
+- Phase-crossfade endpoint cleanup receives a cross-platform scheduling margin.
+- The projectile object gains optional closest-pass state.
+- `clampArena` reports its unchanged clamp result.
+- Deterministic real-browser QA expands around these contracts.
+- No runtime asset, request, startup node, render operation, simulation value,
+  difficulty rule, input duration/priority, score formula, save-v7 field,
+  weather behavior, music track, or visual treatment changes.

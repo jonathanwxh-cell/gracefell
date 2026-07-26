@@ -8,14 +8,15 @@ rules are all decided by what works one-handed on a 390px screen.
 
 **Play it: [gracefell.alyoechosys.dev](https://gracefell.alyoechosys.dev)**
 
-Current release: **v2.25** — Blender-assisted visual depth without replacing the
-authoritative Canvas simulation. A compact Ashen Reliquary plate occupies the existing cached-floor
-slot, phase masks stamp only at real phase transitions, and the default Canvas Malakar has a
-stronger knight/cape/core/halo silhouette. The measured Three.js proof remains opt-in because it is
-less readable and 3–6× more expensive than Canvas at native play size. The v2.23 render-cost gate,
-v2.24 impact frames, v2.22.1 separated phone HUD, and every existing gameplay/save/audio contract
-remain intact. Evidence is recorded in
-[`docs/releases/v2.25.md`](docs/releases/v2.25.md).
+Current release candidate: **v2.26** — clearer combat consequences without a
+larger asset or render budget. Heavy swings now speak on the actual release
+frame, with bounded charge-scaled release and contact weight; received damage
+has light, medium, and heavy tiers; close projectile passes, denied low-stamina
+actions, arena-ward contact, and the victory grade seal each have explicit
+one-shot ownership. The 45-file SFX manifest, music, simulation timing,
+difficulty, score/save schema v7, Canvas renderer, and v2.25 visual treatment
+are unchanged. Evidence is recorded in
+[`docs/releases/v2.26.md`](docs/releases/v2.26.md).
 
 The **v2.22** audio foundation remains a four-role software-house pass that turns the supplied
 Kimi/Moonshot combat library into a bounded, production-safe recorded-foley layer. Forty-five
@@ -100,6 +101,11 @@ Codex generated the new concept boards, built the reproducible Blender-to-Canvas
 integrated the accepted arena and boss treatment, implemented and measured the rejected Three.js
 comparison, and ran independent code, player, performance, failure, and release QA. These v2.25
 boards and Blender assets are Codex work and must not be attributed to Kimi.
+
+**v2.26 — combat-audio polish implemented and verified by Codex (GPT-5).**
+Codex tightened event ownership around heavy release, damage severity, projectile
+closest passes, stamina denial, ward contact, and the terminal grade seal, then
+expanded the real-browser audio/gameplay contract without adding runtime assets.
 
 Directed by [@jonathanwxh-cell](https://github.com/jonathanwxh-cell), who asked for "AAA grade" and meant it.
 
@@ -550,6 +556,31 @@ and QA contract live under
 [`docs/visual-upgrade/`](docs/visual-upgrade/BLENDER_2_5D_VISUAL_SPEC.md).
 Combat, difficulty, saves, scoring, audio, input, and telegraph geometry are
 unchanged.
+
+## Fixed by Codex — v2.26 combat-audio consequence pass
+
+- **Heavy actions land on the picture.** HVY speaks when the blade actually
+  releases, not when the button is first pressed. Charge amount lowers and
+  weights the same release/contact families; the sustained charge bed fades in
+  90 ms and cuts immediately if the player is hurt.
+- **Damage severity is readable.** Adjusted damage routes to light (up to 12),
+  medium (13–20), or heavy (21+) hurt profiles with bounded pitch, body, phone
+  transient, reverb, and music ducking differences.
+- **The room acknowledges close calls and boundaries.** A hostile projectile
+  gets one closest-pass whoosh only after it safely recedes; a damaging contact
+  can never also claim that cue. The arena ward chimes once on a meaningful
+  outward collision and stays latched while the player slides along it.
+- **Denials and results answer back.** A low-stamina roll, light, or heavy
+  request gets a restrained warning without consuming the existing 260 ms input
+  buffer. The grade seal stamps once at its established 1.5-second reveal, with
+  a small S-rank lift.
+- **No new performance cost at rest.** No MP3, request, loader worker, startup
+  node, render operation, particle, or save field was added. All new synthesis
+  is event-bound and routes through the established voice budget, ducking, room,
+  and limiter.
+
+Full rationale, deterministic contract checks, publication receipts, and public
+desktop/mobile verification: [`docs/releases/v2.26.md`](docs/releases/v2.26.md).
 
 ## Running it
 
