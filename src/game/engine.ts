@@ -3124,11 +3124,31 @@ export class Game {
     };
   }
 
+  playerHudRect() {
+    const pad = Math.max(18, this.w * 0.02);
+    const barW = clamp(this.w * 0.3, 190, 380);
+    return {
+      x: pad - 2,
+      y: pad - 2,
+      width: barW + 4,
+      height: 60,
+      pad,
+      barW,
+    };
+  }
+
+  combatUtilityTop() {
+    // Compact screens get one dedicated utility rail below the player
+    // resources. The same value feeds the Canvas SOUND target and is mirrored
+    // by the compact CSS for the DOM controls.
+    return this.w <= 560 ? 82 : 12;
+  }
+
   soundButtonRect() {
     const width = 76;
-    const height = 38;
+    const height = 44;
     const right = 12 + this.safeRight;
-    return { x: this.w - right - width, y: 12, width, height };
+    return { x: this.w - right - width, y: this.combatUtilityTop(), width, height };
   }
 
   vibrate(ms: number | number[]) {
@@ -3883,8 +3903,7 @@ Game.prototype.drawArena = function drawArena(this: Game, ctx: CanvasRenderingCo
 
 Game.prototype.drawHUD = function drawHUD(this: Game, ctx: CanvasRenderingContext2D) {
   const p = this.player;
-  const pad = Math.max(18, this.w * 0.02);
-  const barW = clamp(this.w * 0.3, 190, 380);
+  const { pad, barW } = this.playerHudRect();
 
   // ---- player HP
   ctx.save();
@@ -3956,7 +3975,7 @@ Game.prototype.drawHUD = function drawHUD(this: Game, ctx: CanvasRenderingContex
   // centerline so they never cover Malakar or the touch cluster.
   const rite = this.tutorialMessage();
   if (rite) {
-    const y = this.input.isTouch ? 116 : 84;
+    const y = this.w <= 560 ? 148 : this.input.isTouch ? 116 : 84;
     const width = Math.min(this.w - 32, 330);
     ctx.fillStyle = 'rgba(8,6,4,0.84)';
     ctx.fillRect((this.w - width) / 2, y - 18, width, 30);
@@ -3970,7 +3989,7 @@ Game.prototype.drawHUD = function drawHUD(this: Game, ctx: CanvasRenderingContex
 
   const queuedLights = this.player.queuedLightAttacks;
   if ((this.playerChainHits > 0 && this.playerChainT > 0) || queuedLights > 0) {
-    const y = this.input.isTouch ? 158 : 120;
+    const y = this.w <= 560 ? 190 : this.input.isTouch ? 158 : 120;
     const filled = '\u25c6'.repeat(this.playerChainHits);
     const empty = '\u25c7'.repeat(Math.max(0, 3 - this.playerChainHits));
     const queued = '\u25c6'.repeat(queuedLights);
@@ -4110,7 +4129,7 @@ Game.prototype.drawHUD = function drawHUD(this: Game, ctx: CanvasRenderingContex
     ctx.textAlign = 'center';
     ctx.font = body(13, 650);
     ctx.fillStyle = PAL.parchment;
-    ctx.fillText(this.audio.muted ? 'SOUND OFF' : 'SOUND ON', sound.x + sound.width / 2, sound.y + 24);
+    ctx.fillText(this.audio.muted ? 'SOUND OFF' : 'SOUND ON', sound.x + sound.width / 2, sound.y + 27);
   } else {
     ctx.textAlign = 'right';
     ctx.font = body(13, 500);

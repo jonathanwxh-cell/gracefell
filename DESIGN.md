@@ -2027,3 +2027,46 @@ audio context, and a constrained Save-Data phone. The v2.22 lane requires:
 Exact local, CI, merged-SHA, production, and public receipts belong in
 `docs/releases/v2.22.md`. Asset-level prompts, measurements, hashes, exclusions,
 and remaster details belong in `public/audio/sfx/README.md`.
+
+## v2.22.1 — Codex (GPT-5 / Codex Desktop), "the clear-status rail" (2026-07-26)
+
+### Observed failure
+
+A real iPhone Safari capture exposed a cross-layer layout defect that the
+existing gate did not measure. The player resources are painted into the
+Canvas, while MIX, PAUSE, and MENU are DOM buttons and SOUND is a Canvas hit
+target. At 390×844 the protected player HUD occupied `x=16..210`,
+`y=16..76`, while MIX occupied `x=146..210`, `y=12..56`. Both controls were
+individually in-bounds and fingertip-sized, so the old per-control checks
+passed even though MIX hid the right side of the health bar.
+
+### Repair
+
+Compact combat screens now have two deliberate vertical lanes:
+
+- player HP, stamina, and flasks remain in the top status lane;
+- MENU, MIX, PAUSE, and SOUND share a single utility rail at `y=82`, with
+  8px horizontal gaps at the 390px reference width;
+- SOUND now has the same 44px height as the DOM utilities;
+- the contextual rite and light-chain acknowledgement move below that rail,
+  retaining their separation from both the buttons and one another.
+
+`playerHudRect()` is the shared protected geometry used by rendering and QA.
+`combatUtilityTop()` is the compact/wide source for the Canvas SOUND target;
+the compact CSS mirrors that one measured top coordinate for the three DOM
+utilities.
+
+### Changed from v2.22
+
+This patch changes presentation geometry only. It does not change combat
+timing, boss logic, damage, difficulty, input verbs, scoring, save schema,
+weather, music, recorded effects, audio ownership, or runtime asset count.
+
+### Acceptance contract
+
+The true-touch lane now measures all four utilities against the player HUD and
+against one another. It fails if a control overlaps the protected resource
+rectangle, overlaps a peer, leaves the viewport, or is smaller than 44×44.
+It also captures `touch-hud-utilities.png` at the point of assertion. Focused
+checks cover 320×700, 390×844, and 1280×800 so the mobile repair cannot disturb
+the established desktop header.

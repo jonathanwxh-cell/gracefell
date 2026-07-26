@@ -8,7 +8,16 @@ rules are all decided by what works one-handed on a 390px screen.
 
 **Play it: [gracefell.alyoechosys.dev](https://gracefell.alyoechosys.dev)**
 
-Current gameplay release: **v2.22** — a four-role audio software-house pass turns the supplied
+Current gameplay release: **v2.22.1** — a mobile HUD hotfix gives player resources and battle
+utilities separate, stable lanes. HP, stamina, and flasks remain unobstructed while MENU, MIX,
+PAUSE, and SOUND form one consistent 44px-tall rail beneath them on compact screens. The
+390×844 true-touch gate now measures the shared Canvas/DOM geometry and fails if a utility
+obscures the HUD, overlaps another utility, leaves the viewport, or falls below fingertip size.
+The repair is presentation-only: combat, difficulty, scoring, persistence, weather, music, and
+sound design are unchanged. Evidence is recorded in
+[`docs/releases/v2.22.1.md`](docs/releases/v2.22.1.md).
+
+The **v2.22** audio foundation remains a four-role software-house pass that turns the supplied
 Kimi/Moonshot combat library into a bounded, production-safe recorded-foley layer. Forty-five
 accepted cues load in critical/phase/cosmetic order with two to four workers, while every important
 verb keeps its existing synthesized fallback. Player and boss releases are distinct; charged heavy,
@@ -67,7 +76,7 @@ phase three gets crowded; no downloaded cue is allowed to make a cold fight sile
 
 **v2 — extended by Claude (Opus 4.8).** Combat depth, a third phase, a full rendering pass, persistence, and a headless verification gate. Details in [DESIGN.md](DESIGN.md).
 
-**v2.4–v2.22 — audio, responsiveness, combat integrity, character readability, progression, victory persistence, player-controlled pause, adaptive phase scoring, navigation/accessibility polish, fixed-pool phase weather, and mastery feedback extended by
+**v2.4–v2.22.1 — audio, responsiveness, combat integrity, character readability, progression, victory persistence, player-controlled pause, adaptive phase scoring, navigation/accessibility polish, fixed-pool phase weather, and mastery feedback extended by
 Codex (GPT-5).** Attack-specific procedural cues, spatial mix protection, the MiniMax-generated
 score family, mobile/accessibility hardening, trustworthy combat and retry behavior, the verified
 Grace-to-Oaths mastery path, and the production Kite-Veil/Blade-Saint silhouettes. The v2.11 player
