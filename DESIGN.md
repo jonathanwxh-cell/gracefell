@@ -2135,3 +2135,57 @@ clean.
 
 Nothing in `src/`. `git diff v2.22.1 -- src/` is empty. This pass adds a QA lane,
 an `npm run perf` script, and documentation.
+
+## v2.24 — Claude (Opus 5), "impact frames" (2026-07-26)
+
+Goal: make a hit read harder, now that v2.23 established the frame budget was
+never the obstacle.
+
+Three presentation-only changes: the sword trail became one continuously tapered
+filled strip instead of up to nine constant-width stroked segments (the old loop
+stepped `lineWidth` and alpha per segment and banded at the joins); a swing
+stretches the player along its facing and squashes it across, decaying over
+0.16 s; and a hit makes the boss's drawn body give ground along the blow while
+its shadow stays planted.
+
+### The constraint that shaped it
+
+`design-qa.md` commits the player to seven authored macro-silhouettes that must
+survive the 0.55 mobile camera. An anisotropic scale is exactly the kind of
+change that quietly breaks that.
+
+So the impact frame is applied to the **transform around** `drawKiteVeilBody`,
+never to the authored path data. The state shapes are untouched; only the space
+they are drawn in is deformed. At peak stretch the parchment kite and veil mass
+stay legible.
+
+### Making "presentation only" falsifiable
+
+The claim that none of this touches combat is the whole safety argument, so it
+is asserted rather than stated. `attackStretchImpulse` is a pure exported
+function locked by unit tests. `qa/v224.cjs` proves a hit records recoil without
+moving `boss.x/y`, that the boss stays put while recoil decays, that a fresh
+fight does not inherit it, and that three `render()` calls across a live swing
+mutate no simulation state at all.
+
+That last one guards the real hazard: both new effects add logic at draw time,
+and the way that goes wrong is a render path writing back into game state.
+
+The lane was mutation-tested — injecting `this.x += Math.cos(a) * 2` into
+`Boss.takeDamage` made it fail with `boss position moved on hit`. An assertion
+that cannot fail is not worth committing.
+
+### Dropped: the boss rim-light
+
+Scoped, then cut. The boss's established read is "broken blade halo first, split
+ash cape second"; a rim competes with the halo for the same edge. The player
+already carries a close-range rim, which is what actually solves player/boss
+separation at 0.55 zoom, so a boss rim was redundant as well as risky.
+
+### Changed from v2.23
+
+Presentation only. No change to combat timing, damage, poise, stamina,
+i-frames, boss AI, difficulty, input, scoring, persistence, save schema v7,
+weather, music, or sound effects. Per-frame gradient, `shadowBlur`, and
+draw-call counts are unchanged from the v2.23 baseline; the trail is strictly
+cheaper than what it replaced.
