@@ -453,6 +453,7 @@ export class Player {
   routeLightHits = 0;
   sunderWindow = 0;
   sunderQueued = false;
+  recoveryAction: 'roll' | 'light' | 'heavy' | 'flask' | null = null;
   stepT = 0; // footstep cadence timer while moving
   wardContact = false;
   trail: { x: number; y: number; a: number; life: number }[] = [];
@@ -475,9 +476,14 @@ export class Player {
     this.hurtFlash = Math.max(0, this.hurtFlash - dt);
     this.healPulse = Math.max(0, this.healPulse - dt);
     this.stamDelay = Math.max(0, this.stamDelay - dt);
+    const comboWindowWasActive = this.comboWindow > 0;
     this.comboWindow = Math.max(0, this.comboWindow - dt);
     if (this.state === 'move') this.sunderWindow = Math.max(0, this.sunderWindow - dt);
     if (this.comboWindow <= 0 && this.state === 'move') {
+      if (
+        comboWindowWasActive
+        && (this.routeLightHits > 0 || this.sunderQueued || this.queuedLightAttacks > 0)
+      ) game.breakPlayerChain('TOO SLOW');
       this.comboStep = 0;
       this.queuedLightAttacks = 0;
       this.clearSunderRoute();
@@ -490,6 +496,16 @@ export class Player {
     const spd = 232;
 
     if (this.state === 'dead') { this.updateTrail(dt); return; }
+
+    // A wound briefly owns the hero, but it should not erase the player's next
+    // deliberate command. Keep exactly one recovery action and let ROLL replace
+    // an earlier choice because defense remains the highest-priority answer.
+    if (this.state === 'stagger') {
+      if (input.consume('roll')) this.recoveryAction = 'roll';
+      for (const action of ['light', 'heavy', 'flask'] as const) {
+        if (input.consume(action) && this.recoveryAction === null) this.recoveryAction = action;
+      }
+    }
 
     // A single TTL flag is sufficient for defensive actions, but it collapses
     // rapid repeated ATK taps into one command. Preserve up to the two
@@ -515,18 +531,25 @@ export class Player {
     // state transitions
     if (this.state === 'move' || this.state === 'flask') {
       const queuedLight = this.queuedLightAttacks > 0;
-      const sunderBuffered = this.sunderWindow > 0
+      const bossStaggered = game.boss.state === 'staggered';
+      const routeHeavyBuffered = this.sunderWindow > 0
         && (this.sunderQueued || input.hasBuffered('heavy'));
+      // A stagger execution is the authored defensive payoff. A pending mixed
+      // route must never downgrade it into Sunder.
+      const executeBuffered = bossStaggered && routeHeavyBuffered;
+      const sunderBuffered = !bossStaggered && routeHeavyBuffered;
+      const routedHeavyCost = bossStaggered ? 26 : this.sunderWindow > 0 ? 20 : 26;
       if (this.state === 'move' && queuedLight && this.stam < 12) {
         game.audio.staminaEmpty(game.audioSpatial(this.x, this.y));
+        game.breakPlayerChain('NO STAMINA');
         this.queuedLightAttacks = 0;
         this.clearSunderRoute();
       }
       if (this.state === 'move' && (
         (input.hasBuffered('roll') && this.stam < 20)
         || (input.hasBuffered('light') && this.stam < 12)
-        || (input.hasBuffered('heavy') && this.stam < (this.sunderWindow > 0 ? 20 : 26))
-        || (this.sunderQueued && this.sunderWindow > 0 && this.stam < 20)
+        || (input.hasBuffered('heavy') && this.stam < routedHeavyCost)
+        || (this.sunderQueued && this.sunderWindow > 0 && this.stam < routedHeavyCost)
       )) {
         // Warn without consuming the command: the established 260 ms input
         // buffer can still execute it if regeneration crosses the threshold.
@@ -534,6 +557,7 @@ export class Player {
       }
       if (this.stam >= 20 && this.state !== 'flask' && input.consume('roll')) {
         this.state = 'roll'; this.t = 0.42;
+        game.breakPlayerChain('ROLL');
         this.comboStep = 0; this.comboWindow = 0; this.queuedLightAttacks = 0; this.rollSlashQueued = false;
         this.clearSunderRoute();
         const m = Math.hypot(ax.x, ax.y);
@@ -555,6 +579,7 @@ export class Player {
         this.lungeVy = Math.sin(this.facing) * 330;
       } else if (sunderBuffered && this.stam < 20) {
         input.consume('heavy');
+        game.breakPlayerChain('NO STAMINA');
         this.clearSunderRoute();
       } else if (this.stam >= 12 && this.state !== 'flask' && (queuedLight || input.consume('light'))) {
         if (queuedLight) this.queuedLightAttacks--;
@@ -569,7 +594,12 @@ export class Player {
         this.lungeVx = Math.cos(this.facing) * lunge; this.lungeVy = Math.sin(this.facing) * lunge;
         const spatial = game.audioSpatial(this.x, this.y);
         game.audio.swing(step, spatial);
-      } else if (this.stam >= 26 && this.state !== 'flask' && input.consume('heavy')) {
+      } else if (
+        this.stam >= 26
+        && this.state !== 'flask'
+        && (executeBuffered || input.consume('heavy'))
+      ) {
+        if (executeBuffered) input.consume('heavy');
         this.state = 'heavy'; this.t = 0.62; this.attackHit = false;
         this.queuedLightAttacks = 0;
         this.clearSunderRoute();
@@ -709,7 +739,13 @@ export class Player {
     } else if (this.state === 'stagger') {
       this.vx = lerp(this.vx, 0, 1 - Math.exp(-6 * dt));
       this.vy = lerp(this.vy, 0, 1 - Math.exp(-6 * dt));
-      if (this.t <= 0) this.state = 'move';
+      if (this.t <= 0) {
+        this.state = 'move';
+        if (this.recoveryAction) {
+          input.bufferPress(this.recoveryAction);
+          this.recoveryAction = null;
+        }
+      }
     }
 
     this.x += (this.vx + this.impulseVx) * dt;
@@ -777,10 +813,11 @@ export class Player {
       }
       return false;
     }
+    game.breakPlayerChain('HIT');
     this.comboStep = 0; this.comboWindow = 0; this.queuedLightAttacks = 0; this.rollSlashQueued = false;
     this.clearSunderRoute();
+    this.recoveryAction = null;
     this.gracebreakEligible = false; this.gracebreakStrike = false;
-    game.breakPlayerChain();
     game.audio.chargeLoopStop(true);
     game.lastDamageSource = source;
     this.rollIframes = 0;
@@ -1940,6 +1977,7 @@ export interface GameUiSnapshot {
     telegraph: string;
     comboHits: number;
     queuedLights: number;
+    queuedAction: string;
     resolvePercent: number;
     resolveReady: boolean;
     technique: string;
@@ -2099,6 +2137,7 @@ export class Game {
   phaseEnteredAt = [0, 0, 0];
   lastHits: { source: DamageSource; at: number }[] = [];
   playerChainHits = 0; playerChainT = 0; playerChainFinished = false;
+  chainBreakText = ''; chainBreakT = 0;
   resolve = 0; resolveUses = 0; resolveFromWounds = 0;
   techniqueText = ''; techniqueT = 0;
   lastDamageSource: DamageSource = 'unknown';
@@ -2846,13 +2885,18 @@ export class Game {
         telegraph,
         comboHits: this.playerChainHits,
         queuedLights: this.player.queuedLightAttacks,
+        queuedAction: this.player.recoveryAction ?? '',
         resolvePercent: Math.round(clamp(this.resolve / RESOLVE_MAX, 0, 1) * 100),
         resolveReady: this.resolve >= RESOLVE_MAX,
         technique: this.techniqueT > 0
           ? this.techniqueText
-          : this.player.sunderWindow > 0
-            ? (this.player.sunderQueued ? 'Sunder queued' : 'Sunder available')
-            : this.resolve >= RESOLVE_MAX ? 'Gracebreak ready' : '',
+          : this.boss.state === 'staggered'
+            ? 'Execute ready'
+            : this.player.recoveryAction
+              ? `${this.player.recoveryAction} queued for recovery`
+              : this.player.sunderWindow > 0.08
+                ? (this.player.sunderQueued ? 'Sunder queued' : 'Sunder available')
+                : this.resolve >= RESOLVE_MAX ? 'Gracebreak ready' : '',
       },
     };
   }
@@ -3340,13 +3384,23 @@ export class Game {
     return true;
   }
 
-  breakPlayerChain() {
+  breakPlayerChain(reason?: 'MISS' | 'HIT' | 'ROLL' | 'TOO SLOW' | 'NO STAMINA') {
+    const hadProgress = this.playerChainHits > 0
+      || this.player.routeLightHits > 0
+      || this.player.sunderQueued
+      || this.player.queuedLightAttacks > 0;
     this.playerChainHits = 0;
     this.playerChainT = 0;
     this.playerChainFinished = false;
+    if (reason && hadProgress) {
+      this.chainBreakText = `CHAIN LOST · ${reason}`;
+      this.chainBreakT = 0.9;
+    }
   }
 
   private registerPlayerChain(step: number) {
+    this.chainBreakText = '';
+    this.chainBreakT = 0;
     if (step === 0 || this.playerChainT <= 0) this.playerChainHits = 1;
     else if (step === 1 && this.playerChainHits === 1) this.playerChainHits = 2;
     else if (step === 2 && this.playerChainHits === 2) this.playerChainHits = 3;
@@ -3365,8 +3419,8 @@ export class Game {
   tutorialMessage(): string {
     if (this.tutorialT <= 0 || this.tutorialStage === 'done') return '';
     if (this.tutorialStage === 'move') return this.input.isTouch
-      ? `MOVE · drag ${this.leftHanded ? 'right' : 'left'} · ATK×2 → HVY SUNDER`
-      : 'MOVE · WASD or arrows';
+      ? `MOVE · drag ${this.leftHanded ? 'right' : 'left'} · LAND ATK×2 → HVY SUNDER`
+      : 'MOVE · WASD · LAND J×2 → K';
     if (this.tutorialStage === 'roll') return 'ROLL THROUGH THE BLADE';
     if (this.tutorialStage === 'poise') return 'PERFECT · DODGES BREAK POISE';
     return 'STAGGERED · STRIKE NOW';
@@ -3512,7 +3566,7 @@ export class Game {
       }
     }
     if (!heavy && !rollSlash && !sunder && !connected) {
-      this.breakPlayerChain();
+      this.breakPlayerChain('MISS');
       p.clearSunderRoute();
     }
   }
@@ -3659,6 +3713,7 @@ export class Game {
     this.perfectDodges = 0; this.flasksUsed = 0;
     this.resolve = 0; this.resolveUses = 0; this.resolveFromWounds = 0;
     this.techniqueText = ''; this.techniqueT = 0;
+    this.chainBreakText = ''; this.chainBreakT = 0;
     this.damageMix = { light: 0, heavy: 0, riposte: 0, flank: 0 };
     this.phaseEnteredAt = [0, 0, 0];
     this.lastHits = [];
@@ -3954,6 +4009,7 @@ export class Game {
     }
     this.playerChainT = Math.max(0, this.playerChainT - dt);
     if (this.playerChainT <= 0 && this.playerChainHits > 0) this.breakPlayerChain();
+    this.chainBreakT = Math.max(0, this.chainBreakT - dt);
     this.techniqueT = Math.max(0, this.techniqueT - dt);
     this.tutorialT = Math.max(0, this.tutorialT - dt);
 
@@ -4631,24 +4687,49 @@ Game.prototype.drawHUD = function drawHUD(this: Game, ctx: CanvasRenderingContex
   }
 
   const queuedLights = this.player.queuedLightAttacks;
-  const showSunder = this.player.sunderWindow > 0 || this.player.sunderQueued;
-  if (this.techniqueT > 0 || (this.playerChainHits > 0 && this.playerChainT > 0) || queuedLights > 0 || showSunder) {
+  // Retire the route cue just before the simulation boundary so a displayed
+  // SUNDER prompt always survives long enough for a touch to resolve.
+  const executeReady = this.boss.state === 'staggered';
+  const showSunder = !executeReady && this.player.sunderWindow > 0.08;
+  const recoveryAction = this.player.recoveryAction?.toUpperCase() ?? '';
+  if (
+    this.techniqueT > 0
+    || this.chainBreakT > 0
+    || executeReady
+    || recoveryAction
+    || (this.playerChainHits > 0 && this.playerChainT > 0)
+    || queuedLights > 0
+    || showSunder
+  ) {
     const y = this.w <= 560 ? 190 : this.input.isTouch ? 158 : 120;
-    const filled = '\u25c6'.repeat(this.playerChainHits);
-    const empty = '\u25c7'.repeat(Math.max(0, 3 - this.playerChainHits));
     const queued = '\u25c6'.repeat(queuedLights);
     ctx.globalAlpha = this.playerChainHits > 0 ? clamp(this.playerChainT / 0.28, 0, 1) : 1;
     ctx.textAlign = 'center';
     const techniqueActive = this.techniqueT > 0;
-    const highlighted = techniqueActive || showSunder || this.playerChainFinished;
+    const highlighted = techniqueActive || this.chainBreakT > 0 || executeReady || showSunder || this.playerChainFinished;
     ctx.font = serif(techniqueActive || this.playerChainFinished ? 17 : 14, 750);
     ctx.fillStyle = highlighted ? PAL.spirit : PAL.parchment;
     ctx.shadowColor = highlighted ? 'rgba(188,215,255,0.7)' : 'rgba(0,0,0,0.8)';
     ctx.shadowBlur = highlighted ? 14 : 6;
-    const chainText = this.playerChainHits > 0
-      ? `${this.playerChainFinished ? 'LIGHT FINISHER' : `CHAIN ${this.playerChainHits}/3`}  ${filled}${empty}${queued ? `  ·  NEXT ${queued}` : ''}${showSunder ? '  ·  HVY SUNDER' : ''}`
-      : `INPUT QUEUED  ${queued}`;
-    ctx.fillText(techniqueActive ? this.techniqueText : chainText, this.w / 2, y);
+    const chainText = this.playerChainFinished
+      ? 'LIGHT FINISHER · COMPLETE'
+      : showSunder
+        ? `SUNDER ${this.player.sunderQueued ? 'QUEUED' : 'READY · TAP HVY'}`
+        : this.playerChainHits === 1
+          ? `1 HIT · LAND NEXT ATK${queued ? ` · ${queued} QUEUED` : ''}`
+          : queuedLights > 0
+            ? `ATK QUEUED · ${queued}`
+            : '';
+    const feedbackText = techniqueActive
+      ? this.techniqueText
+      : this.chainBreakT > 0
+        ? this.chainBreakText
+        : executeReady
+          ? 'EXECUTE READY · TAP HVY'
+          : recoveryAction
+            ? `RECOVERING · ${recoveryAction} QUEUED`
+            : chainText;
+    ctx.fillText(feedbackText, this.w / 2, y);
     ctx.shadowBlur = 0;
     ctx.globalAlpha = 1;
   }
@@ -4753,11 +4834,11 @@ Game.prototype.drawHUD = function drawHUD(this: Game, ctx: CanvasRenderingContex
     ctx.font = body(this.input.isTouch ? 13 : narrowKeyboard ? 12 : 15, 500);
     const breakReady = this.resolve >= RESOLVE_MAX;
     const hint = this.input.isTouch
-      ? 'ROLL is invincible · hold BREAK for Gracebreak'
+      ? breakReady ? 'FULL RESOLVE · HOLD BREAK · GRACEBREAK' : 'LAND ATK×2 · TAP HVY · SUNDER'
       : narrowKeyboard ? 'WASD MOVE · SPACE ROLL · J ATK'
         : breakReady
           ? 'WASD move · SPACE roll · J / LMB attack · HOLD K: BREAK · F flask · M mute'
-          : 'WASD move · SPACE roll · J×2 → K: SUNDER · K heavy · F flask · M mute';
+          : 'WASD move · SPACE roll · LAND J×2 → K: SUNDER · F flask · M mute';
     const hintY = this.input.isTouch ? this.h - 208 : narrowKeyboard ? this.h - 34 : this.h - 24;
     if (this.input.isTouch) {
       ctx.fillStyle = 'rgba(8,6,4,0.82)';
@@ -4769,7 +4850,7 @@ Game.prototype.drawHUD = function drawHUD(this: Game, ctx: CanvasRenderingContex
     ctx.fillText(hint, this.w / 2, hintY);
     if (narrowKeyboard) {
       ctx.fillText(
-        breakReady ? 'HOLD K BREAK · F FLASK · M MUTE' : 'J×2 → K SUNDER · F FLASK · M MUTE',
+        breakReady ? 'HOLD K BREAK · F FLASK · M MUTE' : 'LAND J×2 → K SUNDER · F FLASK · M MUTE',
         this.w / 2,
         this.h - 16,
       );
@@ -5195,21 +5276,25 @@ Game.prototype.drawTouchUI = function drawTouchUI(this: Game, ctx: CanvasRenderi
     const bx = b.x, by = b.y;
     const unavailable = b.id === 'flask' && this.player.flasks <= 0;
     const breakReady = b.id === 'heavy' && this.resolve >= RESOLVE_MAX;
+    const executeReady = b.id === 'heavy' && this.boss.state === 'staggered';
+    const sunderReady = b.id === 'heavy' && !executeReady && this.player.sunderWindow > 0.08;
+    const techniqueReady = breakReady || executeReady || sunderReady;
     const active = this.input.btnPressed[b.id]
       || this.input.hasBuffered(b.id)
       || this.player.state === b.id
       || (b.id === 'light' && this.player.state === 'rollSlash')
-      || (b.id === 'heavy' && this.player.state === 'sunder');
+      || (b.id === 'heavy' && this.player.state === 'sunder')
+      || this.player.recoveryAction === b.id;
     ctx.globalAlpha = unavailable ? 0.38 : 1;
     ctx.fillStyle = active
       ? (b.id === 'flask' ? PAL.goldBright : PAL.parchment)
       : 'rgba(12,10,7,0.78)';
     ctx.beginPath(); ctx.arc(bx, by, b.r, 0, TAU); ctx.fill();
     ctx.globalAlpha = unavailable ? 0.32 : 0.92;
-    ctx.strokeStyle = breakReady ? PAL.spirit : PAL.parchment;
-    ctx.lineWidth = breakReady ? 2.8 : 1.8;
+    ctx.strokeStyle = techniqueReady ? PAL.spirit : PAL.parchment;
+    ctx.lineWidth = techniqueReady ? 2.8 : 1.8;
     ctx.beginPath(); ctx.arc(bx, by, b.r, 0, TAU); ctx.stroke();
-    if (breakReady) {
+    if (techniqueReady) {
       ctx.globalAlpha = 0.4 + Math.sin(this.time * 2.4) * 0.08;
       ctx.lineWidth = 1;
       ctx.beginPath(); ctx.arc(bx, by, b.r + 5, 0, TAU); ctx.stroke();
@@ -5217,7 +5302,8 @@ Game.prototype.drawTouchUI = function drawTouchUI(this: Game, ctx: CanvasRenderi
     ctx.globalAlpha = unavailable ? 0.42 : 1;
     ctx.fillStyle = active ? '#0d0b08' : PAL.parchment;
     ctx.font = serif(b.r > 40 ? 15 : 12, 700);
-    ctx.fillText(breakReady ? 'BREAK' : b.label, bx, by + 4);
+    const buttonLabel = executeReady ? 'EXECUTE' : sunderReady ? 'SUNDER' : breakReady ? 'BREAK' : b.label;
+    ctx.fillText(buttonLabel, bx, by + 4);
     if (b.id === 'light' && this.player.queuedLightAttacks > 0) {
       ctx.fillStyle = active ? '#0d0b08' : PAL.spirit;
       ctx.font = serif(8, 800);
@@ -5239,7 +5325,7 @@ Game.prototype.drawPause = function drawPause(this: Game, ctx: CanvasRenderingCo
   ctx.fillRect(0, 0, this.w, this.h);
 
   const panelW = Math.min(this.w - 36, 460);
-  const panelH = this.input.isTouch ? 148 : 156;
+  const panelH = 254;
   const panelX = (this.w - panelW) / 2;
   const panelY = (this.h - panelH) / 2;
   const frame = ctx.createLinearGradient(panelX, panelY, panelX, panelY + panelH);
@@ -5265,6 +5351,14 @@ Game.prototype.drawPause = function drawPause(this: Game, ctx: CanvasRenderingCo
   );
   ctx.fillStyle = PAL.parchmentDim;
   ctx.font = body(13, 550);
-  ctx.fillText('Time, attacks and inputs are held.', this.w / 2, panelY + 120);
+  ctx.fillText('Time, attacks and inputs are held.', this.w / 2, panelY + 116);
+
+  ctx.fillStyle = 'rgba(201,169,89,0.72)';
+  ctx.fillRect(panelX + 28, panelY + 137, panelW - 56, 1);
+  ctx.fillStyle = PAL.parchment;
+  ctx.font = body(this.input.isTouch ? 13 : 14, 700);
+  ctx.fillText('ATK ×3 · LIGHT FINISHER', this.w / 2, panelY + 165);
+  ctx.fillText('LAND ATK ×2 → HVY · SUNDER', this.w / 2, panelY + 194);
+  ctx.fillText('FULL RESOLVE · HOLD HVY · GRACEBREAK', this.w / 2, panelY + 223);
   ctx.restore();
 };

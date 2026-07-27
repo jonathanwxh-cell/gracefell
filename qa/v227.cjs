@@ -89,6 +89,21 @@ async function openGame(browser, options) {
       return states;
     };
 
+    const renderLabels = () => {
+      const labels = [];
+      const originalFillText = CanvasRenderingContext2D.prototype.fillText;
+      CanvasRenderingContext2D.prototype.fillText = function capture(text, x, y, ...rest) {
+        labels.push(String(text));
+        return originalFillText.call(this, text, x, y, ...rest);
+      };
+      try {
+        g.render();
+      } finally {
+        CanvasRenderingContext2D.prototype.fillText = originalFillText;
+      }
+      return labels;
+    };
+
     // ATK, ATK, HVY must branch only after two connected lights.
     let { p, b } = setArena();
     const sunderStart = { hp: b.hp, poise: b.poise, stam: p.stam };
@@ -127,6 +142,8 @@ async function openGame(browser, options) {
       routeLightHits: p.routeLightHits,
       sunderWindow: p.sunderWindow,
       beforeState: p.state,
+      chainBreakText: g.chainBreakText,
+      chainBreakVisible: g.chainBreakT > 0,
     };
     const missHeavyStates = perform('heavy');
     missRoute.sawSunder = missHeavyStates.includes('sunder');
@@ -206,6 +223,80 @@ async function openGame(browser, options) {
       uses: g.resolveUses,
     };
 
+    // If the second connected light breaks poise, the earned Execute must
+    // outrank the still-valid mixed route instead of resolving as Sunder.
+    ({ p, b } = setArena());
+    g.tutorialStage = 'done';
+    g.tutorialT = 0;
+    g.hintT = 0;
+    perform('light');
+    b.poise = 10;
+    perform('light');
+    const executeRouteLabels = renderLabels();
+    const executeRouteStartHp = b.hp;
+    const executeRouteStates = perform('heavy');
+    const executeOverSunder = {
+      staggeredAfterSecondContact: executeRouteLabels.some((label) => label.includes('EXECUTE READY')),
+      showedSunderReady: executeRouteLabels.some((label) => label.includes('SUNDER READY')),
+      executeButton: executeRouteLabels.includes('EXECUTE'),
+      sawHeavy: executeRouteStates.includes('heavy'),
+      sawSunder: executeRouteStates.includes('sunder'),
+      executeConsumed: b.executeConsumed,
+      damage: executeRouteStartHp - b.hp,
+      routeCleared: p.routeLightHits === 0 && p.sunderWindow === 0 && !p.sunderQueued,
+    };
+
+    // One deliberate action survives the 320 ms wound recovery. A later ROLL
+    // replaces an earlier attack because defense owns the priority lane.
+    ({ p } = setArena());
+    p.state = 'stagger'; p.t = 0.32;
+    g.input.bufferPress('light');
+    tick();
+    const recoveryAttackQueued = p.recoveryAction;
+    const recoveryAttackStates = [];
+    for (let i = 0; i < 30; i++) {
+      tick();
+      recoveryAttackStates.push(p.state);
+    }
+    const recoveryAttack = {
+      queued: recoveryAttackQueued,
+      sawLight: recoveryAttackStates.includes('light'),
+    };
+
+    ({ p } = setArena());
+    p.state = 'stagger'; p.t = 0.32;
+    g.input.bufferPress('light');
+    tick();
+    g.input.bufferPress('roll');
+    tick();
+    const recoveryRollQueued = p.recoveryAction;
+    const recoveryRollStates = [];
+    for (let i = 0; i < 30; i++) {
+      tick();
+      recoveryRollStates.push(p.state);
+    }
+    const recoveryRoll = {
+      queued: recoveryRollQueued,
+      sawRoll: recoveryRollStates.includes('roll'),
+      sawLight: recoveryRollStates.includes('light'),
+    };
+
+    // The named next action and the first-contact prompt are rendered from
+    // combat-authoritative contact state.
+    ({ p, b } = setArena());
+    g.tutorialStage = 'done';
+    g.tutorialT = 0;
+    g.hintT = 0;
+    perform('light');
+    const firstContactLabels = renderLabels();
+    perform('light');
+    const sunderReadyLabels = renderLabels();
+    const comboFeedback = {
+      firstContact: firstContactLabels.some((label) => label.includes('1 HIT · LAND NEXT ATK')),
+      sunderReady: sunderReadyLabels.some((label) => label.includes('SUNDER READY · TAP HVY')),
+      sunderButton: sunderReadyLabels.includes('SUNDER'),
+    };
+
     // Wound recovery exists only on disclosed beginner Journeys and caps at 12.
     setArena(-2);
     for (let i = 0; i < 6; i++) g.onPlayerWound();
@@ -244,12 +335,49 @@ async function openGame(browser, options) {
     return {
       sunder, lightString, missRoute, rollPriority,
       gracebreak, whiff, partial, executePriority,
+      executeOverSunder, recoveryAttack, recoveryRoll, comboFeedback,
       journeyWounds, measuredWounds, ironbound, layout,
     };
   });
 
   await mobile.page.screenshot({
     path: path.join(ARTIFACT_DIR, 'mobile-resolve-ready.png'),
+    fullPage: true,
+  });
+
+  await mobile.page.evaluate(() => {
+    const g = window.__game;
+    g.grace = -2;
+    g.resetFight();
+    g.state = 'fight';
+    g.stateT = 0;
+    g.input.isTouch = true;
+    g.tutorialStage = 'done';
+    g.tutorialT = 0;
+    g.hintT = 0;
+    g.player.routeLightHits = 2;
+    g.player.comboStep = 2;
+    g.player.comboWindow = 0.6;
+    g.player.sunderWindow = 0.6;
+    g.playerChainHits = 2;
+    g.playerChainT = 1;
+    g.boss.state = 'recover';
+    g.boss.t = 99;
+    g.render();
+  });
+  await mobile.page.screenshot({
+    path: path.join(ARTIFACT_DIR, 'mobile-sunder-ready.png'),
+    fullPage: true,
+  });
+
+  await mobile.page.evaluate(() => {
+    const g = window.__game;
+    g.boss.state = 'staggered';
+    g.boss.t = 99;
+    g.render();
+  });
+  await mobile.page.screenshot({
+    path: path.join(ARTIFACT_DIR, 'mobile-execute-ready.png'),
     fullPage: true,
   });
 
@@ -328,6 +456,33 @@ async function openGame(browser, options) {
   });
   await shortTouch.page.screenshot({
     path: path.join(ARTIFACT_DIR, 'short-360x640-opening.png'),
+    fullPage: true,
+  });
+
+  const pauseLayout = await shortTouch.page.evaluate(() => {
+    const g = window.__game;
+    g.manualPaused = true;
+    g.paused = true;
+    const labels = [];
+    const originalFillText = CanvasRenderingContext2D.prototype.fillText;
+    CanvasRenderingContext2D.prototype.fillText = function capture(text, x, y, ...rest) {
+      labels.push(String(text));
+      return originalFillText.call(this, text, x, y, ...rest);
+    };
+    try {
+      g.render();
+    } finally {
+      CanvasRenderingContext2D.prototype.fillText = originalFillText;
+    }
+    return {
+      labels,
+      lightRecipe: labels.includes('ATK ×3 · LIGHT FINISHER'),
+      sunderRecipe: labels.includes('LAND ATK ×2 → HVY · SUNDER'),
+      gracebreakRecipe: labels.includes('FULL RESOLVE · HOLD HVY · GRACEBREAK'),
+    };
+  });
+  await shortTouch.page.screenshot({
+    path: path.join(ARTIFACT_DIR, 'short-360x640-pause-recipes.png'),
     fullPage: true,
   });
 
@@ -429,7 +584,9 @@ async function openGame(browser, options) {
   }
   if (result.missRoute.routeLightHits !== 0
     || result.missRoute.sunderWindow !== 0
-    || result.missRoute.sawSunder) {
+    || result.missRoute.sawSunder
+    || result.missRoute.chainBreakText !== 'CHAIN LOST · MISS'
+    || !result.missRoute.chainBreakVisible) {
     failures.push(`missed contact unlocked Sunder: ${JSON.stringify(result.missRoute)}`);
   }
   if (result.rollPriority.state !== 'roll'
@@ -457,6 +614,31 @@ async function openGame(browser, options) {
     || result.executePriority.resolveAfter !== 100
     || result.executePriority.uses !== 0) {
     failures.push(`Execute did not outrank Gracebreak: ${JSON.stringify(result.executePriority)}`);
+  }
+  if (!result.executeOverSunder.staggeredAfterSecondContact
+    || result.executeOverSunder.showedSunderReady
+    || !result.executeOverSunder.executeButton
+    || !result.executeOverSunder.sawHeavy
+    || result.executeOverSunder.sawSunder
+    || !result.executeOverSunder.executeConsumed
+    || result.executeOverSunder.damage < 100
+    || !result.executeOverSunder.routeCleared) {
+    failures.push(`Sunder route stole stagger Execute: ${JSON.stringify(result.executeOverSunder)}`);
+  }
+  if (result.recoveryAttack.queued !== 'light'
+    || !result.recoveryAttack.sawLight
+    || result.recoveryRoll.queued !== 'roll'
+    || !result.recoveryRoll.sawRoll
+    || result.recoveryRoll.sawLight) {
+    failures.push(`wound recovery input contract failed: ${JSON.stringify({
+      attack: result.recoveryAttack,
+      roll: result.recoveryRoll,
+    })}`);
+  }
+  if (!result.comboFeedback.firstContact
+    || !result.comboFeedback.sunderReady
+    || !result.comboFeedback.sunderButton) {
+    failures.push(`combo route feedback is not actionable: ${JSON.stringify(result.comboFeedback)}`);
   }
   if (result.journeyWounds.resolve !== 12
     || result.journeyWounds.fromWounds !== 12
@@ -491,6 +673,9 @@ async function openGame(browser, options) {
     || shortLayout.duplicateControlHint) {
     failures.push(`short-phone opening lanes overlap: ${JSON.stringify(shortLayout)}`);
   }
+  if (!pauseLayout.lightRecipe || !pauseLayout.sunderRecipe || !pauseLayout.gracebreakRecipe) {
+    failures.push(`pause technique reference is incomplete: ${JSON.stringify(pauseLayout)}`);
+  }
   if (!oathHud.combined
     || oathHud.chainLabels.length !== 1
     || oathHud.separateIronbound.length !== 0) {
@@ -505,6 +690,7 @@ async function openGame(browser, options) {
     failures,
     result,
     shortLayout,
+    pauseLayout,
     oathHud,
     desktopLayout,
     artifacts: ARTIFACT_DIR,

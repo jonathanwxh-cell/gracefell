@@ -2598,3 +2598,104 @@ checkpoint, rebuilt, restarted, and continued serving the unchanged
 `assets/index-pLgbWBY7.js` runtime. The v2.27.1 release tag targets the final
 documentation checkpoint so code, acceptance, deployment evidence, and
 future-agent instructions remain one durable handoff.
+
+## v2.27.2 — Codex (GPT-5), "combo truth" (2026-07-28)
+
+Focused gamer review found that v2.27.1's clean-contact timing was already
+generous enough: three-light strings and the mixed Sunder route completed
+reliably across rapid and deliberate cadences. The failure was not difficulty.
+It was a mismatch between combat authority, input ownership, and presentation.
+
+### Findings
+
+- A second light that broke Malakar's poise still left the mixed route active.
+  HVY entered Sunder before the established stagger Execute check, replacing
+  the fight's larger defensive payoff with a smaller technique.
+- The generic 260 ms input buffer expired before the player's 320 ms wound
+  recovery. Inputs pressed during that visibly locked state disappeared.
+- `ATK×2 → HVY` did not say that both lights must connect uninterrupted.
+  Miss, wound, roll, and expiry cleared the route without explaining why.
+- `CHAIN 2/3 · HVY SUNDER` mixed hit count, queue state, and next action. The
+  touch button still said HVY, while the last simulation frames could advertise
+  Sunder too briefly for a new touch to arrive.
+- Returning players had no in-battle technique reference after the opening
+  hints faded.
+
+### Combat authority
+
+The mixed-route input is now classified before state transition. A staggered
+boss turns that buffered route-heavy into ordinary HVY, allowing the existing
+`playerStrike()` Execute contract to run. Otherwise it remains Sunder. ROLL is
+still checked first. Execute retains its established stamina cost, damage,
+one-per-stagger ownership, and Resolve behavior; Sunder retains its own cost,
+damage, poise, and Resolve behavior.
+
+Wound recovery now captures exactly one of ROLL, ATK, HVY, or FLASK rather than
+widening the global input buffer. A later ROLL replaces an earlier recovery
+choice. When the 320 ms stagger ends, that one action is placed back into the
+normal authored input lane, so existing stamina checks and priorities still
+decide whether it executes.
+
+### Truthful, contextual teaching
+
+The transient lane derives its copy from connected-hit state:
+
+- first contact: `1 HIT · LAND NEXT ATK`;
+- valid mixed route: `SUNDER READY · TAP HVY`;
+- boss stagger: `EXECUTE READY · TAP HVY`;
+- held wound input: `RECOVERING · <ACTION> QUEUED`;
+- invalidation: `CHAIN LOST · MISS/HIT/ROLL/TOO SLOW/NO STAMINA`.
+
+The existing touch HVY button becomes `SUNDER` or `EXECUTE` only while that
+technique is authoritative. Sunder presentation retires with an 80 ms safety
+margin before the simulation deadline, preventing a last-frame promise that a
+new browser touch is unlikely to fulfill. No permanent HUD panel or fifth
+button was added.
+
+Pause now carries the three stable recipes—Light Finisher, Sunder, and
+Gracebreak—and the focus-revealed semantic panel exposes the queued recovery
+action. Combat tips name connected/uninterrupted contact and its reset causes.
+
+### Rejected alternatives
+
+- Widening the 600 ms contact window was rejected because clean-contact tests
+  already passed from rapid through deliberate cadences.
+- Shortening wound recovery was rejected because it changes boss consequence
+  and animation feel rather than repairing input ownership.
+- Extending every input TTL past 320 ms was rejected because it would also make
+  ordinary neutral actions stickier.
+- Adding a permanent combo panel or fifth Sunder button was rejected because
+  the short-phone composition is already carefully budgeted.
+- Retuning damage, stamina, Resolve, or difficulty was rejected: no balance
+  defect was reproduced.
+
+### Regression contract
+
+`qa/v227.cjs` now fails unless:
+
+- a poise-breaking second light exposes Execute and the following HVY enters
+  heavy/Execute, never Sunder;
+- recovery ATK executes after wound stagger and a later ROLL replaces it;
+- one contact names the next ATK, two contacts name Sunder, and the touch HVY
+  button mirrors that authoritative state;
+- a miss reports `CHAIN LOST · MISS`;
+- the 360×640 pause card contains all three technique recipes;
+- focused phone captures exist for Sunder-ready and Execute-ready states.
+
+The complete local gate passed lint, 29 unit tests, TypeScript/Vite build,
+desktop/mobile/true-touch QA, v2.21/v2.24/v2.27 focused lanes, visual/failure
+acceptance, and the deterministic render census. The measured worst-case scene
+remains 920 mobile / 903 desktop draw calls, 39 gradients, 2 image draws, and 9
+shadow-blur writes.
+
+### Changed from v2.27.1
+
+- Sunder/Execute and wound-recovery command priority are corrected.
+- Combo, route-loss, touch-button, pause, and semantic feedback are clearer.
+- Deterministic gameplay and focused screenshot coverage expand.
+- The 600 ms route window, damage, stamina, Resolve, boss patterns, difficulty,
+  score/save identity, audio graph/events, assets, weather, touch geometry, and
+  render architecture are unchanged.
+
+GitHub, exact-SHA deployment, service, public bundle, and public-QA receipts
+are recorded in `docs/releases/v2.27.2.md`.
