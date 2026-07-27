@@ -2575,3 +2575,18 @@ gradients, 2 image draws, and 9 shadow-blur writes.
 - No combat state, damage, poise, stamina, timing, collision, boss pattern,
   difficulty modifier, score, save-v7 field, audio event, runtime asset,
   request, touch target, or persistent setting changes.
+
+### Runtime release
+
+Reviewed runtime PR #94 merged as
+`37e9d0c627b34dd1ead74267fa4f9c7b3fb46df7`. The PR-head gate passed in
+GitHub Actions run 30252600472 and the merged main gate passed independently in
+run 30252850910.
+
+Production fast-forwarded cleanly from `b70c832...` to that exact merge, built
+`assets/index-pLgbWBY7.js`, and restarted the user-scoped
+`gracefell.service` at 2026-07-27 17:15:21 +08. The host working tree stayed
+clean; loopback and public health passed. Focused production v2.27.1
+acceptance and the complete public desktop/mobile/true-touch suite both passed
+with zero errors. The public visual/failure lane remained ready with zero
+warnings, and the operation census matched local acceptance.
