@@ -18,7 +18,7 @@ charge, and full meter reads `BREAK READY` with a desktop hold reminder.
 Combat damage, timing, difficulty, score/save identity, audio, assets, and
 touch targets are unchanged. Evidence is recorded in
 [`docs/releases/v2.27.1.md`](docs/releases/v2.27.1.md); the durable GitHub
-checkpoint will be published after the documentation receipt passes.
+checkpoint is [v2.27.1](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.1).
 
 The **v2.27** earned-offense foundation remains intact. Two connected light
 hits can branch into **Sunder** with HVY; successful play fills the run-local
