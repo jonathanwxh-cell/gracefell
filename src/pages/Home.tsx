@@ -45,6 +45,9 @@ const INITIAL_UI: GameUiSnapshot = {
     telegraph: '',
     comboHits: 0,
     queuedLights: 0,
+    resolvePercent: 0,
+    resolveReady: false,
+    technique: '',
   },
 };
 
@@ -434,6 +437,8 @@ export default function Home() {
               <div><dt>Malakar action</dt><dd>{ui.combat.telegraph || ui.combat.bossState}</dd></div>
               <div><dt>Combo</dt><dd>{ui.combat.comboHits} of 3</dd></div>
               <div><dt>Queued attacks</dt><dd>{ui.combat.queuedLights}</dd></div>
+              <div><dt>Resolve</dt><dd>{ui.combat.resolvePercent}%{ui.combat.resolveReady ? ' · Gracebreak ready' : ''}</dd></div>
+              {ui.combat.technique && <div><dt>Technique</dt><dd>{ui.combat.technique}</dd></div>}
             </dl>
           )}
           <div id="game-audio-controls" className="game-accessibility__actions">
@@ -548,7 +553,7 @@ export default function Home() {
           {!mixOpen && (
             <details className="game-accessibility__tips">
               <summary>Combat tips</summary>
-              <p>Attack during a roll to slash safely after it ends. Striking from behind rewards positioning.</p>
+              <p>Attack during a roll to slash safely after it ends. Strike twice, then use Heavy for Sunder. At full Resolve, hold Heavy for Gracebreak.</p>
             </details>
           )}
         </section>

@@ -1329,6 +1329,66 @@ export class GameAudio {
     this.tone({ freq: 180 - amount * 34, freqEnd: 62 - amount * 15, dur: 0.25 + amount * 0.09, type: 'triangle', gain: 0.11 + amount * 0.035, spatial, variation, priority: 'critical' });
   }
 
+  sunderRelease(spatial: SpatialInput = 0) {
+    if (!this.allowCue('sunder-release', 0.055)) return;
+    this.duckMusic(0.34, 0.4);
+    if (this.playSample({
+      name: 'swing-heavy',
+      gain: 0.5,
+      rate: 1.08,
+      spatial,
+      reverb: 0.25,
+      priority: 'critical',
+    })) {
+      this.phoneTransient(spatial, 0.12, 2700, 0.028);
+      return;
+    }
+    const variation = this.vary('sunder-release', 0.68);
+    this.noise({ dur: 0.26, gain: 0.24, freq: 1900, freqEnd: 260, q: 1.2, spatial, reverb: 0.08, variation, priority: 'critical' });
+    this.tone({ freq: 214, freqEnd: 72, dur: 0.25, type: 'triangle', gain: 0.13, spatial, reverb: 0.09, variation, priority: 'critical' });
+  }
+
+  gracebreakRelease(spatial: SpatialInput = 0) {
+    if (!this.allowCue('gracebreak-release', 0.09)) return;
+    this.duckMusic(0.22, 0.56);
+    const variation = this.vary('gracebreak-release', 0.42);
+    const sampled = this.playSample({
+      name: 'swing-heavy',
+      gain: 0.61,
+      rate: 0.79,
+      spatial,
+      reverb: 0.36,
+      priority: 'critical',
+    });
+    if (!sampled) {
+      this.noise({ dur: 0.38, gain: 0.28, freq: 1450, freqEnd: 150, q: 1.05, spatial, reverb: 0.12, variation, priority: 'critical' });
+    }
+    this.phoneTransient(spatial, 0.15, 2200, 0.035);
+    this.tone({ freq: 196, freqEnd: 46, dur: 0.44, type: 'triangle', gain: 0.16, spatial, reverb: 0.15, variation, priority: 'critical' });
+  }
+
+  resolveReady() {
+    if (!this.allowCue('resolve-ready', 0.25)) return;
+    const t0 = this.now();
+    this.tone({ freq: 330, freqEnd: 495, dur: 0.16, type: 'sine', gain: 0.075, reverb: 0.2, priority: 'normal' });
+    this.tone({ freq: 495, freqEnd: 660, dur: 0.2, type: 'triangle', gain: 0.065, when: t0 + 0.12, reverb: 0.24, priority: 'normal' });
+  }
+
+  sunderHit(spatial: SpatialInput = 0) {
+    this.hit(true, spatial, 1, 0.46);
+    if (!this.allowCue('sunder-accent', 0.06)) return;
+    const variation = this.vary('sunder-accent', 0.5);
+    this.tone({ freq: 148, freqEnd: 54, dur: 0.28, type: 'triangle', gain: 0.12, spatial, reverb: 0.1, variation, priority: 'critical' });
+  }
+
+  gracebreakHit(spatial: SpatialInput = 0) {
+    this.hit(true, spatial, 2, 1);
+    if (!this.allowCue('gracebreak-accent', 0.09)) return;
+    const variation = this.vary('gracebreak-accent', 0.36);
+    this.phoneTransient(spatial, 0.18, 1800, 0.04);
+    this.tone({ freq: 82, freqEnd: 25, dur: 0.56, type: 'sine', gain: 0.25, spatial, reverb: 0.16, variation, priority: 'critical' });
+  }
+
   hit(heavy = false, spatial: SpatialInput = 0, variant = 0, charge = 0) {
     const amount = heavy ? Math.max(0, Math.min(1, charge)) : 0;
     const key = heavy ? 'hit-heavy' : 'hit';

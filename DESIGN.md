@@ -2341,3 +2341,119 @@ targets the final documentation checkpoint. Future agents should treat
 `docs/releases/v2.26.md` as the complete evidence record, the release tag as
 the final repository checkpoint, and runtime merge `100d59a...` as the
 gameplay identity. This documentation closure changes no runtime file.
+
+## v2.27 — Codex (GPT-5), "earned offense" (2026-07-27)
+
+The combat already had a readable defensive spine: recognize a named tell,
+roll through it, damage poise, then Execute the stagger. The missing fun was
+not another boss pattern or permanent button. Repeated offense offered only
+the three-light string or independent heavy, so correct play could feel flat
+between stagger events.
+
+### One branch adds choice without adding control load
+
+The mixed route is `ATK · ATK · HVY`. Both light contacts are authoritative:
+presses and queued inputs cannot unlock the branch. After the second contact,
+a 600 ms Sunder window opens. HVY during that window spends 20 stamina and
+releases a 24-damage / 44-poise ender.
+
+| Route | Damage | Poise | Stamina | Intent |
+|---|---:|---:|---:|---|
+| `ATK · ATK · ATK` | 50 | 50 | 36 | efficient damage |
+| `ATK · ATK · HVY` | 50 | 70 | 44 | poise pressure |
+
+Roll remains first in the transition priority. Either light miss, damage,
+route expiry, or a defensive cancel clears the Sunder state. A low-stamina
+buffer cannot turn into a delayed ghost technique after the route has gone.
+`playerChainHits` still describes connected-light presentation only; the
+combat route has separate fields and never reads the HUD counter.
+
+### Resolve rewards varied, successful play
+
+Resolve is a 0–100 run-local meter:
+
+| Event | Resolve |
+|---|---:|
+| first / second / finishing light | 1 / 1 / 3 |
+| Sunder | 6 |
+| roll slash | 4 |
+| perfect dodge | 8 |
+| heavy charged to at least 70% | 6 |
+| flank | 4 |
+| Execute | 12 |
+
+Flank is additive because positioning should improve any eligible strike.
+Gains happen only after a real contact and only while Malakar remains alive,
+so a killing blow cannot produce a misleading ready callout on the terminal
+screen. Reset owns the meter, use count, Journey contribution, and technique
+copy. None enters persistence, grade calculation, score history, or the
+immutable difficulty snapshot.
+
+Journey −2 and −3 receive one disclosed recovery rule: a non-lethal wound
+adds 4 Resolve, capped at 12 for the entire attempt. Measured and every Oath
+receive zero. This is deliberately too small to fill one eighth of the meter;
+it softens a beginner's failed exchanges without making damage an optimal
+charge strategy.
+
+### Gracebreak is a committed release, not a panic button
+
+Full Resolve changes only a fully charged existing HVY. Gracebreak deals 72
+damage and 112 total poise, then restores 20 stamina on contact. Its meter is
+spent on the release frame even when it misses. It grants no invulnerability,
+does not clear hazards, and does not interrupt Malakar by fiat.
+
+Quick or partial heavy preserves the full meter. A staggered boss preserves
+the established Execute instead, also preserving Resolve. Oath +5 continues
+to route a depleted poise bar through `noStagger`, so Gracebreak cannot bypass
+IRONBOUND. These priorities keep the limit release exciting without replacing
+the game's defensive mastery loop.
+
+### The interface and mix reuse protected lanes
+
+Four flat segments fit between stamina and flasks inside
+`playerHudRect()`. At 100, the existing touch HVY changes to `BREAK` and
+receives one spirit outline; no fifth button or extra floating panel enters
+the thumb cluster. Sunder opportunity and Resolve-ready feedback reuse the
+established chain/technique lane above the combat centerline. The semantic
+combat snapshot exposes percentage, readiness, and current technique without
+putting changing values in the live announcement.
+
+Sunder and Gracebreak have named release/contact methods so the gameplay event
+owns one audio boundary. They reuse the accepted heavy sample when available,
+procedural fallback, critical voice reservation, spatial route, room send,
+music ducking, phone transient, compressor, and limiter. Resolve-ready is two
+short restrained tones. There is no MP3, loader entry, startup node, or
+continuous charge family.
+
+### Stress-test findings and rejected expansion
+
+- A permanent special button was rejected: it increases phone targeting and
+  teaching load for a low-frequency action already expressible through HVY.
+- Passive or time-based meter gain was rejected: waiting should not outperform
+  engagement.
+- Damage-only gain was rejected: it reinforces light-spam and ignores the
+  game's defensive identity.
+- Invulnerability, arena clear, and forced boss interruption were rejected:
+  each would make Gracebreak a universal escape rather than an earned attack.
+- Persistent upgrades and saved meter were rejected: they blur path-specific
+  records and require an unnecessary save migration.
+- A rank/Flow subsystem was rejected for v1 of the feature. The readable
+  contact chain and one technique lane are sufficient feedback.
+
+The dedicated `qa/v227.cjs` browser lane mutation-drives both route choices,
+miss invalidation, simultaneous roll priority, full/partial/whiffed
+Gracebreak, Execute precedence, Journey cap, FORSAKEN behavior, named audio
+verbs, and mobile/desktop HUD containment. The complete local gate passed:
+29 unit tests, lint, build, legacy browser acceptance, v2.21/v2.24/v2.27
+lanes, visual-failure testing, and the deterministic operation census.
+
+### Changed from v2.26
+
+- Player combat gains Sunder route state and Gracebreak charge ownership.
+- Game state gains one run-local Resolve meter and bounded Journey recovery.
+- Existing HUD/audio/semantic lanes gain technique presentation.
+- Worst-case render census moves from 916 to 921 mobile draw calls and 898 to
+  903 desktop; gradients remain 39, image draws 2, and shadow-blur writes 9.
+- No asset, request, worker, render surface, collision shape, dodge window,
+  boss pattern, path identity, score formula, save-v7 field, music track, or
+  persistent setting changes.
