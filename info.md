@@ -4,6 +4,8 @@
 - Current release: `v2.27` Sunder, Resolve, and Gracebreak
 - Published checkpoint: [`v2.27.0`](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.0)
 - Release receipts: [`docs/releases/v2.27.md`](docs/releases/v2.27.md)
+- Gameplay merge: `88b71eef8ad4cafb3bac06a62f8aa3721ff33aed`
+- Runtime-main CI: [run 30244816885](https://github.com/jonathanwxh-cell/gracefell/actions/runs/30244816885), passed
 - Visual release: Blender-authored cached arena + Canvas-first Malakar
 - Character foundation: Kite-Veil Penitent + Fallen Blade-Saint
 - Production: <https://gracefell.alyoechosys.dev>

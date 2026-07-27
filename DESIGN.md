@@ -2457,3 +2457,14 @@ lanes, visual-failure testing, and the deterministic operation census.
 - No asset, request, worker, render surface, collision shape, dodge window,
   boss pattern, path identity, score formula, save-v7 field, music track, or
   persistent setting changes.
+
+### Runtime release
+
+Reviewed runtime PR #91 merged as
+`88b71eef8ad4cafb3bac06a62f8aa3721ff33aed` after both the reviewed-head
+and main clean-runner gates passed. Production was fast-forwarded cleanly to
+that exact SHA, built as `assets/index-CxwiiXCN.js`, and restarted through the
+user-scoped service. Loopback/public health and the complete public browser
+suite passed independently. `docs/releases/v2.27.md` is the acceptance record;
+documentation-only receipt/closure merges and the `v2.27.0` tag complete the
+durable repository handoff without changing this gameplay identity.
