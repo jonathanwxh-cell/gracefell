@@ -2468,3 +2468,11 @@ user-scoped service. Loopback/public health and the complete public browser
 suite passed independently. `docs/releases/v2.27.md` is the acceptance record;
 documentation-only receipt/closure merges and the `v2.27.0` tag complete the
 durable repository handoff without changing this gameplay identity.
+
+Receipt PR #92 merged as
+`86f9fb3c9521e5edbf9b03c12a23c9f388b8948b`; its main-branch gate passed and
+production was advanced cleanly to that documentation checkpoint without
+changing `assets/index-CxwiiXCN.js`. The final documentation review and
+`v2.27.0` tag close the circular receipt problem: runtime evidence is written
+after runtime deployment, while the tag identifies the final record that
+cannot name its own future merge SHA.
