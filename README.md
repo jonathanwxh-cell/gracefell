@@ -16,7 +16,8 @@ actions, arena-ward contact, and the victory grade seal each have explicit
 one-shot ownership. The 45-file SFX manifest, music, simulation timing,
 difficulty, score/save schema v7, Canvas renderer, and v2.25 visual treatment
 are unchanged. Evidence is recorded in
-[`docs/releases/v2.26.md`](docs/releases/v2.26.md).
+[`docs/releases/v2.26.md`](docs/releases/v2.26.md), and the durable GitHub
+checkpoint is [v2.26.0](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.26.0).
 
 The **v2.22** audio foundation remains a four-role software-house pass that turns the supplied
 Kimi/Moonshot combat library into a bounded, production-safe recorded-foley layer. Forty-five

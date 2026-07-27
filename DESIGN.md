@@ -2325,3 +2325,19 @@ The existing full phase-score QA is the regression.
 - No runtime asset, request, startup node, render operation, simulation value,
   difficulty rule, input duration/priority, score formula, save-v7 field,
   weather behavior, music track, or visual treatment changes.
+
+### Release closure and cold-start handoff
+
+Runtime PR #88 merged as `100d59a6522e7ef5607f55ef3f31d1103e4ff394`
+after its reviewed-head QA passed. Production-receipt PR #89 merged as
+`495303c65ff2b872273fa780d35fbb2a285ccd9c`; its `main` QA also passed, the
+server was advanced to that exact clean checkout, and loopback plus public
+health remained green on the unchanged `index-CjPWrcKH.js` runtime.
+
+Issues #70–#76 were closed only after that public acceptance, with an
+issue-specific ownership and verification receipt on each issue. The durable
+[v2.26.0 GitHub release](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.26.0)
+targets the final documentation checkpoint. Future agents should treat
+`docs/releases/v2.26.md` as the complete evidence record, the release tag as
+the final repository checkpoint, and runtime merge `100d59a...` as the
+gameplay identity. This documentation closure changes no runtime file.
