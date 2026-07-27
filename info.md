@@ -6,6 +6,8 @@
 - Release receipts: [`docs/releases/v2.27.md`](docs/releases/v2.27.md)
 - Gameplay merge: `88b71eef8ad4cafb3bac06a62f8aa3721ff33aed`
 - Runtime-main CI: [run 30244816885](https://github.com/jonathanwxh-cell/gracefell/actions/runs/30244816885), passed
+- Production-receipt merge: `86f9fb3c9521e5edbf9b03c12a23c9f388b8948b`
+- Receipt-main CI: [run 30245555533](https://github.com/jonathanwxh-cell/gracefell/actions/runs/30245555533), passed
 - Visual release: Blender-authored cached arena + Canvas-first Malakar
 - Character foundation: Kite-Veil Penitent + Fallen Blade-Saint
 - Production: <https://gracefell.alyoechosys.dev>
