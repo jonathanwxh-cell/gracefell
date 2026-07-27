@@ -8,17 +8,17 @@ rules are all decided by what works one-handed on a 390px screen.
 
 **Play it: [gracefell.alyoechosys.dev](https://gracefell.alyoechosys.dev)**
 
-Current release: **v2.27.1** — a mobile combat-readability patch following
-three independent live gamer-agent reviews of v2.27. Short 360×640 phones now
-use a wider, rebalanced combat crop and place transient teaching in the
-protected gap between the boss HUD and thumb controls. FORSAKEN’s Oath-chain
-and IRONBOUND states share one compact plate instead of colliding. The opening
-tutorial names `ATK×2 → HVY SUNDER`, the Resolve rail is stronger at partial
-charge, and full meter reads `BREAK READY` with a desktop hold reminder.
-Combat damage, timing, difficulty, score/save identity, audio, assets, and
-touch targets are unchanged. Evidence is recorded in
-[`docs/releases/v2.27.1.md`](docs/releases/v2.27.1.md); the durable GitHub
-checkpoint is [v2.27.1](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.1).
+Current release: **v2.27.2** — a combo-truth patch following focused gamer
+review of v2.27.1. A poise-breaking second light can no longer let Sunder steal
+the earned Execute. One deliberate combat input now survives the 320 ms wound
+recovery, with a later ROLL retaining priority. The transient lane and touch
+HVY button name the next valid action (`SUNDER` or `EXECUTE`), explain
+miss/wound/roll/expiry resets, and the pause card keeps the three technique
+recipes available without adding permanent HUD weight. The 600 ms contact
+window, damage, difficulty, scores, save schema, audio, assets, and touch
+geometry remain unchanged. Evidence is recorded in
+[`docs/releases/v2.27.2.md`](docs/releases/v2.27.2.md); the durable GitHub
+checkpoint is [v2.27.2](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.2).
 
 The **v2.27** earned-offense foundation remains intact. Two connected light
 hits can branch into **Sunder** with HVY; successful play fills the run-local
@@ -124,6 +124,11 @@ audio, a compact semantic/mobile HUD, and a dedicated browser acceptance lane.
 (GPT-5).** Codex repaired the short-phone opening composition and Oath-chain /
 IRONBOUND collision, strengthened Sunder/Break teaching, and added deterministic
 360×640 plus combined-status browser contracts.
+
+**v2.27.2 — combo truth implemented and verified by Codex (GPT-5).** Codex
+repaired Sunder/Execute priority, retained one player-chosen recovery command,
+made connected-hit requirements and route loss explicit, and added
+combat-authoritative browser and phone-screenshot acceptance.
 
 Directed by [@jonathanwxh-cell](https://github.com/jonathanwxh-cell), who asked for "AAA grade" and meant it.
 
@@ -661,6 +666,29 @@ receipts, and production verification:
 
 Complete reproduction, design rationale, regression matrix, publication, and
 production evidence: [`docs/releases/v2.27.1.md`](docs/releases/v2.27.1.md).
+
+## Fixed by Codex — v2.27.2 combo truth
+
+- **Execute keeps its payoff.** If the second connected light breaks poise,
+  the pending HVY route resolves as the established stagger Execute, never
+  Sunder. ROLL still owns simultaneous priority.
+- **A wound no longer swallows the next decision.** One ATK, HVY, FLASK, or
+  ROLL pressed during the 320 ms recovery is held until movement returns; a
+  later ROLL replaces an earlier choice.
+- **Contact state owns the copy.** The lane now says `1 HIT · LAND NEXT ATK`,
+  `SUNDER READY · TAP HVY`, `EXECUTE READY · TAP HVY`, or
+  `CHAIN LOST · <reason>`. The existing HVY button becomes `SUNDER` or
+  `EXECUTE` only while that action is authoritative.
+- **Recipes remain discoverable.** Pause lists Light Finisher, Sunder, and
+  Gracebreak. The semantic combat panel exposes the queued recovery action and
+  the optional Combat tips explain that misses, wounds, rolls, and delay reset
+  Sunder.
+- **Balance remains measured.** The connected-hit window stays 600 ms. No
+  damage, stamina cost, boss action, difficulty modifier, score/save field,
+  audio event, runtime asset, touch target, or persistent setting changed.
+
+Complete implementation, local acceptance, GitHub publication, and exact-SHA
+production receipts: [`docs/releases/v2.27.2.md`](docs/releases/v2.27.2.md).
 
 ## Running it
 

@@ -1,9 +1,9 @@
 # GRACEFELL project facts
 
-- Current package: `gracefell@2.27.1`
-- Current release: `v2.27.1` live-review combat readability
-- Published checkpoint: [`v2.27.1`](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.1)
-- Release receipts: [`docs/releases/v2.27.1.md`](docs/releases/v2.27.1.md)
+- Current package: `gracefell@2.27.2`
+- Current release: `v2.27.2` combo truth and recovery-input reliability
+- Published checkpoint: [`v2.27.2`](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.2)
+- Release receipts: [`docs/releases/v2.27.2.md`](docs/releases/v2.27.2.md)
 - Gameplay foundation merge: `88b71eef8ad4cafb3bac06a62f8aa3721ff33aed` (v2.27)
 - Readability runtime merge: `37e9d0c627b34dd1ead74267fa4f9c7b3fb46df7`
 - Runtime-main CI: [run 30252850910](https://github.com/jonathanwxh-cell/gracefell/actions/runs/30252850910), passed
@@ -40,9 +40,12 @@ npm run qa
 
 `npm run qa` is the acceptance gate. It builds the app, starts an isolated server on
 `127.0.0.1:8492`, and drives desktop, mobile, and real-touch Chromium paths. See
+[`docs/releases/v2.27.2.md`](docs/releases/v2.27.2.md) for Execute/Sunder
+priority, recovery input, truthful combo feedback, pause recipes, and release
+evidence,
 [`docs/releases/v2.27.1.md`](docs/releases/v2.27.1.md) for the short-phone
-camera/tutorial lanes, combined Oath-chain/IRONBOUND plate, stronger
-Sunder/Break teaching, and release evidence,
+camera/tutorial lanes, combined Oath-chain/IRONBOUND plate, and stronger
+Sunder/Break presentation,
 [`docs/releases/v2.27.md`](docs/releases/v2.27.md) for Sunder route ownership,
 Resolve gains, Gracebreak spending/priority, HUD/audio integration, and release
 evidence,
@@ -72,6 +75,7 @@ original Journey/Oaths, teaching, death-recovery, visible-combo, and save-v4 des
 
 ## Authoritative documentation
 
+- [`docs/releases/v2.27.2.md`](docs/releases/v2.27.2.md) — v2.27.2 combo truth, recovery input, acceptance, and production evidence
 - [`README.md`](README.md) — player-facing overview, controls, balance table, and setup
 - [`DESIGN.md`](DESIGN.md) — design decisions and per-version reasoning
 - [`AGENTS.md`](AGENTS.md) — operational runbook and invariants future agents must preserve

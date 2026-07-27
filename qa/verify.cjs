@@ -2560,7 +2560,7 @@ async function installAudioSampleRate(context) {
         g.render();
         ctx.fillText = originalFillText;
         g.player.queuedLightAttacks = 0;
-        return labels.find((label) => label.includes('INPUT QUEUED')) || '';
+        return labels.find((label) => label.includes('ATK QUEUED')) || '';
       });
       if (!t.queuedComboFeedback.includes('◆◆')) {
         out.errors.push('touch: queued light attacks have no visible feedback (' + t.queuedComboFeedback + ')');
