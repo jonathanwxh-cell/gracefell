@@ -2476,3 +2476,102 @@ changing `assets/index-CxwiiXCN.js`. The final documentation review and
 `v2.27.0` tag close the circular receipt problem: runtime evidence is written
 after runtime deployment, while the tag identifies the final record that
 cannot name its own future merge SHA.
+
+## v2.27.1 — Codex (GPT-5), "protected combat lanes" (2026-07-27)
+
+Three independent production gamer-agent passes found no combat defect in
+v2.27, but they reproduced two small-screen presentation failures:
+
+- at 360×640, the player-biased clean-fight crop placed Malakar beneath the
+  compact utility rail while the opening MOVE card crossed his silhouette and
+  first CHARGE lane;
+- at 390×844 on FORSAKEN, the compact `OATH CHAIN` plate occupied the same
+  boss-title lane as the separate `IRONBOUND`/phase-pip label.
+
+The beginner lane also found that Sunder was taught only after two contacts,
+partial Resolve was easy to overlook, and desktop Break readiness relied on a
+small HUD word while the footer still said only `K heavy`.
+
+### The short phone gets its own composition, not smaller controls
+
+The four-button `touchLayout()` and the 44px utility rail were already correct,
+so this patch does not shrink either. At touch heights up to 680px, a clean
+fight now uses 0.88× of the viewport-fit zoom, widening to 0.84× as phase load
+or hazards grow. The vertical camera target shares 43% of its bias with the
+player/boss midpoint instead of the tall-phone 25%.
+
+At the canonical 360×640 opening, the resulting protected order is:
+
+1. player resources;
+2. utility rail ending at y=126;
+3. Malakar's projected top edge;
+4. central fight space and player;
+5. boss HUD beginning at y=392;
+6. tutorial card at y=432;
+7. the touch buttons.
+
+The short-phone tutorial owns the same lower hint lane that the generic
+control reminder previously occupied, so that duplicate reminder is withheld
+while the tutorial is present. Taller phones retain the established crop and
+tutorial positions.
+
+### One compact boss status has one owner
+
+During a compact FORSAKEN packet, the chain plate now says
+`OATH CHAIN n/m · IRONBOUND`. The separate right-aligned pips label is omitted
+only while that combined plate is active, then returns immediately afterward.
+This preserves both decisive facts without widening the boss HUD or moving the
+cue back across the player's dodge silhouette.
+
+### Teaching becomes earlier and stronger, not more persistent
+
+The first touch tutorial now includes `ATK×2 → HVY SUNDER`. The Resolve rail
+grows from four to six pixels, gains a stronger empty-state contrast, and says
+`BREAK READY` at full meter. The existing touch HVY still changes to `BREAK`;
+desktop's initial footer changes to `HOLD K: BREAK` when ready. No new panel,
+button, animation loop, sound, or saved tutorial field is introduced.
+
+### Rejected alternatives
+
+- Moving the compact Oath plate above the boss HUD was rejected because native
+  review previously found that lane crossed the lower player silhouette during
+  ring decisions.
+- Shrinking the utility buttons or touch actions was rejected because the
+  reported issue was composition, not target geometry.
+- Moving Malakar alone in world space was rejected because it changes actual
+  distance and boss behavior; the camera fix is presentation-only.
+- Altering Oath +2 follow-up timing was rejected. The expert pass described its
+  approximately 218 ms phase-three sample as close to the readability margin
+  but still credible, and no fairness defect was reproduced.
+- Adding Resolve milestone callouts was rejected because they would compete
+  with contact-chain and Sunder technique messages.
+
+### Regression contract
+
+`qa/v227.cjs` now exercises a 360×640 true-touch composition and fails unless:
+
+- Malakar clears the utility rail;
+- the tutorial clears Malakar and sits between the boss HUD and action buttons;
+- the player clears the boss bar;
+- proactive Sunder copy is present without the duplicate control hint;
+- Oath-chain and IRONBOUND appear in one compact plate;
+- desktop full Resolve shows both `BREAK READY` and `HOLD K: BREAK`.
+
+The legacy public QA assertion now requires the combined chain plate to include
+IRONBOUND rather than demanding the old exact chain-only string.
+
+Local acceptance passed 29 unit tests, lint, TypeScript/Vite build, the complete
+desktop/mobile/true-touch browser suite, v2.21/v2.24/v2.27 lanes, visual-failure
+testing, and the deterministic render census. The worst-case mobile scene is
+920 draw calls (down from 921); desktop remains 903. Both remain at 39
+gradients, 2 image draws, and 9 shadow-blur writes.
+
+### Changed from v2.27
+
+- Short touch viewports gain protected camera/tutorial geometry.
+- Compact FORSAKEN chain copy combines two previously colliding HUD states.
+- Sunder/Resolve/Break copy and rail weight change.
+- Browser acceptance gains short-phone and combined-status regressions.
+- No combat state, damage, poise, stamina, timing, collision, boss pattern,
+  difficulty modifier, score, save-v7 field, audio event, runtime asset,
+  request, touch target, or persistent setting changes.

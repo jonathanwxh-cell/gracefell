@@ -2857,7 +2857,8 @@ async function installAudioSampleRate(context) {
         ctx.fillText = originalFillText;
         return { rank: g.mods.chainRank, labels };
       });
-      if (t.oathChainHud.rank !== 3 || !t.oathChainHud.labels.includes('OATH CHAIN  2/3')) {
+      const compactChain = t.oathChainHud.labels.find((label) => label.includes('OATH CHAIN  2/3'));
+      if (t.oathChainHud.rank !== 3 || !compactChain || !compactChain.includes('IRONBOUND')) {
         out.errors.push('touch: Oath chain HUD did not surface the current packet: ' + JSON.stringify(t.oathChainHud));
       }
       await pg.screenshot({ path: path.join(ARTIFACT_DIR, 'touch-oath-chain.png') });
