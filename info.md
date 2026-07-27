@@ -2,6 +2,10 @@
 
 - Current package: `gracefell@2.26.0`
 - Current release: `v2.26` combat-audio consequence pass
+- Published checkpoint: [`v2.26.0`](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.26.0)
+- Gameplay merge: `100d59a6522e7ef5607f55ef3f31d1103e4ff394`
+- Production-receipt merge: `495303c65ff2b872273fa780d35fbb2a285ccd9c`
+- Final receipt CI: [run 30200462720](https://github.com/jonathanwxh-cell/gracefell/actions/runs/30200462720), passed
 - Visual release: Blender-authored cached arena + Canvas-first Malakar
 - Character foundation: Kite-Veil Penitent + Fallen Blade-Saint
 - Production: <https://gracefell.alyoechosys.dev>
