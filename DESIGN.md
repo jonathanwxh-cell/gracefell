@@ -2590,3 +2590,11 @@ clean; loopback and public health passed. Focused production v2.27.1
 acceptance and the complete public desktop/mobile/true-touch suite both passed
 with zero errors. The public visual/failure lane remained ready with zero
 warnings, and the operation census matched local acceptance.
+
+Production-receipt PR #95 merged as
+`394b2fec8ac9bfe8cf8c93db4650bff1f82ea323`; its main-branch run
+30253949536 passed. The server advanced cleanly to that documentation
+checkpoint, rebuilt, restarted, and continued serving the unchanged
+`assets/index-pLgbWBY7.js` runtime. The v2.27.1 release tag targets the final
+documentation checkpoint so code, acceptance, deployment evidence, and
+future-agent instructions remain one durable handoff.
