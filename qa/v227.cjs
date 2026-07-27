@@ -253,6 +253,123 @@ async function openGame(browser, options) {
     fullPage: true,
   });
 
+  const shortTouch = await openGame(browser, {
+    viewport: { width: 360, height: 640 },
+    hasTouch: true,
+    isMobile: true,
+    deviceScaleFactor: 1,
+  });
+  const shortLayout = await shortTouch.page.evaluate(() => {
+    const g = window.__game;
+    cancelAnimationFrame(g.raf);
+    g.raf = 0;
+    g.audio.setMuted(true);
+    g.input.isTouch = true;
+    g.grace = -2;
+    g.resetFight();
+    g.state = 'fight';
+    g.stateT = 0;
+    g.baseZoom = 0.55;
+    g.player.vx = 0;
+    g.player.vy = 0;
+    g.boss.state = 'windup';
+    g.boss.attack = 'charge';
+    g.tutorialStage = 'move';
+    g.tutorialT = 4.5;
+    g.hintT = 4;
+
+    const targetY = g.combatCameraTargetY(g.player.y, g.boss.y);
+    const zoom = g.combatZoomTarget();
+    g.camX = 0;
+    g.camY = targetY;
+    g.camZoom = zoom;
+
+    const labels = [];
+    const originalFillText = CanvasRenderingContext2D.prototype.fillText;
+    CanvasRenderingContext2D.prototype.fillText = function capture(text, x, y, ...rest) {
+      labels.push(String(text));
+      return originalFillText.call(this, text, x, y, ...rest);
+    };
+    try {
+      g.render();
+    } finally {
+      CanvasRenderingContext2D.prototype.fillText = originalFillText;
+    }
+
+    const utilityBottom = g.combatUtilityTop() + 44;
+    const tutorial = g.combatTutorialLayout();
+    const bossScreenY = innerHeight / 2 + (g.boss.y - targetY) * zoom;
+    const playerScreenY = innerHeight / 2 + (g.player.y - targetY) * zoom;
+    const bossTop = bossScreenY - g.boss.r * zoom;
+    const bossBottom = bossScreenY + g.boss.r * zoom;
+    const playerBottom = playerScreenY + g.player.r * zoom;
+    const bossBarY = innerHeight - 248;
+    const buttonTop = Math.min(...g.touchLayout().btns.map((button) => button.y - button.r));
+    return {
+      targetY,
+      zoom,
+      utilityBottom,
+      tutorial,
+      bossTop,
+      bossBottom,
+      playerBottom,
+      bossBarY,
+      buttonTop,
+      labels,
+      bossClear: bossTop >= utilityBottom,
+      tutorialClearOfBoss: tutorial.y - 18 > bossBottom,
+      playerClearOfBossBar: playerBottom < bossBarY,
+      tutorialBetweenBossBarAndButtons:
+        tutorial.y - 18 >= bossBarY + 18
+        && tutorial.y + 12 < buttonTop,
+      proactiveSunder: labels.some((label) => label.includes('HVY SUNDER')),
+      duplicateControlHint: labels.some((label) => label.includes('hold BREAK for Gracebreak')),
+    };
+  });
+  await shortTouch.page.screenshot({
+    path: path.join(ARTIFACT_DIR, 'short-360x640-opening.png'),
+    fullPage: true,
+  });
+
+  const oathHud = await mobile.page.evaluate(() => {
+    const g = window.__game;
+    g.input.isTouch = true;
+    g.grace = 5;
+    g.resetFight();
+    g.state = 'fight';
+    g.stateT = 0;
+    g.tutorialStage = 'done';
+    g.tutorialT = 0;
+    g.hintT = 0;
+    g.boss.state = 'windup';
+    g.boss.attack = 'charge';
+    g.boss.chainTotal = 3;
+    g.boss.chainStep = 2;
+
+    const labels = [];
+    const originalFillText = CanvasRenderingContext2D.prototype.fillText;
+    CanvasRenderingContext2D.prototype.fillText = function capture(text, x, y, ...rest) {
+      labels.push(String(text));
+      return originalFillText.call(this, text, x, y, ...rest);
+    };
+    try {
+      g.render();
+    } finally {
+      CanvasRenderingContext2D.prototype.fillText = originalFillText;
+    }
+    const chainLabels = labels.filter((label) => label.includes('OATH CHAIN'));
+    const separateIronbound = labels.filter((label) => label.startsWith('IRONBOUND'));
+    return {
+      chainLabels,
+      separateIronbound,
+      combined: chainLabels.some((label) => label.includes('IRONBOUND')),
+    };
+  });
+  await mobile.page.screenshot({
+    path: path.join(ARTIFACT_DIR, 'mobile-oath-chain-ironbound.png'),
+    fullPage: true,
+  });
+
   const desktop = await openGame(browser, {
     viewport: { width: 1440, height: 900 },
     deviceScaleFactor: 1,
@@ -267,7 +384,17 @@ async function openGame(browser, options) {
     g.input.isTouch = false;
     g.resolve = 100;
     g.boss.state = 'recover';
-    g.render();
+    const labels = [];
+    const originalFillText = CanvasRenderingContext2D.prototype.fillText;
+    CanvasRenderingContext2D.prototype.fillText = function capture(text, x, y, ...rest) {
+      labels.push(String(text));
+      return originalFillText.call(this, text, x, y, ...rest);
+    };
+    try {
+      g.render();
+    } finally {
+      CanvasRenderingContext2D.prototype.fillText = originalFillText;
+    }
     const hud = g.playerHudRect();
     return {
       hud,
@@ -275,6 +402,9 @@ async function openGame(browser, options) {
         && hud.x + hud.width <= innerWidth
         && hud.y + hud.height <= innerHeight,
       snapshot: g.uiSnapshot().combat,
+      labels,
+      breakReadyLabel: labels.includes('BREAK READY'),
+      breakReadyHint: labels.some((label) => label.includes('HOLD K: BREAK')),
     };
   });
   await desktop.page.screenshot({
@@ -345,13 +475,28 @@ async function openGame(browser, options) {
     || !result.layout.resolveReady
     || !result.layout.hasAudioVerbs
     || !desktopLayout.contained
-    || desktopLayout.snapshot.resolvePercent !== 100) {
+    || desktopLayout.snapshot.resolvePercent !== 100
+    || !desktopLayout.breakReadyLabel
+    || !desktopLayout.breakReadyHint) {
     failures.push(`Resolve HUD/audio acceptance failed: ${JSON.stringify({
       mobile: result.layout,
       desktop: desktopLayout,
     })}`);
   }
-  const errors = [...mobile.errors, ...desktop.errors];
+  if (!shortLayout.bossClear
+    || !shortLayout.tutorialClearOfBoss
+    || !shortLayout.playerClearOfBossBar
+    || !shortLayout.tutorialBetweenBossBarAndButtons
+    || !shortLayout.proactiveSunder
+    || shortLayout.duplicateControlHint) {
+    failures.push(`short-phone opening lanes overlap: ${JSON.stringify(shortLayout)}`);
+  }
+  if (!oathHud.combined
+    || oathHud.chainLabels.length !== 1
+    || oathHud.separateIronbound.length !== 0) {
+    failures.push(`Oath chain and IRONBOUND are not in one compact lane: ${JSON.stringify(oathHud)}`);
+  }
+  const errors = [...mobile.errors, ...shortTouch.errors, ...desktop.errors];
   if (errors.length) failures.push(`page errors: ${JSON.stringify(errors)}`);
 
   const out = {
@@ -359,6 +504,8 @@ async function openGame(browser, options) {
     nErrors: failures.length,
     failures,
     result,
+    shortLayout,
+    oathHud,
     desktopLayout,
     artifacts: ARTIFACT_DIR,
   };
@@ -369,6 +516,7 @@ async function openGame(browser, options) {
     process.exitCode = 1;
   }
   await mobile.context.close();
+  await shortTouch.context.close();
   await desktop.context.close();
   await browser.close();
 })().catch((error) => {

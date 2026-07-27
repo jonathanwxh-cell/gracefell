@@ -2386,7 +2386,26 @@ export class Game {
     const threats = this.projectiles.length + this.rings.length + this.meteors.length;
     const phaseLoad = (this.boss.phase - 1) * 0.5;
     const intensity = clamp(threats / 5 + phaseLoad, 0, 1);
+    if (this.shortTouchCombat()) {
+      // A 360x640 viewport cannot fit the same intimate crop as a tall phone:
+      // Malakar otherwise enters beneath the utility rail while the player
+      // remains pinned above the boss bar. Keep both silhouettes in the
+      // protected playfield, and widen slightly further as hazards accumulate.
+      return this.baseZoom * lerp(0.88, 0.84, intensity);
+    }
     return this.baseZoom * lerp(1.16, 1.0, intensity);
+  }
+
+  shortTouchCombat(): boolean {
+    return this.input.isTouch && this.h <= 680;
+  }
+
+  combatCameraTargetY(lookY: number, bossY: number): number {
+    const pairMidY = (lookY + bossY) / 2;
+    // Tall screens keep the established player-biased composition. Short
+    // phones share more of the frame with Malakar so neither combatant falls
+    // under HUD chrome.
+    return lerp(lookY, pairMidY, this.shortTouchCombat() ? 0.43 : 0.25);
   }
 
   heavyInputHeld(): boolean {
@@ -3346,7 +3365,7 @@ export class Game {
   tutorialMessage(): string {
     if (this.tutorialT <= 0 || this.tutorialStage === 'done') return '';
     if (this.tutorialStage === 'move') return this.input.isTouch
-      ? `MOVE · drag the ${this.leftHanded ? 'right' : 'left'} side`
+      ? `MOVE · drag ${this.leftHanded ? 'right' : 'left'} · ATK×2 → HVY SUNDER`
       : 'MOVE · WASD or arrows';
     if (this.tutorialStage === 'roll') return 'ROLL THROUGH THE BLADE';
     if (this.tutorialStage === 'poise') return 'PERFECT · DODGES BREAK POISE';
@@ -3716,6 +3735,17 @@ export class Game {
     return this.w <= 560 ? 82 : 12;
   }
 
+  combatTutorialLayout() {
+    const shortTouch = this.shortTouchCombat();
+    return {
+      y: shortTouch
+        ? this.h - 208
+        : this.w <= 560 ? 148 : this.input.isTouch ? 116 : 84,
+      width: Math.min(this.w - 32, 330),
+      sharesControlHintLane: shortTouch,
+    };
+  }
+
   soundButtonRect() {
     const width = 76;
     const height = 44;
@@ -4023,7 +4053,7 @@ export class Game {
     const p = this.player, b = this.boss;
     const lookX = p.x + p.vx * 0.12, lookY = p.y + p.vy * 0.12;
     const targetX = this.state === 'intro' ? b.x : lerp(lookX, (p.x + b.x) / 2, 0.25);
-    const targetY = this.state === 'intro' ? b.y : lerp(lookY, (p.y + b.y) / 2, 0.25);
+    const targetY = this.state === 'intro' ? b.y : this.combatCameraTargetY(lookY, b.y);
     this.camX = lerp(this.camX, targetX, 1 - Math.exp(-5 * dt));
     this.camY = lerp(this.camY, targetY, 1 - Math.exp(-5 * dt));
     this.baseZoom = clamp(Math.min(this.w / 1250, this.h / 900), 0.55, 1.35) * (this.state === 'intro' ? 1.12 : 1);
@@ -4551,19 +4581,19 @@ Game.prototype.drawHUD = function drawHUD(this: Game, ctx: CanvasRenderingContex
   const resolveFilled = (this.resolve / RESOLVE_MAX) * 4;
   for (let i = 0; i < 4; i++) {
     const x = i * (segmentW + segmentGap);
-    ctx.fillStyle = 'rgba(188,215,255,0.11)';
-    ctx.fillRect(x, 0, segmentW, 4);
+    ctx.fillStyle = 'rgba(188,215,255,0.18)';
+    ctx.fillRect(x, 0, segmentW, 6);
     const fill = clamp(resolveFilled - i, 0, 1);
     if (fill > 0) {
       ctx.fillStyle = this.resolve >= RESOLVE_MAX ? PAL.spirit : 'rgba(201,169,89,0.92)';
-      ctx.fillRect(x, 0, segmentW * fill, 4);
+      ctx.fillRect(x, 0, segmentW * fill, 6);
     }
   }
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  ctx.font = body(7, 800);
+  ctx.font = body(8, 800);
   ctx.fillStyle = this.resolve >= RESOLVE_MAX ? PAL.spirit : 'rgba(226,208,164,0.82)';
-  ctx.fillText(this.resolve >= RESOLVE_MAX ? 'BREAK' : 'RESOLVE', resolveW + 7, 2);
+  ctx.fillText(this.resolve >= RESOLVE_MAX ? 'BREAK READY' : 'RESOLVE', resolveW + 7, 3);
 
   // flasks
   ctx.translate(0, 9);
@@ -4587,9 +4617,9 @@ Game.prototype.drawHUD = function drawHUD(this: Game, ctx: CanvasRenderingContex
   // Transient teaching and player-chain feedback stay above the combat
   // centerline so they never cover Malakar or the touch cluster.
   const rite = this.tutorialMessage();
+  const tutorialLayout = this.combatTutorialLayout();
   if (rite) {
-    const y = this.w <= 560 ? 148 : this.input.isTouch ? 116 : 84;
-    const width = Math.min(this.w - 32, 330);
+    const { y, width } = tutorialLayout;
     ctx.fillStyle = 'rgba(8,6,4,0.84)';
     ctx.fillRect((this.w - width) / 2, y - 18, width, 30);
     ctx.strokeStyle = 'rgba(188,215,255,0.52)';
@@ -4633,7 +4663,9 @@ Game.prototype.drawHUD = function drawHUD(this: Game, ctx: CanvasRenderingContex
     if (this.mods.clearTells && this.boss.state === 'windup') {
       combatCue = `READ \u00b7 ${BOSS_ATTACK_LABELS[this.boss.attack]}`;
     } else if (this.boss.chainTotal > 1 && this.boss.chainStep > 0 && this.boss.state !== 'staggered') {
-      combatCue = `OATH CHAIN  ${this.boss.chainStep}/${this.boss.chainTotal}`;
+      combatCue = `OATH CHAIN  ${this.boss.chainStep}/${this.boss.chainTotal}${
+        this.mods.noStagger ? ' \u00b7 IRONBOUND' : ''
+      }`;
       combatCueColor = PAL.ember;
     }
     // On compact touch screens the original floating cue crossed the player's
@@ -4709,20 +4741,23 @@ Game.prototype.drawHUD = function drawHUD(this: Game, ctx: CanvasRenderingContex
     ctx.textAlign = 'right';
     ctx.font = pipsFont;
     ctx.fillStyle = 'rgba(201,169,89,0.8)';
-    ctx.fillText(pips, bx + bw, by - 10);
+    if (!compactCueInTitleLane) ctx.fillText(pips, bx + bw, by - 10);
   }
 
   // ---- control hints
-  if (this.hintT > 0) {
+  if (this.hintT > 0 && !(rite && tutorialLayout.sharesControlHintLane)) {
     const hintAlpha = clamp(this.hintT / 2, 0, 1);
     ctx.globalAlpha = hintAlpha;
     ctx.textAlign = 'center';
     const narrowKeyboard = !this.input.isTouch && this.w < 620;
     ctx.font = body(this.input.isTouch ? 13 : narrowKeyboard ? 12 : 15, 500);
+    const breakReady = this.resolve >= RESOLVE_MAX;
     const hint = this.input.isTouch
-      ? 'drag anywhere on the left to move · ROLL is invincible'
+      ? 'ROLL is invincible · hold BREAK for Gracebreak'
       : narrowKeyboard ? 'WASD MOVE · SPACE ROLL · J ATK'
-        : 'WASD move · SPACE roll · J / LMB attack · K heavy · F flask · M mute';
+        : breakReady
+          ? 'WASD move · SPACE roll · J / LMB attack · HOLD K: BREAK · F flask · M mute'
+          : 'WASD move · SPACE roll · J×2 → K: SUNDER · K heavy · F flask · M mute';
     const hintY = this.input.isTouch ? this.h - 208 : narrowKeyboard ? this.h - 34 : this.h - 24;
     if (this.input.isTouch) {
       ctx.fillStyle = 'rgba(8,6,4,0.82)';
@@ -4732,7 +4767,13 @@ Game.prototype.drawHUD = function drawHUD(this: Game, ctx: CanvasRenderingContex
     }
     ctx.fillStyle = this.input.isTouch ? PAL.parchment : PAL.parchmentDim;
     ctx.fillText(hint, this.w / 2, hintY);
-    if (narrowKeyboard) ctx.fillText('K HVY · F FLASK · M MUTE', this.w / 2, this.h - 16);
+    if (narrowKeyboard) {
+      ctx.fillText(
+        breakReady ? 'HOLD K BREAK · F FLASK · M MUTE' : 'J×2 → K SUNDER · F FLASK · M MUTE',
+        this.w / 2,
+        this.h - 16,
+      );
+    }
     ctx.globalAlpha = 1;
   }
 

@@ -8,20 +8,22 @@ rules are all decided by what works one-handed on a 390px screen.
 
 **Play it: [gracefell.alyoechosys.dev](https://gracefell.alyoechosys.dev)**
 
-Current release: **v2.27** — a small authored offense layer that rewards
-intent without adding a permanent action button. Two connected light hits can
-branch into **Sunder** with HVY, trading eight more stamina than the familiar
-third light for twenty more poise damage. Good combat builds a run-local
-**Resolve** rail; at full Resolve, a fully charged HVY becomes
-**Gracebreak**, a committed 72-damage / 112-poise release that restores
-20 stamina only on contact. A miss spends the meter, a partial heavy preserves
-it, a staggered Execute takes priority, and FORSAKEN remains IRONBOUND.
-Journey −2/−3 can receive at most 12 Resolve from wounds; every other gain
-comes from successful play. The save-v7 schema, score/difficulty identities,
-45-file SFX manifest, music, assets, input buffer, and render architecture
-remain intact. Evidence is recorded in
-[`docs/releases/v2.27.md`](docs/releases/v2.27.md), and the durable GitHub
-checkpoint is [v2.27.0](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.0).
+Current release: **v2.27.1** — a mobile combat-readability patch following
+three independent live gamer-agent reviews of v2.27. Short 360×640 phones now
+use a wider, rebalanced combat crop and place transient teaching in the
+protected gap between the boss HUD and thumb controls. FORSAKEN’s Oath-chain
+and IRONBOUND states share one compact plate instead of colliding. The opening
+tutorial names `ATK×2 → HVY SUNDER`, the Resolve rail is stronger at partial
+charge, and full meter reads `BREAK READY` with a desktop hold reminder.
+Combat damage, timing, difficulty, score/save identity, audio, assets, and
+touch targets are unchanged. Evidence is recorded in
+[`docs/releases/v2.27.1.md`](docs/releases/v2.27.1.md).
+
+The **v2.27** earned-offense foundation remains intact. Two connected light
+hits can branch into **Sunder** with HVY; successful play fills the run-local
+**Resolve** rail; and full Resolve plus a fully charged HVY becomes
+**Gracebreak**. Its balance, priority, and release evidence remain in
+[`docs/releases/v2.27.md`](docs/releases/v2.27.md).
 
 The **v2.22** audio foundation remains a four-role software-house pass that turns the supplied
 Kimi/Moonshot combat library into a bounded, production-safe recorded-foley layer. Forty-five
@@ -116,6 +118,11 @@ expanded the real-browser audio/gameplay contract without adding runtime assets.
 (GPT-5).** Codex converted the reviewed gameplay thesis into one contact-gated
 mixed combo, one earned run-local meter, one hold-heavy release, named hybrid
 audio, a compact semantic/mobile HUD, and a dedicated browser acceptance lane.
+
+**v2.27.1 — live-review readability fixes implemented and verified by Codex
+(GPT-5).** Codex repaired the short-phone opening composition and Oath-chain /
+IRONBOUND collision, strengthened Sunder/Break teaching, and added deterministic
+360×640 plus combined-status browser contracts.
 
 Directed by [@jonathanwxh-cell](https://github.com/jonathanwxh-cell), who asked for "AAA grade" and meant it.
 
@@ -632,6 +639,27 @@ desktop/mobile verification: [`docs/releases/v2.26.md`](docs/releases/v2.26.md).
 Complete balance contract, route-priority decisions, local acceptance, release
 receipts, and production verification:
 [`docs/releases/v2.27.md`](docs/releases/v2.27.md).
+
+## Fixed by Codex — v2.27.1 live combat readability
+
+- **Short phones protect the opening tell.** At 360×640, the fight uses a
+  slightly wider crop and a less player-biased vertical camera target. Malakar
+  stays below the utility rail while the player remains above the boss HUD.
+- **Teaching moves into reserved space.** The short-phone tutorial card sits
+  between the boss HUD and action cluster; its duplicate lower hint is
+  suppressed. The first card also teaches `ATK×2 → HVY SUNDER`.
+- **Oath state has one owner.** During compact FORSAKEN packets, `OATH CHAIN`
+  and `IRONBOUND` render together in the boss-title lane. The separate label is
+  withheld only while that combined plate is active.
+- **Resolve is easier to read.** The four-segment rail is thicker, full meter
+  says `BREAK READY`, the touch button remains `BREAK`, and desktop explicitly
+  says to hold K.
+- **The patch stays presentation-only.** No combat number, boss pattern,
+  difficulty modifier, save-v7 field, score, audio event, asset, touch target,
+  or persistent state changed.
+
+Complete reproduction, design rationale, regression matrix, publication, and
+production evidence: [`docs/releases/v2.27.1.md`](docs/releases/v2.27.1.md).
 
 ## Running it
 

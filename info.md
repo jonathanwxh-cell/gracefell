@@ -1,9 +1,9 @@
 # GRACEFELL project facts
 
-- Current package: `gracefell@2.27.0`
-- Current release: `v2.27` Sunder, Resolve, and Gracebreak
-- Published checkpoint: [`v2.27.0`](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.0)
-- Release receipts: [`docs/releases/v2.27.md`](docs/releases/v2.27.md)
+- Current package: `gracefell@2.27.1`
+- Current release: `v2.27.1` live-review combat readability
+- Published checkpoint: pending v2.27.1 publication
+- Release receipts: [`docs/releases/v2.27.1.md`](docs/releases/v2.27.1.md)
 - Gameplay merge: `88b71eef8ad4cafb3bac06a62f8aa3721ff33aed`
 - Runtime-main CI: [run 30244816885](https://github.com/jonathanwxh-cell/gracefell/actions/runs/30244816885), passed
 - Production-receipt merge: `86f9fb3c9521e5edbf9b03c12a23c9f388b8948b`
@@ -38,6 +38,9 @@ npm run qa
 
 `npm run qa` is the acceptance gate. It builds the app, starts an isolated server on
 `127.0.0.1:8492`, and drives desktop, mobile, and real-touch Chromium paths. See
+[`docs/releases/v2.27.1.md`](docs/releases/v2.27.1.md) for the short-phone
+camera/tutorial lanes, combined Oath-chain/IRONBOUND plate, stronger
+Sunder/Break teaching, and release evidence,
 [`docs/releases/v2.27.md`](docs/releases/v2.27.md) for Sunder route ownership,
 Resolve gains, Gracebreak spending/priority, HUD/audio integration, and release
 evidence,
@@ -76,6 +79,7 @@ original Journey/Oaths, teaching, death-recovery, visible-combo, and save-v4 des
 - [`design-qa.md`](design-qa.md) — source-normalized mobile/desktop character comparisons
 - [`docs/visual-upgrade/BLENDER_2_5D_VISUAL_SPEC.md`](docs/visual-upgrade/BLENDER_2_5D_VISUAL_SPEC.md) — v2.25 art direction, budgets, renderer decision, and acceptance contract
 - [`docs/visual-upgrade/ASSET_PIPELINE.md`](docs/visual-upgrade/ASSET_PIPELINE.md) — reproducible Blender generation, optimisation, cache, and fallback instructions
+- [`docs/releases/v2.27.1.md`](docs/releases/v2.27.1.md) — v2.27.1 live-review HUD/camera fixes and release evidence
 - [`docs/releases/v2.27.md`](docs/releases/v2.27.md) — v2.27 Sunder, Resolve, Gracebreak, acceptance, and deployment evidence
 - [`docs/releases/v2.26.md`](docs/releases/v2.26.md) — v2.26 combat-audio consequence contracts and release evidence
 - [`docs/releases/v2.25.md`](docs/releases/v2.25.md) — v2.25 implementation, QA, and deployment record
