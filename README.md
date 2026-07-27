@@ -8,16 +8,20 @@ rules are all decided by what works one-handed on a 390px screen.
 
 **Play it: [gracefell.alyoechosys.dev](https://gracefell.alyoechosys.dev)**
 
-Current release: **v2.26** — clearer combat consequences without a
-larger asset or render budget. Heavy swings now speak on the actual release
-frame, with bounded charge-scaled release and contact weight; received damage
-has light, medium, and heavy tiers; close projectile passes, denied low-stamina
-actions, arena-ward contact, and the victory grade seal each have explicit
-one-shot ownership. The 45-file SFX manifest, music, simulation timing,
-difficulty, score/save schema v7, Canvas renderer, and v2.25 visual treatment
-are unchanged. Evidence is recorded in
-[`docs/releases/v2.26.md`](docs/releases/v2.26.md), and the durable GitHub
-checkpoint is [v2.26.0](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.26.0).
+Current release: **v2.27** — a small authored offense layer that rewards
+intent without adding a permanent action button. Two connected light hits can
+branch into **Sunder** with HVY, trading eight more stamina than the familiar
+third light for twenty more poise damage. Good combat builds a run-local
+**Resolve** rail; at full Resolve, a fully charged HVY becomes
+**Gracebreak**, a committed 72-damage / 112-poise release that restores
+20 stamina only on contact. A miss spends the meter, a partial heavy preserves
+it, a staggered Execute takes priority, and FORSAKEN remains IRONBOUND.
+Journey −2/−3 can receive at most 12 Resolve from wounds; every other gain
+comes from successful play. The save-v7 schema, score/difficulty identities,
+45-file SFX manifest, music, assets, input buffer, and render architecture
+remain intact. Evidence is recorded in
+[`docs/releases/v2.27.md`](docs/releases/v2.27.md), and the durable GitHub
+checkpoint is [v2.27.0](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.0).
 
 The **v2.22** audio foundation remains a four-role software-house pass that turns the supplied
 Kimi/Moonshot combat library into a bounded, production-safe recorded-foley layer. Forty-five
@@ -108,6 +112,11 @@ Codex tightened event ownership around heavy release, damage severity, projectil
 closest passes, stamina denial, ward contact, and the terminal grade seal, then
 expanded the real-browser audio/gameplay contract without adding runtime assets.
 
+**v2.27 — Sunder, Resolve, and Gracebreak implemented and verified by Codex
+(GPT-5).** Codex converted the reviewed gameplay thesis into one contact-gated
+mixed combo, one earned run-local meter, one hold-heavy release, named hybrid
+audio, a compact semantic/mobile HUD, and a dedicated browser acceptance lane.
+
 Directed by [@jonathanwxh-cell](https://github.com/jonathanwxh-cell), who asked for "AAA grade" and meant it.
 
 Different agents keep working on this. **[PROVENANCE.md](PROVENANCE.md)** is the ledger of
@@ -122,9 +131,9 @@ who did which pass, and the rules any future agent follows before touching the c
 | | |
 |---|---|
 | drag on the **movement side** | a floating stick appears under your thumb; defaults left and can be mirrored |
-| **ATK** | slash — connect three light hits for a finisher, or press during a roll for a recovery slash |
+| **ATK** | slash — connect three light hits for a finisher, press during a roll for a recovery slash, or connect two then use HVY for Sunder |
 | **ROLL** | invincible — roll *into* a swing for a perfect dodge |
-| **HVY** | heavy, slow, big poise damage |
+| **HVY** | heavy, slow, big poise damage; after two connected light hits it becomes Sunder, and at full Resolve a full hold becomes Gracebreak |
 | **FLASK** | heal (Journey starts with four; the selected path is shown before the fight) |
 | **MIX** | freezes combat while the score remains audible; set Music/Combat effects, test SFX, then Done |
 | **PAUSE / RESUME** | freezes the fight and audio; no time, attack, or input advances |
@@ -154,6 +163,13 @@ packets.
 
 Break his poise to stagger him; staggered hits do 1.4×. Land a roll *into* an incoming attack for a perfect dodge — slow-motion, stamina back, and poise damage. Defense is how you win.
 
+Connected attacks and deliberate defensive play build the thin **Resolve**
+rail under stamina. Light hits grant 1/1/3 across the string; Sunder grants 6,
+a roll slash 4, a perfect dodge 8, a sufficiently charged heavy 6, a flank 4,
+and an Execute 12. Resolve never persists between attempts. At 100, hold HVY
+through its complete charge to release Gracebreak. Quick or partial heavy
+attacks leave the meter ready for later.
+
 Victory is graded S through C on time and wounds taken. Your best time and win count persist locally.
 The title-screen **SCORES** chronicle keeps the latest 20 victories on this device with their grade,
 fight time, path, attempt, damage, wounds, flask use, perfect dodges, and local completion date.
@@ -165,9 +181,11 @@ The title **Path** runs from **−3 to +5** and tells you what its current choic
 
 A player with no save begins on **JOURNEY −2 — recommended**: Malakar is about 15% slower, wounds
 land 30% softer, dodge windows are wider, four flasks are available, and windups name the incoming
-attack above the boss bar. The sovereign, health pool, phases, move set, and victory requirements
-are unchanged. Existing saves keep their chosen path; an old save that never stored a path remains
-on **MEASURED 0**.
+attack above the boss bar. Journey −2 and −3 also grant 4 Resolve for a
+non-lethal wound, capped at 12 per attempt; this disclosed recovery cannot fill
+even one eighth of the meter. The sovereign, health pool, phases, move set, and
+victory requirements are unchanged. Existing saves keep their chosen path; an
+old save that never stored a path remains on **MEASURED 0**.
 
 Positive paths are **Oaths**. They retain the established speed, damage, flask, poise, and stagger
 curve, then add authored follow-up packets and shorter recovery. The HUD says
@@ -243,6 +261,10 @@ critical voices, so a dense projectile storm cannot spend the voice budget neede
 Light sword contact has its own short 1.45–3.2 kHz critical crack and an immediate score duck.
 That presence-band layer replaces an expendable ultrasonic transient, so ordinary hits remain
 clear on a phone speaker and under phase-three voice pressure without adding another sound layer.
+Sunder and Gracebreak reuse that bounded hybrid graph with named release and
+contact accents. Resolve-ready uses one restrained rising acknowledgement;
+none of these verbs adds a file, looping layer, startup request, or unbounded
+voice.
 
 The MP3s are streamed through the Web Audio music bus instead of being fully decoded into memory.
 Only Phase 1 is eagerly prepared; later phases remain deferred. Playback failures retain and retry
@@ -582,6 +604,34 @@ unchanged.
 
 Full rationale, deterministic contract checks, publication receipts, and public
 desktop/mobile verification: [`docs/releases/v2.26.md`](docs/releases/v2.26.md).
+
+## Fixed by Codex — v2.27 earned offense
+
+- **One mixed combo, no fifth button.** `ATK · ATK · HVY` becomes Sunder only
+  after both light contacts. Its 24-damage ender brings the route to 50 damage,
+  70 poise, and 44 stamina. `ATK · ATK · ATK` remains 50 damage, 50 poise, and
+  36 stamina.
+- **Defense and variety earn the limit break.** A 100-point run-local Resolve
+  meter rewards connected strings, Sunder, roll slash, perfect dodge, charged
+  heavy, flank, and Execute. It is presentation plus combat state, never a save
+  migration or score modifier.
+- **Gracebreak stays a decision.** Full Resolve changes only a fully held HVY.
+  The release spends on whiff, restores 20 stamina only on contact, never
+  clears hazards or grants invulnerability, yields to staggered Execute, and
+  cannot stagger Oath +5.
+- **The interface teaches without crowding.** A four-segment rail fits between
+  stamina and flasks; full meter changes the existing touch HVY label to
+  BREAK. Sunder and Resolve technique copy reuse the established chain lane,
+  while the semantic combat panel exposes the same state to assistive
+  technology.
+- **Performance stays bounded.** No asset, request, particle pool, render
+  surface, persistent field, or continuous audio layer was added. The measured
+  worst-case frame remains at 39 gradients, 2 image draws, and 9 shadow-blur
+  writes; the interface adds five simple draw calls.
+
+Complete balance contract, route-priority decisions, local acceptance, release
+receipts, and production verification:
+[`docs/releases/v2.27.md`](docs/releases/v2.27.md).
 
 ## Running it
 

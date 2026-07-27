@@ -5,6 +5,9 @@ import {
   isFlankHit,
   weatherForPhase, weatherMotionScale,
   attackStretchImpulse, ATTACK_STRETCH_DURATION,
+  resolveGainFor, RESOLVE_MAX,
+  SUNDER_DAMAGE, SUNDER_TOTAL_POISE,
+  GRACEBREAK_DAMAGE, GRACEBREAK_TOTAL_POISE,
 } from './engine';
 
 describe('math helpers', () => {
@@ -96,6 +99,7 @@ describe('difficultyForGrace — the published balance contract (README table)',
     expect(m.dmgTaken).toBeCloseTo(0.7);
     expect(m.iframe).toBeGreaterThan(1);
     expect(m.perfectWindow).toBeGreaterThan(1);
+    expect(m).toMatchObject({ resolveWoundGain: 4, resolveWoundCap: 12 });
   });
   it('Oath ranks match the published rows', () => {
     expect(difficultyForGrace(1)).toMatchObject({ bossSpeed: 1.04, dmgTaken: 1.05, flasks: 3, chainRank: 1 });
@@ -103,6 +107,9 @@ describe('difficultyForGrace — the published balance contract (README table)',
     expect(difficultyForGrace(3)).toMatchObject({ poiseMul: 1.35, staggerDuration: 1.45, chainRank: 2, flasks: 2 });
     expect(difficultyForGrace(4)).toMatchObject({ poiseMul: 1.7, staggerDuration: 1.25 });
     expect(difficultyForGrace(5)).toMatchObject({ noStagger: true, flasks: 1, chainRank: 3 });
+    for (const grace of [-1, 0, 1, 2, 3, 4, 5]) {
+      expect(difficultyForGrace(grace)).toMatchObject({ resolveWoundGain: 0, resolveWoundCap: 0 });
+    }
   });
   it('clamps out-of-range grace to [-3, 5]', () => {
     expect(difficultyForGrace(-99)).toEqual(difficultyForGrace(-3));
@@ -168,8 +175,8 @@ describe('attack stretch impulse (v2.24 impact frames)', () => {
     expect(attackStretchImpulse('heavy', ATTACK_STRETCH_DURATION * 5)).toBe(0);
     expect(attackStretchImpulse('rollSlash', 99)).toBe(0);
   });
-  it('applies to all three attack verbs', () => {
-    for (const s of ['light', 'heavy', 'rollSlash']) {
+  it('applies to every attack verb', () => {
+    for (const s of ['light', 'sunder', 'heavy', 'rollSlash']) {
       expect(attackStretchImpulse(s, 0)).toBeGreaterThan(0);
     }
   });
@@ -179,5 +186,42 @@ describe('attack stretch impulse (v2.24 impact frames)', () => {
       expect(v).toBeGreaterThanOrEqual(0);
       expect(v).toBeLessThanOrEqual(1);
     }
+  });
+});
+
+describe('v2.27 Resolve and authored enders', () => {
+  it('keeps one compact 100-point run-local meter with explicit gains', () => {
+    expect(RESOLVE_MAX).toBe(100);
+    expect({
+      light1: resolveGainFor('light-1'),
+      light2: resolveGainFor('light-2'),
+      finisher: resolveGainFor('light-finisher'),
+      sunder: resolveGainFor('sunder'),
+      rollSlash: resolveGainFor('roll-slash'),
+      perfect: resolveGainFor('perfect-dodge'),
+      chargedHeavy: resolveGainFor('charged-heavy'),
+      flank: resolveGainFor('flank'),
+      execute: resolveGainFor('execute'),
+    }).toEqual({
+      light1: 1,
+      light2: 1,
+      finisher: 3,
+      sunder: 6,
+      rollSlash: 4,
+      perfect: 8,
+      chargedHeavy: 6,
+      flank: 4,
+      execute: 12,
+    });
+  });
+
+  it('makes Sunder a poise route and Gracebreak a stronger earned release', () => {
+    expect(SUNDER_DAMAGE).toBe(24);
+    expect(SUNDER_TOTAL_POISE).toBe(44);
+    expect(GRACEBREAK_DAMAGE).toBe(72);
+    expect(GRACEBREAK_TOTAL_POISE).toBe(112);
+    expect(SUNDER_TOTAL_POISE).toBeGreaterThan(SUNDER_DAMAGE);
+    expect(GRACEBREAK_TOTAL_POISE).toBeGreaterThan(GRACEBREAK_DAMAGE);
+    expect(GRACEBREAK_DAMAGE).toBeGreaterThan(SUNDER_DAMAGE);
   });
 });

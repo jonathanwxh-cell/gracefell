@@ -148,8 +148,41 @@ interface Projectile {
 }
 interface RingWave { x: number; y: number; r: number; speed: number; thickness: number; dmg: number; maxR: number; hostile: boolean; hitDone: boolean; }
 interface Meteor { x: number; y: number; fuse: number; maxFuse: number; r: number; dmg: number; }
-type PlayerImpact = 'light' | 'finisher' | 'heavy';
+type PlayerImpact = 'light' | 'finisher' | 'heavy' | 'sunder' | 'gracebreak';
 export type DamageSource = BossAttack | 'unknown';
+
+export const RESOLVE_MAX = 100;
+export const SUNDER_DAMAGE = 24;
+export const SUNDER_TOTAL_POISE = 44;
+export const GRACEBREAK_DAMAGE = 72;
+export const GRACEBREAK_TOTAL_POISE = 112;
+
+export type ResolveEvent =
+  | 'light-1'
+  | 'light-2'
+  | 'light-finisher'
+  | 'sunder'
+  | 'roll-slash'
+  | 'perfect-dodge'
+  | 'charged-heavy'
+  | 'flank'
+  | 'execute';
+
+const RESOLVE_GAINS: Record<ResolveEvent, number> = {
+  'light-1': 1,
+  'light-2': 1,
+  'light-finisher': 3,
+  sunder: 6,
+  'roll-slash': 4,
+  'perfect-dodge': 8,
+  'charged-heavy': 6,
+  flank: 4,
+  execute: 12,
+};
+
+export function resolveGainFor(event: ResolveEvent): number {
+  return RESOLVE_GAINS[event];
+}
 
 export interface WeatherSnapshot {
   fromPhase: WeatherPhase;
@@ -407,15 +440,19 @@ export class Player {
   hp = 110; maxHp = 110;
   stam = 100; maxStam = 100; stamDelay = 0;
   flasks = 3; maxFlasks = 3;
-  state: 'move' | 'roll' | 'rollSlash' | 'light' | 'heavy' | 'flask' | 'stagger' | 'dead' = 'move';
+  state: 'move' | 'roll' | 'rollSlash' | 'light' | 'sunder' | 'heavy' | 'flask' | 'stagger' | 'dead' = 'move';
   t = 0; // state timer
   iframes = 0; rollIframes = 0; hurtFlash = 0;
   rollDir = 0; attackHit = false; lungeVx = 0; lungeVy = 0;
   impulseVx = 0; impulseVy = 0;
   comboStep = 0; comboWindow = 0; perfectCd = 0;
   charge01 = 0; heavyChargeT = 0; heavyCharging = false; // hold-to-charge heavy
+  gracebreakEligible = false; gracebreakStrike = false;
   queuedLightAttacks = 0;
   rollSlashQueued = false;
+  routeLightHits = 0;
+  sunderWindow = 0;
+  sunderQueued = false;
   stepT = 0; // footstep cadence timer while moving
   wardContact = false;
   trail: { x: number; y: number; a: number; life: number }[] = [];
@@ -425,6 +462,12 @@ export class Player {
 
   get busy() { return this.state !== 'move'; }
 
+  clearSunderRoute() {
+    this.routeLightHits = 0;
+    this.sunderWindow = 0;
+    this.sunderQueued = false;
+  }
+
   update(dt: number, input: Input, game: Game) {
     this.capePhase += dt * 6;
     this.iframes = Math.max(0, this.iframes - dt);
@@ -433,9 +476,11 @@ export class Player {
     this.healPulse = Math.max(0, this.healPulse - dt);
     this.stamDelay = Math.max(0, this.stamDelay - dt);
     this.comboWindow = Math.max(0, this.comboWindow - dt);
+    if (this.state === 'move') this.sunderWindow = Math.max(0, this.sunderWindow - dt);
     if (this.comboWindow <= 0 && this.state === 'move') {
       this.comboStep = 0;
       this.queuedLightAttacks = 0;
+      this.clearSunderRoute();
     }
     this.perfectCd = Math.max(0, this.perfectCd - dt);
     if (this.stamDelay <= 0 && this.state !== 'heavy') this.stam = clamp(this.stam + 36 * dt, 0, this.maxStam);
@@ -452,6 +497,16 @@ export class Player {
     if (this.state === 'light' && input.consume('light')) {
       this.queuedLightAttacks = Math.min(2, this.queuedLightAttacks + 1);
     }
+    // A mixed route needs multiplicity just like the rapid light queue. Accept
+    // HVY only when it follows a real or already-queued second light, then wait
+    // for combat-authoritative contacts before allowing SUNDER to resolve.
+    if (
+      this.state === 'light'
+      && (this.comboStep === 1 || (this.comboStep === 0 && this.queuedLightAttacks > 0))
+      && input.consume('heavy')
+    ) {
+      this.sunderQueued = true;
+    }
     // A dodge attack is buffered, never allowed to cancel invulnerability.
     // This preserves the beginner-safe roll while making ATK during the roll
     // resolve into an authored recovery slash.
@@ -460,14 +515,18 @@ export class Player {
     // state transitions
     if (this.state === 'move' || this.state === 'flask') {
       const queuedLight = this.queuedLightAttacks > 0;
+      const sunderBuffered = this.sunderWindow > 0
+        && (this.sunderQueued || input.hasBuffered('heavy'));
       if (this.state === 'move' && queuedLight && this.stam < 12) {
         game.audio.staminaEmpty(game.audioSpatial(this.x, this.y));
         this.queuedLightAttacks = 0;
+        this.clearSunderRoute();
       }
       if (this.state === 'move' && (
         (input.hasBuffered('roll') && this.stam < 20)
         || (input.hasBuffered('light') && this.stam < 12)
-        || (input.hasBuffered('heavy') && this.stam < 26)
+        || (input.hasBuffered('heavy') && this.stam < (this.sunderWindow > 0 ? 20 : 26))
+        || (this.sunderQueued && this.sunderWindow > 0 && this.stam < 20)
       )) {
         // Warn without consuming the command: the established 260 ms input
         // buffer can still execute it if regeneration crosses the threshold.
@@ -476,6 +535,7 @@ export class Player {
       if (this.stam >= 20 && this.state !== 'flask' && input.consume('roll')) {
         this.state = 'roll'; this.t = 0.42;
         this.comboStep = 0; this.comboWindow = 0; this.queuedLightAttacks = 0; this.rollSlashQueued = false;
+        this.clearSunderRoute();
         const m = Math.hypot(ax.x, ax.y);
         this.rollDir = m > 0.1 ? Math.atan2(ax.y, ax.x) : this.facing;
         this.stam -= 20; this.stamDelay = 0.55;
@@ -483,6 +543,19 @@ export class Player {
         this.iframes = Math.max(this.iframes, this.rollIframes);
         game.audio.dodge(game.audioSpatial(this.x, this.y));
         game.burst(this.x, this.y, 8, '#8f8776', 120, 0.35, 3);
+      } else if (this.stam >= 20 && this.state !== 'flask' && sunderBuffered) {
+        input.consume('heavy');
+        this.state = 'sunder'; this.t = 0.48; this.attackHit = false;
+        this.stam -= 20; this.stamDelay = 0.65;
+        this.comboStep = 0; this.comboWindow = 0; this.queuedLightAttacks = 0;
+        this.sunderWindow = 0; this.sunderQueued = false; this.routeLightHits = 0;
+        const b = game.boss;
+        if (b && b.hp > 0) this.facing = angTo(this.x, this.y, b.x, b.y);
+        this.lungeVx = Math.cos(this.facing) * 330;
+        this.lungeVy = Math.sin(this.facing) * 330;
+      } else if (sunderBuffered && this.stam < 20) {
+        input.consume('heavy');
+        this.clearSunderRoute();
       } else if (this.stam >= 12 && this.state !== 'flask' && (queuedLight || input.consume('light'))) {
         if (queuedLight) this.queuedLightAttacks--;
         const step = this.comboWindow > 0 ? this.comboStep : 0;
@@ -499,7 +572,10 @@ export class Player {
       } else if (this.stam >= 26 && this.state !== 'flask' && input.consume('heavy')) {
         this.state = 'heavy'; this.t = 0.62; this.attackHit = false;
         this.queuedLightAttacks = 0;
+        this.clearSunderRoute();
         this.heavyChargeT = 0; this.charge01 = 0; this.heavyCharging = false;
+        this.gracebreakEligible = game.resolve >= RESOLVE_MAX;
+        this.gracebreakStrike = false;
         this.stam -= 26; this.stamDelay = 0.7;
         const b = game.boss;
         if (b && b.hp > 0) this.facing = angTo(this.x, this.y, b.x, b.y);
@@ -550,11 +626,12 @@ export class Player {
           this.state = 'move'; this.vx *= 0.3; this.vy *= 0.3;
         }
       }
-    } else if (this.state === 'light' || this.state === 'heavy' || this.state === 'rollSlash') {
+    } else if (this.state === 'light' || this.state === 'sunder' || this.state === 'heavy' || this.state === 'rollSlash') {
       const heavy = this.state === 'heavy';
+      const sunder = this.state === 'sunder';
       const rollSlash = this.state === 'rollSlash';
-      const total = heavy ? 0.62 : rollSlash ? 0.3 : this.comboStep === 2 ? 0.44 : 0.32;
-      const activeStart = heavy ? 0.62 - 0.20 : rollSlash ? 0.1 : total - 0.16;
+      const total = heavy ? 0.62 : sunder ? 0.48 : rollSlash ? 0.3 : this.comboStep === 2 ? 0.44 : 0.32;
+      const activeStart = heavy ? 0.62 - 0.20 : sunder ? 0.32 : rollSlash ? 0.1 : total - 0.16;
       const elapsed = total - this.t;
       // lunge early
       // Preserve the original 60 Hz tuning without making reach depend on the
@@ -579,8 +656,9 @@ export class Player {
       this.vx = this.lungeVx * lungeScale; this.vy = this.lungeVy * lungeScale;
       // sword tip trail during active window
       const sw = this.swordAngle();
-      const tipX = this.x + Math.cos(sw) * (heavy ? 88 : 74);
-      const tipY = this.y + Math.sin(sw) * (heavy ? 88 : 74);
+      const tipLength = heavy ? 88 : sunder ? 84 : 74;
+      const tipX = this.x + Math.cos(sw) * tipLength;
+      const tipY = this.y + Math.sin(sw) * tipLength;
       this.swordTip.push({ x: tipX, y: tipY });
       if (this.swordTip.length > 10) this.swordTip.shift();
       // hit check — a heavy can be charged by holding through the wind-up
@@ -597,14 +675,26 @@ export class Player {
           if (this.heavyCharging) game.audio.chargeLoopStop();
           this.heavyCharging = false;
           if (heavy) this.charge01 = clamp(this.heavyChargeT / Player.HEAVY_MAX_CHARGE, 0, 1);
-          if (heavy) game.audio.swingHeavy(game.audioSpatial(this.x, this.y), this.charge01);
-          game.playerStrike(heavy, rollSlash);
+          this.gracebreakStrike = heavy
+            && this.gracebreakEligible
+            && this.charge01 >= 0.999
+            && game.boss.state !== 'staggered';
+          if (this.gracebreakStrike) {
+            game.consumeGracebreak();
+            game.audio.gracebreakRelease(game.audioSpatial(this.x, this.y));
+          } else if (heavy) {
+            game.audio.swingHeavy(game.audioSpatial(this.x, this.y), this.charge01);
+          } else if (sunder) {
+            game.audio.sunderRelease(game.audioSpatial(this.x, this.y));
+          }
+          game.playerStrike(heavy, rollSlash, sunder);
         }
       }
       if (this.t <= 0) {
         this.state = 'move'; this.swordTip = [];
-        if (!heavy && !rollSlash) { this.comboWindow = 0.6; this.comboStep = (this.comboStep + 1) % 3; }
+        if (!heavy && !sunder && !rollSlash) { this.comboWindow = 0.6; this.comboStep = (this.comboStep + 1) % 3; }
         else { this.comboStep = 0; this.comboWindow = 0; }
+        if (heavy) { this.gracebreakEligible = false; this.gracebreakStrike = false; }
       }
     } else if (this.state === 'flask') {
       this.vx = lerp(this.vx, ax.x * spd * 0.35, 1 - Math.exp(-10 * dt));
@@ -661,6 +751,10 @@ export class Player {
       const dir = this.comboStep === 1 ? -1 : 1; // alternate sweep direction
       return this.facing - dir * (arc / 2) + dir * p * arc;
     }
+    if (this.state === 'sunder') {
+      const p = 1 - this.t / 0.48;
+      return this.facing + 1.3 - p * 2.6;
+    }
     if (this.state === 'heavy') {
       const p = 1 - this.t / 0.62;
       if (p < 0.55) return this.facing - 1.25 * clamp(p / 0.28, 0, 1);
@@ -684,6 +778,8 @@ export class Player {
       return false;
     }
     this.comboStep = 0; this.comboWindow = 0; this.queuedLightAttacks = 0; this.rollSlashQueued = false;
+    this.clearSunderRoute();
+    this.gracebreakEligible = false; this.gracebreakStrike = false;
     game.breakPlayerChain();
     game.audio.chargeLoopStop(true);
     game.lastDamageSource = source;
@@ -706,6 +802,7 @@ export class Player {
       this.hp = 0; this.state = 'dead'; this.t = 0;
       game.onPlayerDeath();
     } else {
+      game.onPlayerWound();
       this.state = 'stagger'; this.t = 0.32;
       this.swordTip = [];
     }
@@ -715,7 +812,7 @@ export class Player {
   private drawKiteVeilBody(ctx: CanvasRenderingContext2D, rolling: boolean) {
     const state = this.state;
     const heavyCharge = state === 'heavy' && (this.t > 0.28 || this.heavyCharging);
-    const flutter = Math.sin(this.capePhase) * (rolling ? 0.7 : state === 'heavy' ? 1.1 : 1.8);
+    const flutter = Math.sin(this.capePhase) * (rolling ? 0.7 : state === 'heavy' || state === 'sunder' ? 1.1 : 1.8);
 
     ctx.save();
     ctx.rotate(rolling ? this.rollDir : this.facing);
@@ -765,7 +862,7 @@ export class Player {
       ctx.lineTo(-15, 10);
       ctx.lineTo(-6, 15 + flutter * 0.2);
       ctx.lineTo(4, 8);
-    } else if (state === 'light' || state === 'heavy' || state === 'rollSlash') {
+    } else if (state === 'light' || state === 'sunder' || state === 'heavy' || state === 'rollSlash') {
       // Narrow spear profile during attack/release.
       ctx.moveTo(6, -5);
       ctx.lineTo(-4, -8);
@@ -795,7 +892,7 @@ export class Player {
     ctx.fill();
 
     const apex = rolling ? 12 : state === 'flask' ? 14 : heavyCharge ? 18 : 17;
-    const hoodHalf = rolling ? 7 : state === 'light' || state === 'rollSlash' || (state === 'heavy' && !heavyCharge) ? 7 : state === 'flask' ? 8 : 10;
+    const hoodHalf = rolling ? 7 : state === 'light' || state === 'sunder' || state === 'rollSlash' || (state === 'heavy' && !heavyCharge) ? 7 : state === 'flask' ? 8 : 10;
     const rear = rolling ? -6 : -4;
     ctx.save();
     if (state === 'stagger') ctx.rotate(0.48);
@@ -862,13 +959,16 @@ export class Player {
       ctx.stroke();
       ctx.restore();
     }
-    // hold-to-charge heavy: a gold ring tightens and brightens as the heavy
-    // winds up (reserved danger hue untouched).
+    // Hold-to-charge heavy: a gold ring tightens as before. A full Resolve
+    // charge changes the same ring to spirit-white rather than adding another
+    // effect layer or borrowing the reserved danger hue.
     if (this.heavyCharging) {
       const c = clamp(this.heavyChargeT / Player.HEAVY_MAX_CHARGE, 0, 1);
       ctx.save();
       ctx.globalAlpha = 0.35 + c * 0.5;
-      ctx.strokeStyle = c >= 0.98 ? '#fff2d0' : PAL.goldBright;
+      ctx.strokeStyle = this.gracebreakEligible
+        ? (c >= 0.98 ? '#ffffff' : PAL.spirit)
+        : c >= 0.98 ? '#fff2d0' : PAL.goldBright;
       ctx.lineWidth = 1.5 + c * 2.5;
       ctx.beginPath(); ctx.arc(x, y, this.r + 14 - c * 8, 0, TAU); ctx.stroke();
       ctx.restore();
@@ -916,8 +1016,8 @@ export class Player {
     const swordVisible = this.state !== 'dead' && this.state !== 'flask' && this.state !== 'stagger' && !rolling;
     if (!blink && swordVisible) {
       const sw = this.swordAngle();
-      const inAtk = this.state === 'light' || this.state === 'heavy' || this.state === 'rollSlash';
-      const len = inAtk ? (this.state === 'heavy' ? 88 : 74) : 34;
+      const inAtk = this.state === 'light' || this.state === 'sunder' || this.state === 'heavy' || this.state === 'rollSlash';
+      const len = inAtk ? (this.state === 'heavy' ? 88 : this.state === 'sunder' ? 84 : 74) : 34;
       const a = inAtk ? sw : this.facing + 0.9;
       // trail ribbon
       // One continuously tapered strip instead of up to nine constant-width
@@ -1408,14 +1508,19 @@ export class Boss {
     game.hitstop = Math.max(game.hitstop, dmg > 20 ? 0.09 : 0.05);
     if (dmg > 20) game.zoomPunch = Math.max(game.zoomPunch, 0.045);
     game.shake(dmg > 20 ? 7 : 4, 0.2);
-    const heavyImpact = impact === 'heavy' || (impact === undefined && dmg > 20);
-    game.audio.hit(heavyImpact, game.audioSpatial(this.x, this.y), game.player.comboStep, charge);
+    const heavyImpact = impact === 'heavy' || impact === 'sunder' || impact === 'gracebreak'
+      || (impact === undefined && dmg > 20);
+    if (impact === 'sunder') game.audio.sunderHit(game.audioSpatial(this.x, this.y));
+    else if (impact === 'gracebreak') game.audio.gracebreakHit(game.audioSpatial(this.x, this.y));
+    else game.audio.hit(heavyImpact, game.audioSpatial(this.x, this.y), game.player.comboStep, charge);
     const a = angTo(fromX, fromY, this.x, this.y);
     // Give ground along the blow. Render-only — see the field declaration.
     this.recoil = dmg > 20 ? 6.5 : 3.5;
     this.recoilAng = a;
     game.sparks(this.x - Math.cos(a) * this.r * 0.5, this.y - Math.sin(a) * this.r * 0.5, dmg > 20 ? 16 : 9);
-    const damageColor = impact === 'finisher' ? PAL.spirit : dmg > 20 ? PAL.goldBright : PAL.parchment;
+    const damageColor = impact === 'finisher' || impact === 'gracebreak'
+      ? PAL.spirit
+      : dmg > 20 ? PAL.goldBright : PAL.parchment;
     game.addDamageNum(this.x + rand(-16, 16), this.y - this.r - 8, Math.round(final).toString(), damageColor, dmg > 20 ? 26 : 19);
     if (this.hp <= 0) {
       this.hp = 0;
@@ -1794,6 +1899,8 @@ export interface DifficultyMods {
   clearTells: boolean;
   chainRank: number;
   recoveryMul: number;
+  resolveWoundGain: number;
+  resolveWoundCap: number;
 }
 
 export interface GameUiSnapshot {
@@ -1833,6 +1940,9 @@ export interface GameUiSnapshot {
     telegraph: string;
     comboHits: number;
     queuedLights: number;
+    resolvePercent: number;
+    resolveReady: boolean;
+    technique: string;
   };
 }
 
@@ -1909,7 +2019,7 @@ export function isFlankHit(
 // design-qa.md macro-shape contract still holds at the 0.55 mobile camera.
 // Visual only: it reads from `state`/`t` and feeds nothing back into combat.
 export const ATTACK_STRETCH_DURATION = 0.16;
-const STRETCH_STATES = new Set(['light', 'heavy', 'rollSlash']);
+const STRETCH_STATES = new Set(['light', 'sunder', 'heavy', 'rollSlash']);
 export function attackStretchImpulse(state: string, t: number): number {
   if (!STRETCH_STATES.has(state)) return 0;
   return clamp(1 - t / ATTACK_STRETCH_DURATION, 0, 1);
@@ -1948,6 +2058,10 @@ export function difficultyForGrace(grace: number): DifficultyMods {
     // while authored chains and recovery pressure add new decisions.
     chainRank: g >= 5 ? 3 : g >= 3 ? 2 : g >= 1 ? 1 : 0,
     recoveryMul: g > 0 ? oathRecovery[g] : 1 + aid * 0.1,
+    // Only the disclosed beginner Journey receives a bounded comeback
+    // contribution. It cannot fill more than 12% of one meter per attempt.
+    resolveWoundGain: g <= -2 ? 4 : 0,
+    resolveWoundCap: g <= -2 ? 12 : 0,
   };
 }
 
@@ -1985,6 +2099,8 @@ export class Game {
   phaseEnteredAt = [0, 0, 0];
   lastHits: { source: DamageSource; at: number }[] = [];
   playerChainHits = 0; playerChainT = 0; playerChainFinished = false;
+  resolve = 0; resolveUses = 0; resolveFromWounds = 0;
+  techniqueText = ''; techniqueT = 0;
   lastDamageSource: DamageSource = 'unknown';
   tutorialStage: 'move' | 'roll' | 'poise' | 'stagger' | 'done' = 'move';
   tutorialT = 0;
@@ -2670,7 +2786,7 @@ export class Game {
     const status = this.paused ? 'Paused' : this.state === 'title' ? 'Title screen'
       : this.state === 'intro' ? 'Malakar enters the arena'
       : this.state === 'fight'
-        ? `Battle in progress, phase ${this.boss.phase}${telegraph ? `. ${telegraph}` : ''}`
+        ? `Battle in progress, phase ${this.boss.phase}${telegraph ? `. ${telegraph}` : ''}${this.resolve >= RESOLVE_MAX ? '. Resolve ready' : ''}`
       : this.state === 'dead' ? `Defeated. Malakar has ${Math.max(0, Math.ceil((this.boss.hp / this.boss.maxHp) * 100))}% health remaining`
       : `Victory. Grade ${this.grade}. Score saved`;
     return {
@@ -2711,6 +2827,13 @@ export class Game {
         telegraph,
         comboHits: this.playerChainHits,
         queuedLights: this.player.queuedLightAttacks,
+        resolvePercent: Math.round(clamp(this.resolve / RESOLVE_MAX, 0, 1) * 100),
+        resolveReady: this.resolve >= RESOLVE_MAX,
+        technique: this.techniqueT > 0
+          ? this.techniqueText
+          : this.player.sunderWindow > 0
+            ? (this.player.sunderQueued ? 'Sunder queued' : 'Sunder available')
+            : this.resolve >= RESOLVE_MAX ? 'Gracebreak ready' : '',
       },
     };
   }
@@ -3159,6 +3282,45 @@ export class Game {
   }
 
   // ------------------------------------------------------------ combat glue
+  private announceTechnique(text: string, duration = 1.2) {
+    this.techniqueText = text;
+    this.techniqueT = duration;
+  }
+
+  private addResolveAmount(amount: number, reason: ResolveEvent | 'wound') {
+    if (this.state !== 'fight' || this.boss.hp <= 0 || amount <= 0 || this.resolve >= RESOLVE_MAX) return;
+    const before = this.resolve;
+    this.resolve = clamp(this.resolve + amount, 0, RESOLVE_MAX);
+    if (before < RESOLVE_MAX && this.resolve >= RESOLVE_MAX) {
+      this.audio.resolveReady();
+      this.announceTechnique('RESOLVE FULL · HOLD HVY', 1.8);
+      this.vibrate([10, 24, 14]);
+      this.uiChanged?.();
+    }
+    void reason; // retained as an explicit debug/telemetry seam without persistence
+  }
+
+  addResolve(event: ResolveEvent) {
+    this.addResolveAmount(resolveGainFor(event), event);
+  }
+
+  onPlayerWound() {
+    const remaining = Math.max(0, this.mods.resolveWoundCap - this.resolveFromWounds);
+    const gain = Math.min(this.mods.resolveWoundGain, remaining);
+    if (gain <= 0) return;
+    this.resolveFromWounds += gain;
+    this.addResolveAmount(gain, 'wound');
+  }
+
+  consumeGracebreak() {
+    if (this.resolve < RESOLVE_MAX) return false;
+    this.resolve = 0;
+    this.resolveUses++;
+    this.announceTechnique('GRACEBREAK', 1.35);
+    this.uiChanged?.();
+    return true;
+  }
+
   breakPlayerChain() {
     this.playerChainHits = 0;
     this.playerChainT = 0;
@@ -3205,24 +3367,33 @@ export class Game {
     return hints[source];
   }
 
-  playerStrike(heavy: boolean, rollSlash = false) {
+  playerStrike(heavy: boolean, rollSlash = false, sunder = false) {
     const p = this.player, b = this.boss;
     const step = p.comboStep;
-    const finisher = !heavy && !rollSlash && step === 2;
-    const impact: PlayerImpact = heavy ? 'heavy' : finisher ? 'finisher' : 'light';
+    const gracebreak = heavy && p.gracebreakStrike;
+    const finisher = !heavy && !rollSlash && !sunder && step === 2;
+    const impact: PlayerImpact = gracebreak
+      ? 'gracebreak'
+      : sunder ? 'sunder' : heavy ? 'heavy' : finisher ? 'finisher' : 'light';
     const charge = heavy ? p.charge01 : 0;
-    const range = (heavy ? 95 : rollSlash ? 92 : finisher ? 88 : 78) + charge * 16;
-    const arc = heavy ? 1.25 : rollSlash ? 1.2 : finisher ? 1.3 : 1.05;
-    const dmg = heavy ? Math.round(30 * (1 + charge * 0.75)) : rollSlash ? 18 : finisher ? 24 : step === 1 ? 14 : 12;
+    const range = (heavy ? 95 : sunder ? 92 : rollSlash ? 92 : finisher ? 88 : 78) + charge * 16;
+    const arc = heavy ? 1.25 : sunder ? 1.22 : rollSlash ? 1.2 : finisher ? 1.3 : 1.05;
+    const dmg = gracebreak
+      ? GRACEBREAK_DAMAGE
+      : sunder ? SUNDER_DAMAGE
+        : heavy ? Math.round(30 * (1 + charge * 0.75))
+          : rollSlash ? 18 : finisher ? 24 : step === 1 ? 14 : 12;
     const d = dist(p.x, p.y, b.x, b.y);
     let connected = false;
-    if (heavy) this.breakPlayerChain();
+    let execute = false;
+    let flank = false;
+    if (heavy || sunder) this.breakPlayerChain();
     if (d < range + b.r) {
       const a = angTo(p.x, p.y, b.x, b.y);
       if (Math.abs(angDiff(p.facing, a)) < arc) {
         const punishedStagger = b.state === 'staggered';
-        const execute = heavy && punishedStagger && !b.executeConsumed;
-        const flank = !punishedStagger && b.state !== 'windup'
+        execute = heavy && punishedStagger && !b.executeConsumed;
+        flank = !punishedStagger && b.state !== 'windup'
           && isFlankHit(b.facing, b.x, b.y, p.x, p.y);
         if (execute) {
           // Stagger execution: the payoff the whole defensive loop is built
@@ -3240,7 +3411,7 @@ export class Game {
           this.addDamageNum(b.x, b.y - b.r - 48, 'EXECUTE', PAL.spirit, 24);
           this.audio.execute(this.audioSpatial(b.x, b.y));
         } else {
-          const base = (heavy || finisher || rollSlash) ? dmg : dmg + Math.floor(rand(-2, 3));
+          const base = (heavy || sunder || finisher || rollSlash) ? dmg : dmg + Math.floor(rand(-2, 3));
           const dealt = b.takeDamage(
             base * (flank ? 1.25 : 1),
             this,
@@ -3249,28 +3420,71 @@ export class Game {
             impact,
             heavy ? p.charge01 : 0,
           );
-          const kind: DamageKind = flank ? 'flank' : heavy ? 'heavy' : 'light';
+          const kind: DamageKind = flank ? 'flank' : heavy || sunder ? 'heavy' : 'light';
           this.damageMix[kind] += dealt;
           if (flank) {
             if (b.state !== 'staggered') b.applyPoise(base * 0.25, this);
             this.addDamageNum(b.x, b.y - b.r - 46, 'FLANK', PAL.spirit, 18);
           }
+          if (sunder && b.state !== 'staggered') {
+            b.applyPoise(SUNDER_TOTAL_POISE - SUNDER_DAMAGE, this);
+          }
           if (heavy && charge > 0) {
             // Charged heavies are the poise-breaker that sets up an execution.
-            if (b.state !== 'staggered') b.applyPoise(charge * 40, this);
+            const bonusPoise = gracebreak
+              ? GRACEBREAK_TOTAL_POISE - GRACEBREAK_DAMAGE
+              : charge * 40;
+            if (b.state !== 'staggered') b.applyPoise(bonusPoise, this);
             this.shake(6 + charge * 8, 0.25);
             this.zoomPunch = Math.max(this.zoomPunch, charge * 0.06);
             this.sparks(b.x, b.y, Math.round(8 + charge * 14));
           }
+          if (sunder) {
+            this.hitstop = Math.max(this.hitstop, 0.1);
+            this.zoomPunch = Math.max(this.zoomPunch, 0.052);
+            this.addDamageNum(b.x, b.y - b.r - 46, 'SUNDER', PAL.goldBright, 19);
+            this.announceTechnique('SUNDER');
+          }
+          if (gracebreak) {
+            p.stam = clamp(p.stam + 20, 0, p.maxStam);
+            this.hitstop = Math.max(this.hitstop, 0.13);
+            this.zoomPunch = Math.max(this.zoomPunch, 0.075);
+            this.goldFlash = Math.max(this.goldFlash, 0.42);
+            this.shake(12, 0.36);
+            this.sparks(b.x, b.y, 24);
+            this.addDamageNum(b.x, b.y - b.r - 52, 'GRACEBREAK', PAL.spirit, 23);
+            this.announceTechnique('GRACEBREAK', 1.35);
+          }
         }
         connected = true;
-        if (!heavy && !rollSlash) this.registerPlayerChain(step);
+        if (!heavy && !rollSlash && !sunder) {
+          this.registerPlayerChain(step);
+          if (step === 0) {
+            p.routeLightHits = 1;
+          } else if (step === 1 && p.routeLightHits === 1) {
+            p.routeLightHits = 2;
+            p.sunderWindow = 0.6;
+          } else {
+            p.clearSunderRoute();
+          }
+        }
+        if (b.hp > 0 && this.state === 'fight') {
+          if (execute) {
+            this.addResolve('execute');
+          } else if (!gracebreak) {
+            if (sunder) this.addResolve('sunder');
+            else if (rollSlash) this.addResolve('roll-slash');
+            else if (heavy && charge >= 0.7) this.addResolve('charged-heavy');
+            else if (!heavy) this.addResolve(finisher ? 'light-finisher' : step === 1 ? 'light-2' : 'light-1');
+            if (flank) this.addResolve('flank');
+          }
+        }
         if (punishedStagger && this.tutorialStage === 'stagger') {
           this.tutorialStage = 'done';
           this.tutorialT = 0;
           this.persist();
         }
-        if ((heavy || finisher) && b.state !== 'staggered') {
+        if ((heavy || sunder || finisher) && b.state !== 'staggered') {
           const force = finisher ? 90 : 60;
           b.impulseVx += Math.cos(a) * force;
           b.impulseVy += Math.sin(a) * force;
@@ -3278,7 +3492,10 @@ export class Game {
         if (finisher || rollSlash) { this.sparks(b.x, b.y, rollSlash ? 7 : 10); this.shake(rollSlash ? 4 : 5, 0.2); }
       }
     }
-    if (!heavy && !rollSlash && !connected) this.breakPlayerChain();
+    if (!heavy && !rollSlash && !sunder && !connected) {
+      this.breakPlayerChain();
+      p.clearSunderRoute();
+    }
   }
   onPerfectDodge() {
     const p = this.player;
@@ -3296,6 +3513,7 @@ export class Game {
     this.addDamageNum(p.x, p.y - 30, 'PERFECT', PAL.spirit, 21);
     this.sparks(p.x, p.y, 14);
     this.boss.applyPoise(16, this);
+    this.addResolve('perfect-dodge');
   }
   bossArcStrike(x: number, y: number, facing: number, arc: number, range: number, dmg: number, source: DamageSource = 'swipe') {
     const p = this.player;
@@ -3420,6 +3638,8 @@ export class Game {
     this.phaseDecay = 0; this.emberDensityMul = 1;
     this.weatherFromPhase = 1; this.weatherPhase = 1; this.weatherBlend = 1;
     this.perfectDodges = 0; this.flasksUsed = 0;
+    this.resolve = 0; this.resolveUses = 0; this.resolveFromWounds = 0;
+    this.techniqueText = ''; this.techniqueT = 0;
     this.damageMix = { light: 0, heavy: 0, riposte: 0, flank: 0 };
     this.phaseEnteredAt = [0, 0, 0];
     this.lastHits = [];
@@ -3704,6 +3924,7 @@ export class Game {
     }
     this.playerChainT = Math.max(0, this.playerChainT - dt);
     if (this.playerChainT <= 0 && this.playerChainHits > 0) this.breakPlayerChain();
+    this.techniqueT = Math.max(0, this.techniqueT - dt);
     this.tutorialT = Math.max(0, this.tutorialT - dt);
 
     // global state transitions
@@ -4321,8 +4542,31 @@ Game.prototype.drawHUD = function drawHUD(this: Game, ctx: CanvasRenderingContex
   ctx.fillText('STAM', 4, 4);
   ctx.restore();
 
+  // Resolve is a thin, segmented rail rather than another inventory icon.
+  // It remains inside playerHudRect(), between stamina and the flask row.
+  ctx.translate(0, 11);
+  const resolveW = barW * 0.58;
+  const segmentGap = 2;
+  const segmentW = (resolveW - segmentGap * 3) / 4;
+  const resolveFilled = (this.resolve / RESOLVE_MAX) * 4;
+  for (let i = 0; i < 4; i++) {
+    const x = i * (segmentW + segmentGap);
+    ctx.fillStyle = 'rgba(188,215,255,0.11)';
+    ctx.fillRect(x, 0, segmentW, 4);
+    const fill = clamp(resolveFilled - i, 0, 1);
+    if (fill > 0) {
+      ctx.fillStyle = this.resolve >= RESOLVE_MAX ? PAL.spirit : 'rgba(201,169,89,0.92)';
+      ctx.fillRect(x, 0, segmentW * fill, 4);
+    }
+  }
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.font = body(7, 800);
+  ctx.fillStyle = this.resolve >= RESOLVE_MAX ? PAL.spirit : 'rgba(226,208,164,0.82)';
+  ctx.fillText(this.resolve >= RESOLVE_MAX ? 'BREAK' : 'RESOLVE', resolveW + 7, 2);
+
   // flasks
-  ctx.translate(0, 20);
+  ctx.translate(0, 9);
   for (let i = 0; i < p.maxFlasks; i++) {
     ctx.save();
     ctx.translate(i * 26 + 8, 6);
@@ -4357,24 +4601,24 @@ Game.prototype.drawHUD = function drawHUD(this: Game, ctx: CanvasRenderingContex
   }
 
   const queuedLights = this.player.queuedLightAttacks;
-  if ((this.playerChainHits > 0 && this.playerChainT > 0) || queuedLights > 0) {
+  const showSunder = this.player.sunderWindow > 0 || this.player.sunderQueued;
+  if (this.techniqueT > 0 || (this.playerChainHits > 0 && this.playerChainT > 0) || queuedLights > 0 || showSunder) {
     const y = this.w <= 560 ? 190 : this.input.isTouch ? 158 : 120;
     const filled = '\u25c6'.repeat(this.playerChainHits);
     const empty = '\u25c7'.repeat(Math.max(0, 3 - this.playerChainHits));
     const queued = '\u25c6'.repeat(queuedLights);
     ctx.globalAlpha = this.playerChainHits > 0 ? clamp(this.playerChainT / 0.28, 0, 1) : 1;
     ctx.textAlign = 'center';
-    ctx.font = serif(this.playerChainFinished ? 17 : 14, 750);
-    ctx.fillStyle = this.playerChainFinished ? PAL.spirit : PAL.parchment;
-    ctx.shadowColor = this.playerChainFinished ? 'rgba(188,215,255,0.7)' : 'rgba(0,0,0,0.8)';
-    ctx.shadowBlur = this.playerChainFinished ? 14 : 6;
-    ctx.fillText(
-      this.playerChainHits > 0
-        ? `${this.playerChainFinished ? 'LIGHT FINISHER' : `CHAIN ${this.playerChainHits}/3`}  ${filled}${empty}${queued ? `  ·  NEXT ${queued}` : ''}`
-        : `INPUT QUEUED  ${queued}`,
-      this.w / 2,
-      y,
-    );
+    const techniqueActive = this.techniqueT > 0;
+    const highlighted = techniqueActive || showSunder || this.playerChainFinished;
+    ctx.font = serif(techniqueActive || this.playerChainFinished ? 17 : 14, 750);
+    ctx.fillStyle = highlighted ? PAL.spirit : PAL.parchment;
+    ctx.shadowColor = highlighted ? 'rgba(188,215,255,0.7)' : 'rgba(0,0,0,0.8)';
+    ctx.shadowBlur = highlighted ? 14 : 6;
+    const chainText = this.playerChainHits > 0
+      ? `${this.playerChainFinished ? 'LIGHT FINISHER' : `CHAIN ${this.playerChainHits}/3`}  ${filled}${empty}${queued ? `  ·  NEXT ${queued}` : ''}${showSunder ? '  ·  HVY SUNDER' : ''}`
+      : `INPUT QUEUED  ${queued}`;
+    ctx.fillText(techniqueActive ? this.techniqueText : chainText, this.w / 2, y);
     ctx.shadowBlur = 0;
     ctx.globalAlpha = 1;
   }
@@ -4909,23 +5153,30 @@ Game.prototype.drawTouchUI = function drawTouchUI(this: Game, ctx: CanvasRenderi
   for (const b of laidOut) {
     const bx = b.x, by = b.y;
     const unavailable = b.id === 'flask' && this.player.flasks <= 0;
+    const breakReady = b.id === 'heavy' && this.resolve >= RESOLVE_MAX;
     const active = this.input.btnPressed[b.id]
       || this.input.hasBuffered(b.id)
       || this.player.state === b.id
-      || (b.id === 'light' && this.player.state === 'rollSlash');
+      || (b.id === 'light' && this.player.state === 'rollSlash')
+      || (b.id === 'heavy' && this.player.state === 'sunder');
     ctx.globalAlpha = unavailable ? 0.38 : 1;
     ctx.fillStyle = active
       ? (b.id === 'flask' ? PAL.goldBright : PAL.parchment)
       : 'rgba(12,10,7,0.78)';
     ctx.beginPath(); ctx.arc(bx, by, b.r, 0, TAU); ctx.fill();
     ctx.globalAlpha = unavailable ? 0.32 : 0.92;
-    ctx.strokeStyle = PAL.parchment;
-    ctx.lineWidth = 1.8;
+    ctx.strokeStyle = breakReady ? PAL.spirit : PAL.parchment;
+    ctx.lineWidth = breakReady ? 2.8 : 1.8;
     ctx.beginPath(); ctx.arc(bx, by, b.r, 0, TAU); ctx.stroke();
+    if (breakReady) {
+      ctx.globalAlpha = 0.4 + Math.sin(this.time * 2.4) * 0.08;
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(bx, by, b.r + 5, 0, TAU); ctx.stroke();
+    }
     ctx.globalAlpha = unavailable ? 0.42 : 1;
     ctx.fillStyle = active ? '#0d0b08' : PAL.parchment;
     ctx.font = serif(b.r > 40 ? 15 : 12, 700);
-    ctx.fillText(b.label, bx, by + 4);
+    ctx.fillText(breakReady ? 'BREAK' : b.label, bx, by + 4);
     if (b.id === 'light' && this.player.queuedLightAttacks > 0) {
       ctx.fillStyle = active ? '#0d0b08' : PAL.spirit;
       ctx.font = serif(8, 800);
