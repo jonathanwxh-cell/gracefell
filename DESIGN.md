@@ -2746,3 +2746,9 @@ desktop/mobile/true-touch suite, v2.21/v2.24/v2.27 focused lanes, audio
 lifecycle, visual/failure checks, and render census all passed with zero
 errors; the visual lane was ready with zero warnings. Exact publication links
 and documentation closure are retained in `docs/releases/v2.27.2.md`.
+
+Production-receipt PR #99 passed its reviewed gate and merged as
+`b1cca605d325122830ac01737f32a097165b1ed9`; independent main run
+30316920447 passed. That documentation-only checkpoint reproduced the accepted
+`assets/index-lXxo8uG6.js` bundle and closes the gap between runtime evidence
+and the next cold-start agent handoff.
