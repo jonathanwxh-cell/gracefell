@@ -648,7 +648,7 @@ export class GameAudio {
     };
   }
 
-  private prepareSoundtrackDeck(index: number, phase: SoundtrackPhase) {
+  private prepareSoundtrackDeck(index: number, phase: SoundtrackPhase, gainResetAt = 0) {
     const existing = this.soundtrackDecks[index];
     if (existing?.phase === phase) {
       if (this.ctx && !existing.source) this.connectSoundtrackDeck(existing);
@@ -661,7 +661,19 @@ export class GameAudio {
       existing.phase = phase;
       existing.element.src = sourceUrl;
       existing.element.preload = phase === 1 ? 'auto' : 'metadata';
-      if (existing.gain) existing.gain.gain.value = 0.0001;
+      if (existing.gain && this.ctx) {
+        // Reusing the outgoing deck can happen in the same frame that its
+        // 720 ms curve finishes. AudioParam.value writes at currentTime and may
+        // overlap that curve by a fraction of a render quantum, so schedule the
+        // reset beyond the reviewed transition endpoint instead.
+        const resetAt = Math.max(
+          this.ctx.currentTime + 0.005,
+          (this.soundtrackTransition?.endAt ?? 0) + 0.005,
+          gainResetAt,
+        );
+        existing.gain.gain.cancelScheduledValues(resetAt);
+        existing.gain.gain.setValueAtTime(0.0001, resetAt);
+      }
       existing.element.load();
       if (this.ctx && !existing.source) this.connectSoundtrackDeck(existing);
       return existing;
@@ -1181,6 +1193,13 @@ export class GameAudio {
       else voice.gain.gain.setTargetAtTime(0.0001, now, 0.018);
       voice.source.stop(now + (immediate ? 0 : 0.09));
       if (immediate) voice.cleanup();
+      else {
+        // `onended` follows the AudioContext clock. Backgrounded and headless
+        // browsers may suspend that clock after stop() is scheduled, leaving a
+        // logically finished charge tail reserved indefinitely. Keep the
+        // authored 90 ms fade, then guarantee idempotent wall-clock cleanup.
+        window.setTimeout(voice.cleanup, 160);
+      }
     } catch {
       voice.cleanup();
     }
@@ -1992,7 +2011,7 @@ export class GameAudio {
     this.soundtrackTransition = null;
 
     const next = transition.phase < 3 ? (transition.phase + 1) as SoundtrackPhase : null;
-    if (next) this.prepareSoundtrackDeck(transition.from, next);
+    if (next) this.prepareSoundtrackDeck(transition.from, next, settleAt);
     const queued = this.queuedSoundtrackPhase;
     this.queuedSoundtrackPhase = null;
     if (queued && queued !== this.soundtrackPhase) this.queueSoundtrackPhase(queued);
