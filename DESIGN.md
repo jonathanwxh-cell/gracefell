@@ -2752,3 +2752,18 @@ Production-receipt PR #99 passed its reviewed gate and merged as
 30316920447 passed. That documentation-only checkpoint reproduced the accepted
 `assets/index-lXxo8uG6.js` bundle and closes the gap between runtime evidence
 and the next cold-start agent handoff.
+
+### v2.27.2 final-gate addendum — focus belongs to the committed screen
+
+PR #100 passed the complete PR-head gate, but its independent main replay
+captured a score-dialog accessibility race. The dialog and data were correct;
+React had removed the modal before the zero-delay callback restored focus from
+its CLOSE button to RECORDS. This is a real keyboard-ownership defect even
+though another runner may advance the timer before observing it.
+
+The close path now marks score-focus restoration before clearing the dialog.
+A layout effect keyed to the committed `dialog` state restores the persistent
+RECORDS opener after the modal DOM is gone and before paint. The effect is
+owner-specific, so MIX and battle-menu focus behavior remains unchanged.
+Complete local QA then passed with zero errors, including populated score
+history, Escape dismissal, opener focus, and canvas tab-order restoration.

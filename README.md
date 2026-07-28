@@ -22,7 +22,9 @@ checkpoint is [v2.27.2](https://github.com/jonathanwxh-cell/gracefell/releases/t
 The same acceptance pass also hardened graceful charge-loop cleanup when a
 backgrounded browser suspends its AudioContext clock; the 90 ms fade remains
 unchanged and a 160 ms idempotent wall-clock backstop prevents a reserved voice
-from leaking.
+from leaking. Final clean-runner replay also made score-chronicle dismissal
+deterministic: Escape now removes the dialog and restores keyboard focus to
+RECORDS in the same committed layout, without a timer race.
 
 The **v2.27** earned-offense foundation remains intact. Two connected light
 hits can branch into **Sunder** with HVY; successful play fills the run-local
@@ -693,6 +695,9 @@ production evidence: [`docs/releases/v2.27.1.md`](docs/releases/v2.27.1.md).
 - **Graceful audio cleanup cannot stall.** The existing 90 ms charge-loop fade
   now has a 160 ms wall-clock cleanup backstop for suspended AudioContexts. It
   adds no voice, node, cue, or mix change.
+- **The score chronicle returns focus deterministically.** Closing it with
+  Escape or CLOSE restores focus to RECORDS during the committed React layout,
+  so keyboard control cannot trail dialog removal by a timer tick.
 
 Complete implementation, local acceptance, GitHub publication, and exact-SHA
 production receipts: [`docs/releases/v2.27.2.md`](docs/releases/v2.27.2.md).

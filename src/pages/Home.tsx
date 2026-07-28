@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from 'react';
 import { Game, type GameUiSnapshot, type ScoreHistoryEntry } from '@/game/engine';
 
 type GameDialog = 'mix' | 'battle-menu' | 'scores' | null;
@@ -96,6 +102,7 @@ export default function Home() {
   const battleResumeRef = useRef<HTMLButtonElement>(null);
   const scoresCloseRef = useRef<HTMLButtonElement>(null);
   const scoresToggleRef = useRef<HTMLButtonElement>(null);
+  const restoreScoresFocusRef = useRef(false);
   const [ui, setUi] = useState<GameUiSnapshot>(INITIAL_UI);
   const [dialog, setDialog] = useState<GameDialog>(null);
   const [shareStatus, setShareStatus] = useState('');
@@ -132,6 +139,12 @@ export default function Home() {
     if (dialog === 'mix') musicControlRef.current?.focus({ preventScroll: true });
     if (dialog === 'battle-menu') battleResumeRef.current?.focus({ preventScroll: true });
     if (dialog === 'scores') scoresCloseRef.current?.focus({ preventScroll: true });
+  }, [dialog]);
+
+  useLayoutEffect(() => {
+    if (dialog !== null || !restoreScoresFocusRef.current) return;
+    restoreScoresFocusRef.current = false;
+    scoresToggleRef.current?.focus({ preventScroll: true });
   }, [dialog]);
 
   const act = (action: (game: Game) => void) => {
@@ -265,9 +278,9 @@ export default function Home() {
   };
 
   const closeScores = () => {
+    restoreScoresFocusRef.current = true;
     setDialog(null);
     act((game) => game.setUiFocused(false));
-    window.setTimeout(() => scoresToggleRef.current?.focus({ preventScroll: true }), 0);
   };
 
   const closeActiveDialog = () => {
