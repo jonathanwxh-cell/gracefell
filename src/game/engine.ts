@@ -447,7 +447,7 @@ export class Player {
   impulseVx = 0; impulseVy = 0;
   comboStep = 0; comboWindow = 0; perfectCd = 0;
   charge01 = 0; heavyChargeT = 0; heavyCharging = false; // hold-to-charge heavy
-  gracebreakEligible = false; gracebreakStrike = false;
+  gracebreakEligible = false; gracebreakStrike = false; gracebreakTouchLatch = false;
   queuedLightAttacks = 0;
   rollSlashQueued = false;
   routeLightHits = 0;
@@ -606,6 +606,13 @@ export class Player {
         this.heavyChargeT = 0; this.charge01 = 0; this.heavyCharging = false;
         this.gracebreakEligible = game.resolve >= RESOLVE_MAX;
         this.gracebreakStrike = false;
+        // The contextual touch button says BREAK, so one deliberate tap must
+        // own that visible command. Latch only the earned touch route and let
+        // it complete the existing 0.5 s charge; keyboard/mouse HVY retains
+        // manual hold, while stagger Execute and queued Sunder keep priority.
+        this.gracebreakTouchLatch = this.gracebreakEligible
+          && input.isTouch
+          && !bossStaggered;
         this.stam -= 26; this.stamDelay = 0.7;
         const b = game.boss;
         if (b && b.hp > 0) this.facing = angTo(this.x, this.y, b.x, b.y);
@@ -693,7 +700,11 @@ export class Player {
       if (this.swordTip.length > 10) this.swordTip.shift();
       // hit check — a heavy can be charged by holding through the wind-up
       if (!this.attackHit && elapsed >= activeStart) {
-        if (heavy && this.heavyChargeT < Player.HEAVY_MAX_CHARGE && game.heavyInputHeld()) {
+        if (
+          heavy
+          && this.heavyChargeT < Player.HEAVY_MAX_CHARGE
+          && (game.heavyInputHeld() || this.gracebreakTouchLatch)
+        ) {
           if (!this.heavyCharging) game.audio.chargeLoopStart();
           this.heavyCharging = true;
           this.heavyChargeT = Math.min(Player.HEAVY_MAX_CHARGE, this.heavyChargeT + dt);
@@ -704,6 +715,7 @@ export class Player {
           this.attackHit = true;
           if (this.heavyCharging) game.audio.chargeLoopStop();
           this.heavyCharging = false;
+          this.gracebreakTouchLatch = false;
           if (heavy) this.charge01 = clamp(this.heavyChargeT / Player.HEAVY_MAX_CHARGE, 0, 1);
           this.gracebreakStrike = heavy
             && this.gracebreakEligible
@@ -724,7 +736,11 @@ export class Player {
         this.state = 'move'; this.swordTip = [];
         if (!heavy && !sunder && !rollSlash) { this.comboWindow = 0.6; this.comboStep = (this.comboStep + 1) % 3; }
         else { this.comboStep = 0; this.comboWindow = 0; }
-        if (heavy) { this.gracebreakEligible = false; this.gracebreakStrike = false; }
+        if (heavy) {
+          this.gracebreakEligible = false;
+          this.gracebreakStrike = false;
+          this.gracebreakTouchLatch = false;
+        }
       }
     } else if (this.state === 'flask') {
       this.vx = lerp(this.vx, ax.x * spd * 0.35, 1 - Math.exp(-10 * dt));
@@ -817,7 +833,7 @@ export class Player {
     this.comboStep = 0; this.comboWindow = 0; this.queuedLightAttacks = 0; this.rollSlashQueued = false;
     this.clearSunderRoute();
     this.recoveryAction = null;
-    this.gracebreakEligible = false; this.gracebreakStrike = false;
+    this.gracebreakEligible = false; this.gracebreakStrike = false; this.gracebreakTouchLatch = false;
     game.audio.chargeLoopStop(true);
     game.lastDamageSource = source;
     this.rollIframes = 0;
@@ -3356,7 +3372,10 @@ export class Game {
     this.resolve = clamp(this.resolve + amount, 0, RESOLVE_MAX);
     if (before < RESOLVE_MAX && this.resolve >= RESOLVE_MAX) {
       this.audio.resolveReady();
-      this.announceTechnique('RESOLVE FULL · HOLD HVY', 1.8);
+      this.announceTechnique(
+        this.input.isTouch ? 'RESOLVE FULL · TAP BREAK' : 'RESOLVE FULL · HOLD HVY',
+        1.8,
+      );
       this.vibrate([10, 24, 14]);
       this.uiChanged?.();
     }
@@ -4834,7 +4853,7 @@ Game.prototype.drawHUD = function drawHUD(this: Game, ctx: CanvasRenderingContex
     ctx.font = body(this.input.isTouch ? 13 : narrowKeyboard ? 12 : 15, 500);
     const breakReady = this.resolve >= RESOLVE_MAX;
     const hint = this.input.isTouch
-      ? breakReady ? 'FULL RESOLVE · HOLD BREAK · GRACEBREAK' : 'LAND ATK×2 · TAP HVY · SUNDER'
+      ? breakReady ? 'FULL RESOLVE · TAP BREAK · GRACEBREAK' : 'LAND ATK×2 · TAP HVY · SUNDER'
       : narrowKeyboard ? 'WASD MOVE · SPACE ROLL · J ATK'
         : breakReady
           ? 'WASD move · SPACE roll · J / LMB attack · HOLD K: BREAK · F flask · M mute'
@@ -5359,6 +5378,12 @@ Game.prototype.drawPause = function drawPause(this: Game, ctx: CanvasRenderingCo
   ctx.font = body(this.input.isTouch ? 13 : 14, 700);
   ctx.fillText('ATK ×3 · LIGHT FINISHER', this.w / 2, panelY + 165);
   ctx.fillText('LAND ATK ×2 → HVY · SUNDER', this.w / 2, panelY + 194);
-  ctx.fillText('FULL RESOLVE · HOLD HVY · GRACEBREAK', this.w / 2, panelY + 223);
+  ctx.fillText(
+    this.input.isTouch
+      ? 'FULL RESOLVE · TAP BREAK · GRACEBREAK'
+      : 'FULL RESOLVE · HOLD HVY · GRACEBREAK',
+    this.w / 2,
+    panelY + 223,
+  );
   ctx.restore();
 };

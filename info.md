@@ -1,9 +1,10 @@
 # GRACEFELL project facts
 
-- Current package: `gracefell@2.27.2`
-- Current release: `v2.27.2` combo truth and recovery-input reliability
-- Published checkpoint: [`v2.27.2`](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.2)
-- Release receipts: [`docs/releases/v2.27.2.md`](docs/releases/v2.27.2.md)
+- Current package: `gracefell@2.27.3`
+- Current release: `v2.27.3` touch BREAK activation
+- Published checkpoint: [`v2.27.3`](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.3) after reviewed publication
+- Release receipts: [`docs/releases/v2.27.3.md`](docs/releases/v2.27.3.md)
+- Previous release: [`v2.27.2`](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.2), final SHA `d45272eb5407fe6dc7f3103df21978f1fbb58efd`
 - Gameplay foundation merge: `88b71eef8ad4cafb3bac06a62f8aa3721ff33aed` (v2.27)
 - Combo runtime merge: `ad9b7d31c228a9ea3a1ccab566a858e5da4587ba`
 - Audio acceptance-hardening merge: `c89e43d53a0b480c5dbf37e585519d9ed6a2e280`
@@ -80,6 +81,7 @@ original Journey/Oaths, teaching, death-recovery, visible-combo, and save-v4 des
 ## Authoritative documentation
 
 - [`docs/releases/v2.27.2.md`](docs/releases/v2.27.2.md) — v2.27.2 combo truth, recovery input, acceptance, and production evidence
+- [`docs/releases/v2.27.3.md`](docs/releases/v2.27.3.md) — v2.27.3 touch BREAK activation, real-touch QA, and release evidence
 - [`README.md`](README.md) — player-facing overview, controls, balance table, and setup
 - [`DESIGN.md`](DESIGN.md) — design decisions and per-version reasoning
 - [`AGENTS.md`](AGENTS.md) — operational runbook and invariants future agents must preserve

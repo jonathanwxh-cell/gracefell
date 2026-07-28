@@ -8,8 +8,18 @@ rules are all decided by what works one-handed on a 390px screen.
 
 **Play it: [gracefell.alyoechosys.dev](https://gracefell.alyoechosys.dev)**
 
-Current release: **v2.27.2** — a combo-truth patch following focused gamer
-review of v2.27.1. A poise-breaking second light can no longer let Sunder steal
+Current release: **v2.27.3** — the glowing touch `BREAK` command now activates
+from one deliberate tap. At full Resolve, that tap latches the existing
+0.5-second charge and releases Gracebreak automatically; the charge animation,
+72 damage, 112 poise pressure, 26 stamina cost, whiff spending, and one-use
+Resolve consumption are unchanged. Stagger Execute and connected-hit Sunder
+still outrank the ordinary route. Keyboard and mouse keep manual hold-to-charge
+HVY, including partial heavies. Evidence is recorded in
+[`docs/releases/v2.27.3.md`](docs/releases/v2.27.3.md); the durable GitHub
+checkpoint is [v2.27.3](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.3).
+
+The **v2.27.2** combo-truth foundation remains intact. A poise-breaking second
+light can no longer let Sunder steal
 the earned Execute. One deliberate combat input now survives the 320 ms wound
 recovery, with a later ROLL retaining priority. The transient lane and touch
 HVY button name the next valid action (`SUNDER` or `EXECUTE`), explain
@@ -672,6 +682,27 @@ receipts, and production verification:
 
 Complete reproduction, design rationale, regression matrix, publication, and
 production evidence: [`docs/releases/v2.27.1.md`](docs/releases/v2.27.1.md).
+
+## Fixed by Codex — v2.27.3 touch BREAK activation
+
+- **The visible command now works on tap.** At full Resolve, tapping the
+  contextual touch `BREAK` button latches the existing charged-heavy sequence
+  until its authored 0.5-second maximum, then releases exactly one Gracebreak.
+- **The ritual remains readable.** Ready copy says
+  `FULL RESOLVE · TAP BREAK · GRACEBREAK`; the button stays visibly active
+  during the charge, and the existing release banner/damage number confirms
+  success.
+- **Desktop depth remains intact.** Keyboard and mouse still require a manual
+  hold. Releasing early remains a normal partial heavy and does not spend
+  Resolve.
+- **Combat authority remains intact.** Sunder and stagger Execute keep their
+  established priority. Damage, poise pressure, stamina, whiff spending,
+  Resolve gain, difficulty, saves, score, boss actions, audio mix, assets,
+  touch geometry, and render budgets do not change.
+
+Implementation, real-touch reproduction, screenshots, regression evidence,
+publication, and exact-SHA deployment receipts:
+[`docs/releases/v2.27.3.md`](docs/releases/v2.27.3.md).
 
 ## Fixed by Codex — v2.27.2 combo truth
 

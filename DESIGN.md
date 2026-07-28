@@ -2791,3 +2791,59 @@ from `3250172...` as `assets/index-BzkBsL72.js`, and restarted at 08:59:47 +08.
 Complete public QA then passed with zero errors, including score focus,
 isolated charge voices `0 → 1 → 1 → 0`, all focused gameplay lanes, zero
 visual warnings, and the unchanged render census.
+
+## v2.27.3 — Codex (GPT-5), "break means break" (2026-07-28)
+
+The live v2.27.2 HUD truthfully reported full Resolve, but the touch action did
+not honor its own label. The circle changed from HVY to BREAK and the nearby
+instruction said HOLD BREAK. A normal player tap still released an ordinary
+uncharged heavy: the live reproduction dealt 30 damage, left Resolve at 100,
+and recorded zero Gracebreak uses. The simulation was internally consistent;
+the interaction contract was not.
+
+### Decision
+
+The contextual touch action now latches one earned BREAK tap through the
+existing charged-heavy sequence. It does not fire immediately: the player
+still enters heavy wind-up, roots at the strike frame, fills the authored
+0.5-second charge, plays the existing sustained cue, then releases. This keeps
+anticipation and counterplay while removing an undisclosed hold gesture from a
+button that presents itself as a complete command.
+
+The latch is touch-only and is captured when heavy starts at full Resolve.
+Queued Sunder is resolved before ordinary heavy, and stagger Execute prevents
+the latch, so neither priority changes. Damage clears it; release and heavy
+exit clear it idempotently. Keyboard/right-mouse retain manual hold-to-charge,
+including a partial release that preserves Resolve.
+
+### Changed from v2.27.2
+
+- Touch full-Resolve copy changes from HOLD BREAK to TAP BREAK.
+- A tap completes the existing maximum charge instead of becoming a quick
+  ordinary heavy.
+- No damage, poise, stamina, timing, whiff, Resolve gain, difficulty, boss,
+  score, save, audio, asset, geometry, or render-budget value changes.
+
+### Acceptance
+
+The focused browser lane now uses a real `touchscreen.tap()` on the rendered
+BREAK circle. It captures ready, charging, and released phone frames and
+asserts a mid-charge latch before one 72-damage release consumes Resolve
+`100 → 0`. A separate keyboard-mode control proves a partial manual heavy
+still preserves the meter. Lint, 29 unit tests, the complete browser matrix,
+v2.21/v2.24/v2.27 focused lanes, visual/failure gate, and deterministic render
+census pass locally with zero errors.
+
+One later complete replay caught a second acceptance edge: graceful charge stop
+had cleared cue ownership but still reported one reserved voice at the 260 ms
+sample. The 160 ms node-cleanup backstop is deliberately best-effort because
+browser scheduling may delay both timers and AudioContext `onended`. A stopped
+cue should not occupy the scarce critical-voice budget while it waits for
+physical node teardown.
+
+The sustained voice now separates allocation release from node cleanup.
+`stopSustainedCues()` releases the reservation synchronously after scheduling
+the same 90 ms fade. The source, gain, and routed nodes remain connected until
+`onended` or the existing 160 ms backstop disconnects them. Both closures are
+idempotent, so immediate damage/reset/title/destroy paths remain safe and the
+audible mix does not change.
