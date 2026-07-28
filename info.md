@@ -7,10 +7,13 @@
 - Gameplay foundation merge: `88b71eef8ad4cafb3bac06a62f8aa3721ff33aed` (v2.27)
 - Combo runtime merge: `ad9b7d31c228a9ea3a1ccab566a858e5da4587ba`
 - Audio acceptance-hardening merge: `c89e43d53a0b480c5dbf37e585519d9ed6a2e280`
-- Final runtime-main CI: [run 30316228463](https://github.com/jonathanwxh-cell/gracefell/actions/runs/30316228463), passed
+- Accepted gameplay merge: `32501728ac5436463ad6ebb3ef539c81ac43f16d`
+- Final acceptance merge: `abae223b24f2d3600f25f1c72b15446a6ea9956b`
+- Final runtime-main CI: [run 30317910728](https://github.com/jonathanwxh-cell/gracefell/actions/runs/30317910728), passed
+- Final acceptance-main CI: [run 30318778678](https://github.com/jonathanwxh-cell/gracefell/actions/runs/30318778678), passed
 - Production-receipt merge: `b1cca605d325122830ac01737f32a097165b1ed9`
 - Receipt-main CI: [run 30316920447](https://github.com/jonathanwxh-cell/gracefell/actions/runs/30316920447), passed
-- Production bundle: `assets/index-lXxo8uG6.js`
+- Production bundle: `assets/index-BzkBsL72.js`
 - Visual release: Blender-authored cached arena + Canvas-first Malakar
 - Character foundation: Kite-Veil Penitent + Fallen Blade-Saint
 - Production: <https://gracefell.alyoechosys.dev>
