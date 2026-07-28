@@ -2767,3 +2767,17 @@ RECORDS opener after the modal DOM is gone and before paint. The effect is
 owner-specific, so MIX and battle-menu focus behavior remains unchanged.
 Complete local QA then passed with zero errors, including populated score
 history, Escape dismissal, opener focus, and canvas tab-order restoration.
+
+The first public replay of that build proved the focus contract and exposed a
+separate acceptance-harness ownership error. The sustained-charge test sampled
+`activeVoices`, a deliberately global pool, after a prior contract restored the
+real gameplay RAF. Its local charge owner was already false, but Malakar could
+start an unrelated critical cue during the 260 ms release sample and make the
+pool look one voice high.
+
+The lifecycle probe now cancels the gameplay RAF and sets the game paused
+without suspending Web Audio. It therefore owns every voice transition it
+counts while still exercising the recorded charge loop, duplicate start,
+authored release fade, suspended-clock cleanup backstop, and synchronous
+damage/reset/title/destroy paths. This is test isolation, not a mix or gameplay
+change.
