@@ -2725,3 +2725,24 @@ calculated a safe future settle point. Deck reuse now accepts that settle point
 and schedules its reset there. This extends the existing sub-quantum guard to
 the actual reuse write; crossfade duration, curves, deck count, and music
 timing remain unchanged.
+
+### Runtime release
+
+Combo runtime PR #97 passed GitHub Actions run 30315016127 and merged as
+`ad9b7d31c228a9ea3a1ccab566a858e5da4587ba`. Its independent main run
+30315203091 passed before production fast-forwarded cleanly and served
+`assets/index-DMl8om2A.js`.
+
+The repeated public failures were retained as evidence and the release stayed
+open. Audio-hardening PR #98 passed run 30316032525 and merged as
+`c89e43d53a0b480c5dbf37e585519d9ed6a2e280`; independent main run
+30316228463 also passed. Production then fast-forwarded cleanly to that exact
+merge, built `assets/index-lXxo8uG6.js`, and restarted the user-scoped
+`gracefell.service` at 2026-07-28 08:09:03 +08.
+
+The host checkout remained clean. Loopback and public health returned
+`{"ok":true,"app":"gracefell"}`. The complete public
+desktop/mobile/true-touch suite, v2.21/v2.24/v2.27 focused lanes, audio
+lifecycle, visual/failure checks, and render census all passed with zero
+errors; the visual lane was ready with zero warnings. Exact publication links
+and documentation closure are retained in `docs/releases/v2.27.2.md`.
