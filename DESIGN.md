@@ -2847,3 +2847,19 @@ the same 90 ms fade. The source, gain, and routed nodes remain connected until
 `onended` or the existing 160 ms backstop disconnects them. Both closures are
 idempotent, so immediate damage/reset/title/destroy paths remain safe and the
 audible mix does not change.
+
+### Production receipt
+
+PR #104 passed clean-runner head run 30323608408 and merged as
+`803a7c6d068269e16e1db8c6c13e410cb2348b11`; main run 30323776253 also
+passed. Production advanced from v2.27.2 SHA `d45272e...` to that exact clean
+runtime merge, built `assets/index-CtIaLuKS.js`, and restarted at
+10:44:26 +08.
+
+A real 390x844 touchscreen tap on the public BREAK circle entered the existing
+charge, latched through charge `0.35`, released one 72-damage Gracebreak,
+consumed Resolve `100 -> 0`, and returned the control to HVY. Damage
+interruption preserved Resolve and cleared the latch; desktop partial hold
+remained manual. The complete public QA gate then passed with zero errors,
+zero visual warnings, and the unchanged 920 mobile / 903 desktop draw-call
+census.
