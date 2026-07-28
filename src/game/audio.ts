@@ -171,6 +171,7 @@ interface SustainedVoice {
   source: AudioScheduledSourceNode;
   gain: GainNode;
   nodes: AudioNode[];
+  releaseReservation: () => void;
   cleanup: () => void;
   fallback: boolean;
 }
@@ -1148,17 +1149,30 @@ export class GameAudio {
 
     gain.gain.setTargetAtTime(fallback ? 0.055 : 0.34, ctx.currentTime, 0.12);
     const routed = this.routeVoice(gain, this.sfx, 0, fallback ? 0.12 : 0.28);
+    let reservationReleased = false;
+    const releaseReservation = () => {
+      if (reservationReleased) return;
+      reservationReleased = true;
+      this.activeVoices = Math.max(0, this.activeVoices - 1);
+    };
     let cleaned = false;
     const cleanup = () => {
       if (cleaned) return;
       cleaned = true;
-      this.activeVoices = Math.max(0, this.activeVoices - 1);
+      releaseReservation();
       for (const node of [source, ...extraNodes, gain, ...routed]) {
         try { node.disconnect(); } catch { /* already disconnected */ }
       }
     };
     source.onended = cleanup;
-    this.chargeLoopVoice = { source, gain, nodes: [...extraNodes, ...routed], cleanup, fallback };
+    this.chargeLoopVoice = {
+      source,
+      gain,
+      nodes: [...extraNodes, ...routed],
+      releaseReservation,
+      cleanup,
+      fallback,
+    };
     try {
       source.start();
     } catch {
@@ -1192,6 +1206,11 @@ export class GameAudio {
       if (immediate) voice.gain.gain.setValueAtTime(0.0001, now);
       else voice.gain.gain.setTargetAtTime(0.0001, now, 0.018);
       voice.source.stop(now + (immediate ? 0 : 0.09));
+      // Once stop owns the cue, it must not keep a scarce critical slot
+      // hostage to AudioContext/onended or wall-timer scheduling. Release only
+      // the allocation now; the nodes remain connected for the authored fade
+      // and are disconnected by onended or the existing cleanup backstop.
+      voice.releaseReservation();
       if (immediate) voice.cleanup();
       else {
         // `onended` follows the AudioContext clock. Backgrounded and headless

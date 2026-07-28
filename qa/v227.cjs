@@ -202,15 +202,19 @@ async function openGame(browser, options) {
     chargeHeavy();
     const whiff = { damage: whiffHp - b.hp, resolveAfter: g.resolve, uses: g.resolveUses };
 
-    // A partial heavy remains a normal heavy and preserves the earned meter.
+    // Desktop/manual partial heavy remains a normal heavy and preserves the
+    // earned meter. Touch has a separate real-tap assertion below because its
+    // contextual BREAK button now intentionally latches the full release.
     ({ p, b } = setArena());
     g.resolve = 100;
+    g.input.isTouch = false;
     g.input.held.heavy = true;
     g.input.bufferPress('heavy');
     while (p.state !== 'heavy' || p.heavyChargeT < 0.2) tick();
     g.input.held.heavy = false;
     while (!p.attackHit) tick();
     const partial = { charge: p.charge01, resolveAfter: g.resolve, uses: g.resolveUses };
+    g.input.isTouch = true;
 
     // Staggered Execute always wins over Gracebreak and preserves the meter.
     ({ p, b } = setArena());
@@ -219,6 +223,22 @@ async function openGame(browser, options) {
     chargeHeavy();
     const executePriority = {
       executeConsumed: b.executeConsumed,
+      resolveAfter: g.resolve,
+      uses: g.resolveUses,
+    };
+
+    // Damage cancels the touch-owned charge without spending its meter.
+    ({ p, b } = setArena());
+    g.resolve = 100;
+    g.input.bufferPress('heavy');
+    tick();
+    const latchedBeforeDamage = p.gracebreakTouchLatch;
+    p.iframes = 0;
+    p.takeDamage(10, b.x, b.y, g, 'swipe');
+    const interruptedTouchBreak = {
+      latchedBeforeDamage,
+      latchedAfterDamage: p.gracebreakTouchLatch,
+      state: p.state,
       resolveAfter: g.resolve,
       uses: g.resolveUses,
     };
@@ -334,14 +354,104 @@ async function openGame(browser, options) {
     Math.random = originalRandom;
     return {
       sunder, lightString, missRoute, rollPriority,
-      gracebreak, whiff, partial, executePriority,
+      gracebreak, whiff, partial, executePriority, interruptedTouchBreak,
       executeOverSunder, recoveryAttack, recoveryRoll, comboFeedback,
       journeyWounds, measuredWounds, ironbound, layout,
     };
   });
 
+  // The visible touch button says BREAK at full Resolve. Exercise that exact
+  // fingertip path: a tap must latch the existing 0.5 s charged release rather
+  // than silently falling through to an ordinary quick heavy.
+  const touchBreakSetup = await mobile.page.evaluate(() => {
+    const g = window.__game;
+    g.grace = 0;
+    g.resetFight();
+    g.state = 'fight';
+    g.stateT = 1;
+    g.input.reset();
+    g.input.isTouch = true;
+    g.resolve = 100;
+    g.hintT = 4;
+    g.tutorialStage = 'done';
+    g.tutorialT = 0;
+    g.player.x = 0;
+    g.player.y = 0;
+    g.player.facing = 0;
+    g.player.stam = 100;
+    g.player.iframes = 999;
+    g.boss.x = 145;
+    g.boss.y = 0;
+    g.boss.state = 'recover';
+    g.boss.t = 99;
+    g.boss.hp = 9999;
+    g.boss.maxHp = 9999;
+    g.boss.poise = 400;
+    g.boss.maxPoise = 400;
+    const labels = [];
+    const originalFillText = CanvasRenderingContext2D.prototype.fillText;
+    CanvasRenderingContext2D.prototype.fillText = function capture(text, x, y, ...rest) {
+      labels.push(String(text));
+      return originalFillText.call(this, text, x, y, ...rest);
+    };
+    try {
+      g.render();
+    } finally {
+      CanvasRenderingContext2D.prototype.fillText = originalFillText;
+    }
+    g.paused = false;
+    g.lastTs = performance.now();
+    g.startLoop();
+    g.uiChanged?.();
+    const button = g.touchLayout().btns.find((candidate) => candidate.id === 'heavy');
+    return {
+      button,
+      readyCopy: labels.includes('FULL RESOLVE · TAP BREAK · GRACEBREAK'),
+    };
+  });
+  await mobile.page.waitForTimeout(300);
+  await mobile.page.screenshot({
+    path: path.join(ARTIFACT_DIR, 'mobile-break-tap-ready.png'),
+    fullPage: true,
+  });
   await mobile.page.screenshot({
     path: path.join(ARTIFACT_DIR, 'mobile-resolve-ready.png'),
+    fullPage: true,
+  });
+  await mobile.page.touchscreen.tap(touchBreakSetup.button.x, touchBreakSetup.button.y);
+  await mobile.page.waitForTimeout(720);
+  const touchBreakCharging = await mobile.page.evaluate(() => {
+    const g = window.__game;
+    return {
+      state: g.player.state,
+      charge: g.player.heavyChargeT,
+      latched: g.player.gracebreakTouchLatch,
+      resolve: g.resolve,
+      uses: g.resolveUses,
+    };
+  });
+  await mobile.page.screenshot({
+    path: path.join(ARTIFACT_DIR, 'mobile-break-tap-charging.png'),
+    fullPage: true,
+  });
+  await mobile.page.waitForTimeout(600);
+  const touchBreak = await mobile.page.evaluate(() => {
+    const g = window.__game;
+    const outcome = {
+      state: g.player.state,
+      charge: g.player.charge01,
+      latched: g.player.gracebreakTouchLatch,
+      resolve: g.resolve,
+      uses: g.resolveUses,
+      damage: g.boss.maxHp - g.boss.hp,
+      technique: g.techniqueText,
+    };
+    cancelAnimationFrame(g.raf);
+    g.raf = 0;
+    return outcome;
+  });
+  await mobile.page.screenshot({
+    path: path.join(ARTIFACT_DIR, 'mobile-break-tap-released.png'),
     fullPage: true,
   });
 
@@ -478,7 +588,7 @@ async function openGame(browser, options) {
       labels,
       lightRecipe: labels.includes('ATK ×3 · LIGHT FINISHER'),
       sunderRecipe: labels.includes('LAND ATK ×2 → HVY · SUNDER'),
-      gracebreakRecipe: labels.includes('FULL RESOLVE · HOLD HVY · GRACEBREAK'),
+      gracebreakRecipe: labels.includes('FULL RESOLVE · TAP BREAK · GRACEBREAK'),
     };
   });
   await shortTouch.page.screenshot({
@@ -568,6 +678,25 @@ async function openGame(browser, options) {
   });
 
   const failures = [];
+  if (!touchBreakSetup.readyCopy
+    || touchBreakCharging.state !== 'heavy'
+    || !(touchBreakCharging.charge > 0 && touchBreakCharging.charge < 0.5)
+    || !touchBreakCharging.latched
+    || touchBreakCharging.resolve !== 100
+    || touchBreakCharging.uses !== 0
+    || touchBreak.state !== 'move'
+    || touchBreak.charge !== 1
+    || touchBreak.latched
+    || touchBreak.resolve !== 0
+    || touchBreak.uses !== 1
+    || touchBreak.damage !== 72
+    || touchBreak.technique !== 'GRACEBREAK') {
+    failures.push(`touch BREAK tap did not own one charged Gracebreak: ${JSON.stringify({
+      setup: touchBreakSetup,
+      charging: touchBreakCharging,
+      released: touchBreak,
+    })}`);
+  }
   if (!result.sunder.sawState
     || result.sunder.damage !== 50
     || result.sunder.poise !== 70
@@ -614,6 +743,13 @@ async function openGame(browser, options) {
     || result.executePriority.resolveAfter !== 100
     || result.executePriority.uses !== 0) {
     failures.push(`Execute did not outrank Gracebreak: ${JSON.stringify(result.executePriority)}`);
+  }
+  if (!result.interruptedTouchBreak.latchedBeforeDamage
+    || result.interruptedTouchBreak.latchedAfterDamage
+    || result.interruptedTouchBreak.state !== 'stagger'
+    || result.interruptedTouchBreak.resolveAfter !== 100
+    || result.interruptedTouchBreak.uses !== 0) {
+    failures.push(`damage did not cancel touch BREAK safely: ${JSON.stringify(result.interruptedTouchBreak)}`);
   }
   if (!result.executeOverSunder.staggeredAfterSecondContact
     || result.executeOverSunder.showedSunderReady
@@ -689,6 +825,9 @@ async function openGame(browser, options) {
     nErrors: failures.length,
     failures,
     result,
+    touchBreakSetup,
+    touchBreakCharging,
+    touchBreak,
     shortLayout,
     pauseLayout,
     oathHud,
