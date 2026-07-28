@@ -19,6 +19,10 @@ window, damage, difficulty, scores, save schema, audio, assets, and touch
 geometry remain unchanged. Evidence is recorded in
 [`docs/releases/v2.27.2.md`](docs/releases/v2.27.2.md); the durable GitHub
 checkpoint is [v2.27.2](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.2).
+The same acceptance pass also hardened graceful charge-loop cleanup when a
+backgrounded browser suspends its AudioContext clock; the 90 ms fade remains
+unchanged and a 160 ms idempotent wall-clock backstop prevents a reserved voice
+from leaking.
 
 The **v2.27** earned-offense foundation remains intact. Two connected light
 hits can branch into **Sunder** with HVY; successful play fills the run-local
@@ -686,6 +690,9 @@ production evidence: [`docs/releases/v2.27.1.md`](docs/releases/v2.27.1.md).
 - **Balance remains measured.** The connected-hit window stays 600 ms. No
   damage, stamina cost, boss action, difficulty modifier, score/save field,
   audio event, runtime asset, touch target, or persistent setting changed.
+- **Graceful audio cleanup cannot stall.** The existing 90 ms charge-loop fade
+  now has a 160 ms wall-clock cleanup backstop for suspended AudioContexts. It
+  adds no voice, node, cue, or mix change.
 
 Complete implementation, local acceptance, GitHub publication, and exact-SHA
 production receipts: [`docs/releases/v2.27.2.md`](docs/releases/v2.27.2.md).

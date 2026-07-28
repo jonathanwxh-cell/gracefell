@@ -2699,3 +2699,29 @@ shadow-blur writes.
 
 GitHub, exact-SHA deployment, service, public bundle, and public-QA receipts
 are recorded in `docs/releases/v2.27.2.md`.
+
+### Acceptance-discovered audio cleanup hardening
+
+The first local and public complete gates intermittently found one reserved
+charge-loop voice after graceful release. The cue owner was already cleared,
+but `activeVoices` depended on the scheduled source reaching `onended`. A
+backgrounded/headless browser can suspend `AudioContext.currentTime`, so the
+90 ms scheduled stop never reaches that callback in wall time.
+
+The graceful path retains its 90 ms fade and adds an idempotent 160 ms
+wall-clock call to the existing cleanup closure. A running context normally
+cleans first through `onended`; a suspended context now releases its nodes and
+voice reservation through the backstop. Immediate damage, reset, title, and
+destroy paths remain synchronous. No audio asset, node family, voice, gain,
+timing, mix, or gameplay event changed.
+
+The next complete replay proved the voice backstop, then exposed a second
+pre-existing edge in the same acceptance area: after a crossfade completed,
+the outgoing permanent deck was immediately reused for the next phase.
+`prepareSoundtrackDeck()` assigned `gain.value`, which implicitly wrote at the
+observed audio clock—0.18 ms before the old 720 ms curve's mathematical end in
+the failing sample—even though `finishSoundtrackTransition()` had already
+calculated a safe future settle point. Deck reuse now accepts that settle point
+and schedules its reset there. This extends the existing sub-quantum guard to
+the actual reuse write; crossfade duration, curves, deck count, and music
+timing remain unchanged.
