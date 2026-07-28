@@ -3407,6 +3407,12 @@ async function installAudioSampleRate(context) {
         const g = window.__game;
         const audio = g.audio;
         const settle = (ms = 260) => new Promise((resolve) => setTimeout(resolve, ms));
+        // This probe owns the voice counter it samples. Leave Web Audio
+        // running, but stop the gameplay RAF so a real boss cue cannot enter
+        // the global pool between the charge release and its assertion.
+        cancelAnimationFrame(g.raf);
+        g.raf = 0;
+        g.paused = true;
         g.arenaR = 520;
         g.resetFight();
         g.state = 'fight';
@@ -3421,6 +3427,7 @@ async function installAudioSampleRate(context) {
         audio.chargeLoopStop();
         await settle();
         const release = audio.debugState();
+        const simulationIsolated = g.paused && g.raf === 0;
 
         audio.chargeLoopStart();
         g.player.state = 'move';
@@ -3444,6 +3451,7 @@ async function installAudioSampleRate(context) {
         await settle(350);
         const destroyed = audio.debugState();
         return {
+          simulationIsolated,
           baseline,
           first: { active: first.sustainedCueActive, voices: first.activeVoices, fallback: first.sustainedCueFallback },
           duplicate: { active: duplicate.sustainedCueActive, voices: duplicate.activeVoices },
@@ -3463,7 +3471,8 @@ async function installAudioSampleRate(context) {
       });
       out.steps.recordedSfxLifecycle = sustainedLifecycle;
       if (
-        !sustainedLifecycle.first.active
+        !sustainedLifecycle.simulationIsolated
+        || !sustainedLifecycle.first.active
         || sustainedLifecycle.first.fallback
         || sustainedLifecycle.first.voices !== sustainedLifecycle.baseline + 1
         || sustainedLifecycle.duplicate.voices !== sustainedLifecycle.first.voices
