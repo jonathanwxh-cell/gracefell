@@ -2781,3 +2781,13 @@ counts while still exercising the recorded charge loop, duplicate start,
 authored release fade, suspended-clock cleanup backstop, and synchronous
 damage/reset/title/destroy paths. This is test isolation, not a mix or gameplay
 change.
+
+PR #101 passed clean-runner head run 30317739960 and merged as
+`32501728ac5436463ad6ebb3ef539c81ac43f16d`; main run 30317910728 passed.
+PR #102 passed head run 30318620506 and merged as
+`abae223b24f2d3600f25f1c72b15446a6ea9956b`; main run 30318778678 passed.
+Production advanced cleanly to the latter SHA, rebuilt the gameplay runtime
+from `3250172...` as `assets/index-BzkBsL72.js`, and restarted at 08:59:47 +08.
+Complete public QA then passed with zero errors, including score focus,
+isolated charge voices `0 → 1 → 1 → 0`, all focused gameplay lanes, zero
+visual warnings, and the unchanged render census.
