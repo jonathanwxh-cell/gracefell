@@ -8,6 +8,8 @@
 - Combo runtime merge: `ad9b7d31c228a9ea3a1ccab566a858e5da4587ba`
 - Audio acceptance-hardening merge: `c89e43d53a0b480c5dbf37e585519d9ed6a2e280`
 - Final runtime-main CI: [run 30316228463](https://github.com/jonathanwxh-cell/gracefell/actions/runs/30316228463), passed
+- Production-receipt merge: `b1cca605d325122830ac01737f32a097165b1ed9`
+- Receipt-main CI: [run 30316920447](https://github.com/jonathanwxh-cell/gracefell/actions/runs/30316920447), passed
 - Production bundle: `assets/index-lXxo8uG6.js`
 - Visual release: Blender-authored cached arena + Canvas-first Malakar
 - Character foundation: Kite-Veil Penitent + Fallen Blade-Saint
