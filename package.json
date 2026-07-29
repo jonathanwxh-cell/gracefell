@@ -2,7 +2,7 @@
   "name": "gracefell",
   "private": true,
   "license": "UNLICENSED",
-  "version": "2.27.4",
+  "version": "2.27.5",
   "type": "module",
   "scripts": {
     "dev": "vite",
