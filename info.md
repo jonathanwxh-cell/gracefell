@@ -1,16 +1,15 @@
 # GRACEFELL project facts
 
-- Current package: `gracefell@2.27.4` candidate
-- Current published release: `v2.27.3` touch BREAK activation
-- Published checkpoint: [`v2.27.3`](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.3)
-- Candidate record: [`docs/releases/v2.27.4.md`](docs/releases/v2.27.4.md)
-- Previous release receipts: [`docs/releases/v2.27.3.md`](docs/releases/v2.27.3.md)
-- Previous release: [`v2.27.2`](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.2), final SHA `d45272eb5407fe6dc7f3103df21978f1fbb58efd`
-- v2.27.3 reviewed head: `8e1e6d2958f8a595671365b2855248912e29f516`
-- v2.27.3 implementation PR: [#104](https://github.com/jonathanwxh-cell/gracefell/pull/104)
-- v2.27.3 PR CI: [run 30323608408](https://github.com/jonathanwxh-cell/gracefell/actions/runs/30323608408), passed
-- v2.27.3 runtime merge: `803a7c6d068269e16e1db8c6c13e410cb2348b11`
-- v2.27.3 runtime-main CI: [run 30323776253](https://github.com/jonathanwxh-cell/gracefell/actions/runs/30323776253), passed
+- Current package: `gracefell@2.27.4`
+- Current release: `v2.27.4` room to read
+- Published checkpoint: [`v2.27.4`](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.4)
+- Release receipts: [`docs/releases/v2.27.4.md`](docs/releases/v2.27.4.md)
+- Previous release: [`v2.27.3`](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.3), final SHA `81663a3a86f827bf4d1e37afef0d771e1e551472`
+- v2.27.4 reviewed head: `8302a12957bc369b604332070811eff1eebc013f`
+- v2.27.4 implementation PR: [#106](https://github.com/jonathanwxh-cell/gracefell/pull/106)
+- v2.27.4 PR CI: [run 30436996211](https://github.com/jonathanwxh-cell/gracefell/actions/runs/30436996211), passed
+- v2.27.4 runtime merge: `c954d3eb6f3b52239a7dce13dc6051752474eecf`
+- v2.27.4 runtime-main CI: [run 30437329942](https://github.com/jonathanwxh-cell/gracefell/actions/runs/30437329942), passed
 - Gameplay foundation merge: `88b71eef8ad4cafb3bac06a62f8aa3721ff33aed` (v2.27)
 - Combo runtime merge: `ad9b7d31c228a9ea3a1ccab566a858e5da4587ba`
 - Audio acceptance-hardening merge: `c89e43d53a0b480c5dbf37e585519d9ed6a2e280`
@@ -20,7 +19,7 @@
 - Final acceptance-main CI: [run 30318778678](https://github.com/jonathanwxh-cell/gracefell/actions/runs/30318778678), passed
 - Production-receipt merge: `b1cca605d325122830ac01737f32a097165b1ed9`
 - Receipt-main CI: [run 30316920447](https://github.com/jonathanwxh-cell/gracefell/actions/runs/30316920447), passed
-- Production bundle: `assets/index-CtIaLuKS.js`
+- Production bundle: `assets/index-DDP4dxP_.js`
 - Visual release: Blender-authored cached arena + Canvas-first Malakar
 - Character foundation: Kite-Veil Penitent + Fallen Blade-Saint
 - Production: <https://gracefell.alyoechosys.dev>
