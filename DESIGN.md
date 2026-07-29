@@ -3001,7 +3001,24 @@ remain ordinary 42-damage HVY. A natural Execute that fills Resolve from
 89→100 must keep the `EXECUTE` result, announce `Resolve full` rather than
 `Resolve ready`, and restore Break surfaces only after stagger exits.
 
-Publication remains provisional until frozen-candidate role evaluation,
-reviewed CI, exact-SHA production deployment, complete public QA, final
-acceptance documentation, the annotated `v2.27.5` tag, and GitHub release all
-complete.
+### Production receipt
+
+All five exact-bundle role simulations passed at 9.0–9.6/10 with no zero
+category or blocker. Runtime PR #108 head
+`62aa91848ef6e794d5e9b849b8dab48bf07e3b10` passed clean-runner CI
+30446253514 and both adversarial reviews with no findings. It merged as
+`fca01e8c324aa227e8bb63f217aba5788f79b53e`; independent main run
+30446537473 passed.
+
+Production fast-forwarded cleanly to that exact runtime merge, built
+`assets/index-C6-AvkyV.js`, and restarted `gracefell.service` at
+19:13:58 +08. Loopback and public health both returned
+`{"ok":true,"app":"gracefell"}`. The public bundle matched the scored SHA-256
+`20078FCBFC97A288D3CC1BF2CFD1D69D9524B3E1552A9E08AE8D0DCFC60FB3E8`.
+The complete public desktop/mobile/true-touch matrix, v2.21/v2.24/v2.27
+focused lanes, stagger/Execute real-input checks, render census, and
+visual/failure gate passed with zero errors or warnings.
+
+The documentation-only acceptance merge is the tagged checkpoint. It changes
+no runtime file and binds the exact implementation, deployment evidence, and
+future-agent handoff to `v2.27.5`.
