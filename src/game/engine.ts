@@ -2119,6 +2119,14 @@ export function difficultyForGrace(grace: number): DifficultyMods {
   };
 }
 
+export const GUIDED_OPENING_STALK_SECONDS = 3.2;
+
+export function openingStalkSeconds(tutorialComplete: boolean, grace: number): number {
+  // Give a first-run Journey player one readable approach before Malakar
+  // commits. Returning players and the Measured/Oath contract stay unchanged.
+  return !tutorialComplete && grace < 0 ? GUIDED_OPENING_STALK_SECONDS : 0.4;
+}
+
 export class Game {
   canvas: HTMLCanvasElement;
   ctx: CanvasRenderingContext2D;
@@ -4030,7 +4038,9 @@ export class Game {
     if (this.playerChainT <= 0 && this.playerChainHits > 0) this.breakPlayerChain();
     this.chainBreakT = Math.max(0, this.chainBreakT - dt);
     this.techniqueT = Math.max(0, this.techniqueT - dt);
-    this.tutorialT = Math.max(0, this.tutorialT - dt);
+    // The intro is cinematic, not learning time. A first-run prompt receives
+    // its full authored duration once the player can actually act.
+    if (this.state === 'fight') this.tutorialT = Math.max(0, this.tutorialT - dt);
 
     // global state transitions
     if (this.state === 'title') {
@@ -4046,7 +4056,8 @@ export class Game {
       if (this.stateT > 2.6 || (this.stateT > 0.6 && this.input.consume('confirm'))) {
         this.input.clearCombatActions();
         this.state = 'fight'; this.stateT = 0;
-        this.boss.state = 'stalk'; this.boss.t = 0.4;
+        this.boss.state = 'stalk';
+        this.boss.t = openingStalkSeconds(this.tutorialStage === 'done', this.graceAtStart);
         this.projectiles = []; this.rings = []; this.meteors = [];
         // The first reveal is intimate; phase shifts retain the large roar.
         this.audio.roar(false, this.audioSpatial(this.boss.x, this.boss.y));
@@ -4093,7 +4104,7 @@ export class Game {
         )
       ) {
         this.tutorialStage = 'roll';
-        this.tutorialT = 6;
+        this.tutorialT = 4;
       }
       if (this.boss.hp > 0) this.boss.update(dt, this);
       this.audio.updateCombatState(
@@ -5267,6 +5278,7 @@ Game.prototype.drawVictory = function drawVictory(this: Game, ctx: CanvasRenderi
 
 Game.prototype.drawTouchUI = function drawTouchUI(this: Game, ctx: CanvasRenderingContext2D) {
   // joystick
+  const moveLessonActive = this.tutorialStage === 'move';
   if (this.input.joyActive) {
     ctx.globalAlpha = 0.25;
     ctx.strokeStyle = PAL.parchment;
@@ -5276,10 +5288,13 @@ Game.prototype.drawTouchUI = function drawTouchUI(this: Game, ctx: CanvasRenderi
     ctx.fillStyle = PAL.parchment;
     ctx.beginPath(); ctx.arc(this.input.joyOx + this.input.joyX * 52, this.input.joyOy + this.input.joyY * 52, 22, 0, TAU); ctx.fill();
     ctx.globalAlpha = 1;
-  } else if (this.hintT > 0) {
+  } else if (this.hintT > 0 || moveLessonActive) {
     const guideX = this.w * (this.leftHanded ? 0.78 : 0.22);
     const guideY = this.h - Math.max(84, 72 + this.safeBottom);
-    ctx.globalAlpha = 0.38 * clamp(this.hintT / 2, 0, 1);
+    // The text lesson may expire, but a hesitant first-run player keeps one
+    // faint spatial affordance until movement actually advances the lesson.
+    const guideT = moveLessonActive ? Math.max(1, this.hintT, this.tutorialT) : this.hintT;
+    ctx.globalAlpha = 0.38 * clamp(guideT / 2, 0, 1);
     ctx.strokeStyle = PAL.parchment;
     ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.arc(guideX, guideY, 44, 0, TAU); ctx.stroke();

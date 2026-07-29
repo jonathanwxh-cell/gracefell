@@ -568,7 +568,19 @@ export default function Home() {
           {!mixOpen && (
             <details className="game-accessibility__tips">
               <summary>Combat tips</summary>
-              <p>Attack during a roll to slash safely after it ends. Land two uninterrupted attacks, then use Heavy for Sunder; a miss, wound, roll, or delay resets that route. At full Resolve, hold Heavy for Gracebreak.</p>
+              <p>
+                <strong>Roll slash.</strong> Attack during a roll to slash safely after it ends.
+              </p>
+              <p>
+                <strong>Sunder.</strong> Land two uninterrupted attacks, then use Heavy. A miss,
+                wound, roll, or delay resets the route.
+              </p>
+              <p>
+                <strong>Gracebreak.</strong>{' '}
+                {ui.touch
+                  ? 'At full Resolve, tap Break for Gracebreak.'
+                  : 'At full Resolve, hold Heavy through the charge for Gracebreak.'}
+              </p>
             </details>
           )}
         </section>

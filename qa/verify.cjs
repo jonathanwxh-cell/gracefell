@@ -315,14 +315,17 @@ async function installAudioSampleRate(context) {
         await pg.waitForTimeout(80);
         const tipsAfter = await pg.evaluate(() => ({
           open: document.querySelector('.game-accessibility__tips')?.open,
+          copy: document.querySelector('.game-accessibility__tips')?.textContent?.trim() || '',
           state: window.__game.state,
           confirmSequence: window.__game.input.confirmSequence,
         }));
         step.semanticTips = { before: tipsBefore, after: tipsAfter };
         if (!tipsAfter.open
+          || !tipsAfter.copy.includes('hold Heavy through the charge')
+          || tipsAfter.copy.includes('tap Break')
           || tipsAfter.state !== 'title'
           || tipsAfter.confirmSequence !== tipsBefore.confirmSequence) {
-          out.errors.push('desktop: Combat tips disclosure lost native keyboard ownership: '
+          out.errors.push('desktop: Combat tips lost keyboard ownership or device-specific Gracebreak copy: '
             + JSON.stringify(step.semanticTips));
         }
         await pg.keyboard.press('Enter'); // close the optional disclosure
@@ -371,6 +374,24 @@ async function installAudioSampleRate(context) {
       const st1 = await pg.evaluate(() => (window).__game && (window).__game.state);
       step.stateAfterStart = st1;
       if (st1 !== 'fight') out.errors.push(vp.name + ': did not reach fight state (' + st1 + ')');
+      step.openingGuidance = await pg.evaluate(() => {
+        const g = window.__game;
+        return {
+          bossState: g.boss.state,
+          bossT: g.boss.t,
+          tutorialStage: g.tutorialStage,
+          tutorialT: g.tutorialT,
+          grace: g.graceAtStart,
+        };
+      });
+      if (step.openingGuidance.grace < 0
+        && step.openingGuidance.tutorialStage === 'move'
+        && (step.openingGuidance.bossState !== 'stalk'
+          || step.openingGuidance.bossT < 3
+          || step.openingGuidance.tutorialT < 4.3)) {
+        out.errors.push(vp.name + ': first-run Journey lost its playable opening guidance: '
+          + JSON.stringify(step.openingGuidance));
+      }
       await pg.waitForTimeout(300);
       step.combatSemantics = await pg.evaluate(() => ({
         status: document.querySelector('#game-status')?.textContent,
@@ -2134,6 +2155,10 @@ async function installAudioSampleRate(context) {
       // 1. the game must KNOW it's a phone before any touch happens
       t.isTouchBeforeAnyTouch = await pg.evaluate(() => window.__game.input.isTouch);
       if (!t.isTouchBeforeAnyTouch) out.errors.push('touch: game did not detect a coarse pointer before first touch (phone users see mouse/keyboard copy)');
+      t.combatTipsCopy = (await pg.locator('.game-accessibility__tips').textContent())?.trim() || '';
+      if (!t.combatTipsCopy.includes('tap Break') || t.combatTipsCopy.includes('hold Heavy')) {
+        out.errors.push('touch: Combat tips do not match the tap-driven BREAK action: ' + t.combatTipsCopy);
+      }
 
       // 2. touch-appropriate copy, no keyboard bindings shown
       t.rows = await pg.evaluate(() => window.__game.menuRows().map((r) => r.id));
@@ -2208,6 +2233,62 @@ async function installAudioSampleRate(context) {
       await pg.waitForFunction(() => window.__game && window.__game.state === 'fight', null, { timeout: 12000 }).catch(() => {});
       t.stateAfterTap = await pg.evaluate(() => window.__game.state);
       if (t.stateAfterTap !== 'fight') out.errors.push('touch: tap did not start the fight (' + t.stateAfterTap + ')');
+      t.openingGuidance = await pg.evaluate(() => {
+        const g = window.__game;
+        return {
+          bossState: g.boss.state,
+          bossT: g.boss.t,
+          tutorialStage: g.tutorialStage,
+          tutorialT: g.tutorialT,
+          grace: g.graceAtStart,
+        };
+      });
+      if (t.openingGuidance.grace < 0
+        && t.openingGuidance.tutorialStage === 'move'
+        && (t.openingGuidance.bossState !== 'stalk'
+          || t.openingGuidance.bossT < 3
+          || t.openingGuidance.tutorialT < 4.3)) {
+        out.errors.push('touch: first-run Journey lost its playable opening guidance: '
+          + JSON.stringify(t.openingGuidance));
+      }
+      t.moveGuidePersistence = await pg.evaluate(() => {
+        const g = window.__game;
+        const canvas = document.querySelector('canvas');
+        const ctx = canvas.getContext('2d');
+        const originalFillText = ctx.fillText;
+        const original = {
+          stage: g.tutorialStage,
+          tutorialT: g.tutorialT,
+          hintT: g.hintT,
+        };
+        let moveLabels = 0;
+        ctx.fillText = function (text, x, y, maxWidth) {
+          if (String(text) === 'MOVE') moveLabels++;
+          return maxWidth === undefined
+            ? originalFillText.call(this, text, x, y)
+            : originalFillText.call(this, text, x, y, maxWidth);
+        };
+        g.tutorialStage = 'move';
+        g.tutorialT = 0;
+        g.hintT = 0;
+        g.render();
+        const afterPromptExpiry = moveLabels;
+        moveLabels = 0;
+        g.tutorialStage = 'roll';
+        g.render();
+        const afterMovementLearned = moveLabels;
+        ctx.fillText = originalFillText;
+        g.tutorialStage = original.stage;
+        g.tutorialT = original.tutorialT;
+        g.hintT = original.hintT;
+        g.render();
+        return { afterPromptExpiry, afterMovementLearned };
+      });
+      if (t.moveGuidePersistence.afterPromptExpiry < 1
+        || t.moveGuidePersistence.afterMovementLearned !== 0) {
+        out.errors.push('touch: MOVE guide does not persist exactly until movement is learned: '
+          + JSON.stringify(t.moveGuidePersistence));
+      }
 
       // The player-resource HUD is Canvas content while the utilities mix DOM
       // and Canvas targets. Protect the actual cross-layer geometry so a valid
