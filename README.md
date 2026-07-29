@@ -8,15 +8,15 @@ rules are all decided by what works one-handed on a 390px screen.
 
 **Play it: [gracefell.alyoechosys.dev](https://gracefell.alyoechosys.dev)**
 
-Current release: **v2.27.3** — the glowing touch `BREAK` command now activates
-from one deliberate tap. At full Resolve, that tap latches the existing
-0.5-second charge and releases Gracebreak automatically; the charge animation,
-72 damage, 112 poise pressure, 26 stamina cost, whiff spending, and one-use
-Resolve consumption are unchanged. Stagger Execute and connected-hit Sunder
-still outrank the ordinary route. Keyboard and mouse keep manual hold-to-charge
-HVY, including partial heavies. Evidence is recorded in
-[`docs/releases/v2.27.3.md`](docs/releases/v2.27.3.md); the durable GitHub
-checkpoint is [v2.27.3](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.3).
+Current release: **v2.27.4** — a first Journey player now receives one readable
+opening approach, the full tutorial clock begins only when combat is playable,
+and the faint touch MOVE ring remains until movement is actually learned.
+Moving clears that guide and the next ROLL lesson leaves sooner. Returning
+players, Measured, Oaths, combat balance, and the compact action set are
+unchanged. Five amended-build gamer roles scored 8.0–9.0/10. Evidence is
+recorded in [`docs/releases/v2.27.4.md`](docs/releases/v2.27.4.md); the durable
+GitHub checkpoint is
+[v2.27.4](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.4).
 
 The **v2.27.2** combo-truth foundation remains intact. A poise-breaking second
 light can no longer let Sunder steal
@@ -734,7 +734,7 @@ publication, and exact-SHA deployment receipts:
 Complete implementation, local acceptance, GitHub publication, and exact-SHA
 production receipts: [`docs/releases/v2.27.2.md`](docs/releases/v2.27.2.md).
 
-## Candidate by Codex — v2.27.4 room to read
+## Improved by Codex — v2.27.4 room to read
 
 - **The first Journey opening is playable teaching time.** An unfinished
   tutorial on a negative Journey path gives Malakar one 3.2-second stalking
@@ -757,8 +757,7 @@ production receipts: [`docs/releases/v2.27.2.md`](docs/releases/v2.27.2.md).
 Five independent agent-simulated gamer roles scored the exact candidate
 8.0–9.0/10. Research, local acceptance, scorecards, and the bounded-change
 record are in [`docs/releases/v2.27.4.md`](docs/releases/v2.27.4.md).
-Publication receipts remain pending until reviewed CI, exact-SHA deployment,
-and public QA complete.
+That record includes reviewed CI, exact-SHA deployment, and complete public QA.
 
 ## Running it
 

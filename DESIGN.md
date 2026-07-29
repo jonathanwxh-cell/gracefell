@@ -2926,3 +2926,18 @@ scored 8.0, 8.4, 8.9, 9.0, and 9.0 out of 10 with no zero category or control
 blocker. A newcomer remained alive after 4.85 idle seconds, then dealt 183
 damage through the next 18.5 seconds; the veteran reached stagger at 5.88
 seconds and tutorial completion at 6.90 seconds.
+
+### Production receipt
+
+PR #106 amended head `8302a12957bc369b604332070811eff1eebc013f`
+passed clean-runner CI 30436996211 after the frozen-diff P1 was fixed and
+re-reviewed with no findings. It merged as
+`c954d3eb6f3b52239a7dce13dc6051752474eecf`; independent main run
+30437329942 passed.
+
+Production fast-forwarded cleanly to that exact runtime merge, built
+`assets/index-DDP4dxP_.js`, and restarted `gracefell.service` at 16:57:56 +08.
+Loopback and public health both returned `{"ok":true,"app":"gracefell"}`. The
+complete public desktop/mobile/true-touch gate then passed in 257.1 seconds
+with zero errors, zero visual warnings, the MOVE post-expiry lifecycle intact,
+and the unchanged 920-mobile / 903-desktop render census.
