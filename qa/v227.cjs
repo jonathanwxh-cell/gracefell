@@ -662,9 +662,23 @@ async function openGame(browser, options) {
       && g.player.sunderWindow > 0.08
       && g.player.state === 'move';
   });
+  // A public full-page capture may take longer than the authored 600 ms route
+  // window. Freeze only while recording the ready state, then resume before
+  // the real HVY tap so screenshot I/O cannot consume a player-owned timer.
+  await mobile.page.evaluate(() => {
+    const g = window.__game;
+    cancelAnimationFrame(g.raf);
+    g.raf = 0;
+    g.render();
+  });
   await mobile.page.screenshot({
     path: path.join(ARTIFACT_DIR, 'mobile-real-tap-sunder-ready.png'),
     fullPage: true,
+  });
+  await mobile.page.evaluate(() => {
+    const g = window.__game;
+    g.lastTs = performance.now();
+    g.startLoop();
   });
   await mobile.page.touchscreen.tap(touchSunderSetup.heavy.x, touchSunderSetup.heavy.y);
   await mobile.page.waitForFunction(() => window.__game?.boss.techniqueImpact === 'sunder');
