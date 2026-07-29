@@ -1,6 +1,6 @@
 # GRACEFELL project facts
 
-- Current package: `gracefell@2.27.5`
+- Current package candidate: `gracefell@2.27.6` (local; not released or deployed)
 - Current release: [`v2.27.5`](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.5), stagger authority
 - Release receipt: [`docs/releases/v2.27.5.md`](docs/releases/v2.27.5.md)
 - Previous release: [`v2.27.4`](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.4)

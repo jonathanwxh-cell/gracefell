@@ -343,6 +343,8 @@ export class MalakarThreeProof {
 
   private updateProcedural(snapshot: MalakarVisualSnapshot) {
     const windup = Math.max(0, Math.min(1, snapshot.windupProgress));
+    const impactStrength = Math.max(0, Math.min(1, snapshot.techniqueImpactStrength));
+    const impactScale = snapshot.techniqueImpact === 'execute' ? 1 : 0.58;
     const capeSpread = snapshot.phase >= 3 ? 0.22 : snapshot.phase >= 2 ? 0.12 : 0;
     this.capeLeft.rotation.y = capeSpread + windup * 0.14;
     this.capeRight.rotation.y = -capeSpread - windup * 0.14;
@@ -351,8 +353,10 @@ export class MalakarThreeProof {
 
     const phaseScale = snapshot.phase >= 3 ? 1.08 : snapshot.phase === 2 ? 1.03 : 1;
     this.proceduralRoot.scale.setScalar(phaseScale);
-    const assetWidth = snapshot.phase >= 3 ? 1.14 : snapshot.phase === 2 ? 1.07 : 1;
-    const assetHeight = snapshot.state === 'staggered' ? 0.86 : 1;
+    const assetWidth = (snapshot.phase >= 3 ? 1.14 : snapshot.phase === 2 ? 1.07 : 1)
+      * (1 - impactStrength * impactScale * 0.12);
+    const assetHeight = (snapshot.state === 'staggered' ? 0.86 : 1)
+      * (1 + impactStrength * impactScale * 0.08);
     this.assetRoot.scale.set(assetWidth, assetHeight, assetWidth);
     this.assetRoot.rotation.z = snapshot.state === 'windup'
       ? -0.04 - windup * 0.1
@@ -393,7 +397,7 @@ export class MalakarThreeProof {
       const shard = this.halo[i];
       shard.visible = i < visible;
       const angle = snapshot.time * speed + i / 9 * Math.PI * 2;
-      const radius = 1.18 - gather;
+      const radius = 1.18 - gather + impactStrength * impactScale * (0.16 + (i % 3) * 0.035);
       shard.position.set(Math.cos(angle) * radius, 0.48 + Math.sin(angle) * 0.72, Math.sin(angle) * 0.36);
       shard.rotation.set(angle * 0.2, angle, angle + Math.PI / 2);
     }

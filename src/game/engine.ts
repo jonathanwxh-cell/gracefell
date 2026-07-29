@@ -8,6 +8,7 @@ import { drawMalakarCanvasProof } from './render/malakarCanvas';
 import type { MalakarThreeProof } from './render/malakarThree';
 import {
   parseVisualProofFlags,
+  type MalakarTechniqueImpact,
   type MalakarVisualSnapshot,
 } from './render/visualModes';
 
@@ -1168,6 +1169,16 @@ export class Boss {
   // Visual-only knockback: the drawn body gives ground on a hit while the
   // collision circle, position and AI stay exactly where they were.
   recoil = 0; recoilAng = 0;
+  // Technique reactions are presentation state only. They let Sunder fracture
+  // the sovereign's halo and Execute visibly cleave his crown without moving
+  // the collision circle, changing AI, or borrowing the hostile danger hue.
+  techniqueImpact: MalakarTechniqueImpact | null = null;
+  techniqueImpactT = 0;
+  get techniqueImpactStrength() {
+    if (!this.techniqueImpact) return 0;
+    const duration = this.techniqueImpact === 'execute' ? 0.38 : 0.28;
+    return clamp(this.techniqueImpactT / duration, 0, 1);
+  }
   meteorQueue: Meteor[] = [];
   swordAng = 0;
   embers = 0;
@@ -1192,6 +1203,8 @@ export class Boss {
     this.aura = Math.max(0, this.aura - dt);
     this.hurtFlash = Math.max(0, this.hurtFlash - dt);
     this.recoil = Math.max(0, this.recoil - dt * 40);
+    this.techniqueImpactT = Math.max(0, this.techniqueImpactT - dt);
+    if (this.techniqueImpactT === 0) this.techniqueImpact = null;
     this.embers += dt;
     this.foleyT -= dt;
     this.chargeFoleyT -= dt;
@@ -1595,6 +1608,11 @@ export class Boss {
     return final;
   }
 
+  showTechniqueImpact(impact: MalakarTechniqueImpact) {
+    this.techniqueImpact = impact;
+    this.techniqueImpactT = impact === 'execute' ? 0.38 : 0.28;
+  }
+
   applyPoise(dmg: number, game: Game) {
     if (this.state === 'dying' || this.state === 'spawn' || this.state === 'staggered') return;
     this.poise -= dmg;
@@ -1684,6 +1702,8 @@ export class Boss {
         secondSwordDraw: this.secondSwordDraw,
         recoil: this.recoil,
         recoilAng: this.recoilAng,
+        techniqueImpact: this.techniqueImpact,
+        techniqueImpactStrength: this.techniqueImpactStrength,
         time: game.time,
       });
       return;
@@ -3523,13 +3543,13 @@ export class Game {
           // hue); shake()/zoomPunch route through the photosensitivity gates.
           b.executeConsumed = true;
           const dealt = b.takeDamage(30 * 2.6, this, p.x, p.y, 'finisher');
+          b.showTechniqueImpact('execute');
           this.damageMix.riposte += dealt;
           this.hitstop = Math.max(this.hitstop, 0.14);
           this.zoomPunch = Math.max(this.zoomPunch, 0.08);
           this.goldFlash = Math.max(this.goldFlash, 0.5);
           this.shake(14, 0.4);
           this.sparks(b.x, b.y, 24);
-          this.addDamageNum(b.x, b.y - b.r - 48, 'EXECUTE', PAL.spirit, 24);
           this.announceTechnique('EXECUTE');
           this.audio.execute(this.audioSpatial(b.x, b.y));
         } else {
@@ -3562,9 +3582,9 @@ export class Game {
             this.sparks(b.x, b.y, Math.round(8 + charge * 14));
           }
           if (sunder) {
+            b.showTechniqueImpact('sunder');
             this.hitstop = Math.max(this.hitstop, 0.1);
             this.zoomPunch = Math.max(this.zoomPunch, 0.052);
-            this.addDamageNum(b.x, b.y - b.r - 46, 'SUNDER', PAL.goldBright, 19);
             // A Sunder contact may also earn the stagger opening. In that
             // case Execute is the next authoritative action and owns the
             // transient lane immediately.
@@ -4775,14 +4795,16 @@ Game.prototype.drawHUD = function drawHUD(this: Game, ctx: CanvasRenderingContex
     const chainText = this.playerChainFinished
       ? 'LIGHT FINISHER · COMPLETE'
       : showSunder
-        ? `SUNDER ${this.player.sunderQueued ? 'QUEUED' : 'READY · TAP HVY'}`
+        ? `SUNDER ${this.player.sunderQueued
+          ? 'QUEUED'
+          : `READY · TAP ${this.input.isTouch ? 'HVY' : 'K'}`}`
         : this.playerChainHits === 1
           ? `1 HIT · LAND NEXT ATK${queued ? ` · ${queued} QUEUED` : ''}`
           : queuedLights > 0
             ? `ATK QUEUED · ${queued}`
             : '';
     const feedbackText = executeReady
-      ? 'EXECUTE READY · TAP HVY'
+      ? `EXECUTE READY · TAP ${this.input.isTouch ? 'HVY' : 'K'}`
       : techniqueActive
         ? this.techniqueText
         : this.chainBreakT > 0
