@@ -37,23 +37,43 @@ const ARTIFACT_DIR = process.env.GRACEFELL_ARTIFACT_DIR
     g.boss.hp = 9999; g.boss.maxHp = 9999;
     g.boss.state = 'recover'; g.boss.t = 99;
 
-    const before = { x: g.boss.x, y: g.boss.y, poise: g.boss.poise, recoil: g.boss.recoil };
+    const before = {
+      x: g.boss.x,
+      y: g.boss.y,
+      poise: g.boss.poise,
+      recoil: g.boss.recoil,
+      techniqueImpact: g.boss.techniqueImpact,
+    };
     g.boss.takeDamage(30, g, g.player.x, g.player.y, 'heavy');
+    g.boss.showTechniqueImpact('sunder');
     const afterHit = {
       x: g.boss.x, y: g.boss.y, recoil: g.boss.recoil, recoilAng: g.boss.recoilAng,
+      techniqueImpact: g.boss.techniqueImpact,
+      techniqueImpactT: g.boss.techniqueImpactT,
     };
     // Recoil must decay back to rest without ever displacing the entity.
     let movedDuringDecay = false;
     for (let i = 0; i < 40; i++) {
       g.boss.update(1 / 60, g);
       if (g.boss.x !== afterHit.x || g.boss.y !== afterHit.y) movedDuringDecay = true;
-      if (g.boss.recoil === 0) break;
+      if (g.boss.recoil === 0 && g.boss.techniqueImpact === null) break;
     }
-    const afterDecay = { x: g.boss.x, y: g.boss.y, recoil: g.boss.recoil };
+    const afterDecay = {
+      x: g.boss.x,
+      y: g.boss.y,
+      recoil: g.boss.recoil,
+      techniqueImpact: g.boss.techniqueImpact,
+      techniqueImpactT: g.boss.techniqueImpactT,
+    };
 
     // A fresh fight must not inherit a recoil offset.
     g.resetFight();
-    const afterReset = { recoil: g.boss.recoil, recoilAng: g.boss.recoilAng };
+    const afterReset = {
+      recoil: g.boss.recoil,
+      recoilAng: g.boss.recoilAng,
+      techniqueImpact: g.boss.techniqueImpact,
+      techniqueImpactT: g.boss.techniqueImpactT,
+    };
 
     // ---- drawing a swing must not mutate the simulation --------------------
     // The impact frame and the ribbon both add logic to draw time. The risk
@@ -74,6 +94,7 @@ const ARTIFACT_DIR = process.env.GRACEFELL_ARTIFACT_DIR
       pfacing: +g.player.facing.toFixed(6), tips: g.player.swordTip.length,
       bx: g.boss.x, by: g.boss.y, bhp: g.boss.hp, bpoise: g.boss.poise,
       brecoil: g.boss.recoil, particles: g.particles.length, dmgNums: g.dmgNums.length,
+      btechnique: g.boss.techniqueImpact, btechniqueT: +g.boss.techniqueImpactT.toFixed(6),
     });
 
     const swingStates = [];
@@ -104,14 +125,23 @@ const ARTIFACT_DIR = process.env.GRACEFELL_ARTIFACT_DIR
   if (!(r.afterHit.recoil > 0)) {
     failures.push(`no recoil recorded on a heavy hit: ${JSON.stringify(r.afterHit)}`);
   }
+  if (r.afterHit.techniqueImpact !== 'sunder' || !(r.afterHit.techniqueImpactT > 0)) {
+    failures.push(`no Sunder presentation reaction recorded: ${JSON.stringify(r.afterHit)}`);
+  }
   if (r.movedDuringDecay) {
     failures.push('boss position changed while recoil decayed — recoil must not feed back into simulation');
   }
   if (r.afterDecay.recoil !== 0) {
     failures.push(`recoil did not decay to rest: ${JSON.stringify(r.afterDecay)}`);
   }
-  if (r.afterReset.recoil !== 0 || r.afterReset.recoilAng !== 0) {
-    failures.push(`a fresh fight inherited recoil state: ${JSON.stringify(r.afterReset)}`);
+  if (r.afterDecay.techniqueImpact !== null || r.afterDecay.techniqueImpactT !== 0) {
+    failures.push(`technique reaction did not decay to rest: ${JSON.stringify(r.afterDecay)}`);
+  }
+  if (r.afterReset.recoil !== 0
+    || r.afterReset.recoilAng !== 0
+    || r.afterReset.techniqueImpact !== null
+    || r.afterReset.techniqueImpactT !== 0) {
+    failures.push(`a fresh fight inherited presentation state: ${JSON.stringify(r.afterReset)}`);
   }
   if (!r.sawAttackState) {
     failures.push(`the buffered light never entered the attack state: ${JSON.stringify(r.swingStates)}`);

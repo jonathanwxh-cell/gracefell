@@ -5,6 +5,7 @@ const GOLD = '#c9a959';
 const GOLD_BRIGHT = '#f0d78c';
 const AMBER = '#d1873f';
 const PARCHMENT = '#ece0c4';
+const SPIRIT = '#bcd7ff';
 
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
 const mix = (a: number, b: number, amount: number) => a + (b - a) * amount;
@@ -124,13 +125,18 @@ function drawHalo(ctx: CanvasRenderingContext2D, snapshot: MalakarVisualSnapshot
     ? snapshot.windupProgress * 8
     : 0;
   const verticalScale = snapshot.state === 'staggered' ? 0.54 : 0.72;
+  const impactStrength = clamp01(snapshot.techniqueImpactStrength);
+  const impactSpread = snapshot.techniqueImpact === 'execute' ? 18 : 10;
 
   for (let i = 0; i < count; i++) {
-    const angle = snapshot.time * speed + (i / 9) * TAU;
+    const impactDirection = i % 2 === 0 ? 1 : -1;
+    const angle = snapshot.time * speed + (i / 9) * TAU
+      + impactDirection * impactStrength * (snapshot.techniqueImpact === 'execute' ? 0.18 : 0.1);
     const staggerWobble = snapshot.state === 'staggered'
       ? Math.sin(snapshot.time * 5 + i * 1.7) * 5.5
       : 0;
-    const radius = snapshot.r + 28 - volleyGather + staggerWobble;
+    const radius = snapshot.r + 28 - volleyGather + staggerWobble
+      + impactStrength * impactSpread * (0.65 + (i % 3) * 0.18);
     ctx.save();
     ctx.translate(Math.cos(angle) * radius, Math.sin(angle) * radius * verticalScale);
     ctx.rotate(angle + Math.PI / 2);
@@ -163,6 +169,78 @@ function drawHalo(ctx: CanvasRenderingContext2D, snapshot: MalakarVisualSnapshot
   }
 }
 
+function drawTechniqueImpact(
+  ctx: CanvasRenderingContext2D,
+  snapshot: MalakarVisualSnapshot,
+) {
+  const strength = clamp01(snapshot.techniqueImpactStrength);
+  if (!snapshot.techniqueImpact || strength <= 0) return;
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = strength * (snapshot.techniqueImpact === 'execute' ? 0.92 : 0.78);
+  ctx.strokeStyle = snapshot.techniqueImpact === 'execute' ? SPIRIT : GOLD_BRIGHT;
+  ctx.fillStyle = snapshot.techniqueImpact === 'execute' ? SPIRIT : GOLD_BRIGHT;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  if (snapshot.techniqueImpact === 'sunder') {
+    // Broken, incomplete arcs make the orbiting crown look structurally
+    // fractured without adding another word or using the danger language.
+    ctx.lineWidth = 2.4;
+    ctx.setLineDash([11, 8]);
+    for (const offset of [-0.18, 0.18]) {
+      ctx.beginPath();
+      ctx.arc(0, 0, snapshot.r + 19 + offset * 12, -0.88 + offset, 0.9 + offset);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(0, 0, snapshot.r + 19 - offset * 12, 2.22 + offset, 4.04 + offset);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(side * 6, -snapshot.r * 0.72);
+      ctx.lineTo(side * 15, -snapshot.r * 0.25);
+      ctx.lineTo(side * 7, snapshot.r * 0.08);
+      ctx.lineTo(side * 20, snapshot.r * 0.62);
+      ctx.stroke();
+    }
+  } else {
+    // A narrow spirit cleave reads directly on the king. Small crown shards
+    // travel out from his halo while the ordinary numeric damage remains clear.
+    ctx.lineWidth = 3.2;
+    ctx.beginPath();
+    ctx.moveTo(-snapshot.r * 0.88, -snapshot.r * 1.12);
+    ctx.lineTo(-snapshot.r * 0.18, -snapshot.r * 0.18);
+    ctx.lineTo(snapshot.r * 0.08, snapshot.r * 0.16);
+    ctx.lineTo(snapshot.r * 0.78, snapshot.r * 1.08);
+    ctx.stroke();
+    ctx.globalAlpha = strength * 0.46;
+    ctx.lineWidth = 8;
+    ctx.stroke();
+    ctx.globalAlpha = strength * 0.9;
+    for (let i = 0; i < 6; i++) {
+      const angle = -1.1 + i * 0.44;
+      const radius = snapshot.r + 31 + (i % 2) * 8;
+      const x = Math.cos(angle) * radius;
+      const y = Math.sin(angle) * radius * 0.76;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(angle + Math.PI / 2);
+      ctx.beginPath();
+      ctx.moveTo(0, -7);
+      ctx.lineTo(3.5, 2);
+      ctx.lineTo(0, 6);
+      ctx.lineTo(-3.5, 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+  ctx.restore();
+}
+
 export function drawMalakarCanvasProof(
   ctx: CanvasRenderingContext2D,
   snapshot: MalakarVisualSnapshot,
@@ -178,6 +256,14 @@ export function drawMalakarCanvasProof(
     snapshot.x + Math.cos(snapshot.recoilAng) * snapshot.recoil,
     snapshot.y + Math.sin(snapshot.recoilAng) * snapshot.recoil,
   );
+  const impactStrength = clamp01(snapshot.techniqueImpactStrength);
+  if (snapshot.techniqueImpact === 'sunder') {
+    ctx.rotate(-0.05 * impactStrength);
+    ctx.scale(1 - 0.06 * impactStrength, 1 + 0.05 * impactStrength);
+  } else if (snapshot.techniqueImpact === 'execute') {
+    ctx.rotate(-0.11 * impactStrength);
+    ctx.scale(1 - 0.13 * impactStrength, 1 + 0.09 * impactStrength);
+  }
   ctx.rotate(staggerLean);
 
   if (snapshot.phase >= 2 || snapshot.state === 'windup') {
@@ -314,5 +400,6 @@ export function drawMalakarCanvasProof(
     ctx.stroke();
     ctx.setLineDash([]);
   }
+  drawTechniqueImpact(ctx, snapshot);
   ctx.restore();
 }

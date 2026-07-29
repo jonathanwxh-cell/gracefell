@@ -782,6 +782,24 @@ agent-simulated gamer roles scored it 9.0–9.6/10 with no zero category or
 blocker; the same record contains reviewed CI, exact-SHA deployment, and the
 complete public QA receipt.
 
+## Local candidate — v2.27.6 king reactions
+
+- **Sunder breaks the crown in gold.** Its real `ATK · ATK · HVY` contact
+  briefly compresses Malakar, splays his halo, and draws broken fracture arcs.
+- **Execute lands as a spirit cleave.** The one-per-stagger punish drives a
+  stronger king pose and crown burst while keeping the numeric 109 damage
+  readable.
+- **One technique name is enough.** The central lane retains `SUNDER` or
+  `EXECUTE`; redundant words over the damage number are gone.
+- **Prompts match the device.** Touch retains `HVY`; desktop Sunder and Execute
+  readiness now name the real `K` key.
+- **Presentation only.** Damage, poise, stamina, Resolve, timing, stagger and
+  phase authority, save-v7, touch geometry, boss collision/AI, audio, and
+  hostile telegraph colors are unchanged.
+
+This work is a locally verified candidate, not the current release. Production
+and the linked public receipt remain v2.27.5 until a separate publish request.
+
 ## Running it
 
 ```bash

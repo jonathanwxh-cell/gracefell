@@ -89,6 +89,32 @@ async function openGame(browser, options) {
       return states;
     };
 
+    const performWithImpact = (verb, maxFrames = 100) => {
+      g.player.x = 0; g.player.y = 0; g.player.facing = 0;
+      g.player.vx = 0; g.player.vy = 0;
+      g.boss.x = 150; g.boss.y = 0;
+      g.boss.vx = 0; g.boss.vy = 0;
+      const startHp = g.boss.hp;
+      g.input.bufferPress(verb);
+      const states = [];
+      let sawAction = false;
+      let impact = null;
+      for (let i = 0; i < maxFrames; i++) {
+        tick();
+        states.push(g.player.state);
+        if (!impact && g.boss.hp < startHp) {
+          impact = {
+            kind: g.boss.techniqueImpact,
+            timer: g.boss.techniqueImpactT,
+            strength: g.boss.techniqueImpactStrength,
+          };
+        }
+        if (g.player.state !== 'move') sawAction = true;
+        if (sawAction && g.player.state === 'move') break;
+      }
+      return { states, impact };
+    };
+
     const renderText = () => {
       const entries = [];
       const originalFillText = CanvasRenderingContext2D.prototype.fillText;
@@ -120,10 +146,13 @@ async function openGame(browser, options) {
     // ATK, ATK, HVY must branch only after two connected lights.
     let { p, b } = setArena();
     const sunderStart = { hp: b.hp, poise: b.poise, stam: p.stam };
+    const sunderLightOne = perform('light');
+    const sunderLightTwo = perform('light');
+    const sunderHeavy = performWithImpact('heavy');
     const sunderStates = [
-      ...perform('light'),
-      ...perform('light'),
-      ...perform('heavy'),
+      ...sunderLightOne,
+      ...sunderLightTwo,
+      ...sunderHeavy.states,
     ];
     const sunder = {
       sawState: sunderStates.includes('sunder'),
@@ -132,6 +161,7 @@ async function openGame(browser, options) {
       stamina: sunderStart.stam - p.stam,
       resolve: g.resolve,
       routeCleared: p.routeLightHits === 0 && p.sunderWindow === 0 && !p.sunderQueued,
+      reaction: sunderHeavy.impact,
     };
 
     // The familiar third light remains intact and has lower poise/stamina cost.
@@ -578,8 +608,98 @@ async function openGame(browser, options) {
     };
   });
 
-  // Exercise the real mobile event route, then read React's live-region-adjacent
-  // combat status. The canvas, semantic panel and resolved action must agree.
+  // Exercise the real mobile Sunder route. This is deliberately three actual
+  // fingertip events so the screenshot proves both the authored input path and
+  // the boss-local fracture reaction, not a synthetic state toggle.
+  const touchSunderSetup = await mobile.page.evaluate(() => {
+    const g = window.__game;
+    cancelAnimationFrame(g.raf);
+    g.raf = 0;
+    g.grace = 0;
+    g.resetFight();
+    g.state = 'fight';
+    g.stateT = 1;
+    g.input.reset();
+    g.input.isTouch = true;
+    g.tutorialStage = 'done';
+    g.tutorialT = 0;
+    g.hintT = 0;
+    g.player.x = 0;
+    g.player.y = 0;
+    g.player.facing = 0;
+    g.player.stam = 100;
+    g.player.iframes = 999;
+    g.boss.x = 110;
+    g.boss.y = 0;
+    g.boss.state = 'recover';
+    g.boss.t = 999;
+    g.boss.hp = 9999;
+    g.boss.maxHp = 9999;
+    g.boss.poise = 400;
+    g.boss.maxPoise = 400;
+    g.paused = false;
+    g.lastTs = performance.now();
+    g.startLoop();
+    g.uiChanged?.();
+    const buttons = g.touchLayout().btns;
+    return {
+      light: buttons.find((candidate) => candidate.id === 'light'),
+      heavy: buttons.find((candidate) => candidate.id === 'heavy'),
+      startHp: g.boss.hp,
+      startPoise: g.boss.poise,
+      startStamina: g.player.stam,
+    };
+  });
+  await mobile.page.touchscreen.tap(touchSunderSetup.light.x, touchSunderSetup.light.y);
+  await mobile.page.waitForFunction(() => {
+    const g = window.__game;
+    return g?.player.routeLightHits === 1 && g.player.state === 'move';
+  });
+  await mobile.page.touchscreen.tap(touchSunderSetup.light.x, touchSunderSetup.light.y);
+  await mobile.page.waitForFunction(() => {
+    const g = window.__game;
+    return g?.player.routeLightHits === 2
+      && g.player.sunderWindow > 0.08
+      && g.player.state === 'move';
+  });
+  await mobile.page.screenshot({
+    path: path.join(ARTIFACT_DIR, 'mobile-real-tap-sunder-ready.png'),
+    fullPage: true,
+  });
+  await mobile.page.touchscreen.tap(touchSunderSetup.heavy.x, touchSunderSetup.heavy.y);
+  await mobile.page.waitForFunction(() => window.__game?.boss.techniqueImpact === 'sunder');
+  const touchSunder = await mobile.page.evaluate((setup) => {
+    const g = window.__game;
+    cancelAnimationFrame(g.raf);
+    g.raf = 0;
+    const labels = [];
+    const originalFillText = CanvasRenderingContext2D.prototype.fillText;
+    CanvasRenderingContext2D.prototype.fillText = function capture(text, x, y, ...rest) {
+      labels.push(String(text));
+      return originalFillText.call(this, text, x, y, ...rest);
+    };
+    try {
+      g.render();
+    } finally {
+      CanvasRenderingContext2D.prototype.fillText = originalFillText;
+    }
+    return {
+      damage: setup.startHp - g.boss.hp,
+      poise: setup.startPoise - g.boss.poise,
+      stamina: setup.startStamina - g.player.stam,
+      reaction: g.boss.techniqueImpact,
+      reactionT: g.boss.techniqueImpactT,
+      reactionStrength: g.boss.techniqueImpactStrength,
+      techniqueLabels: labels.filter((label) => label === 'SUNDER').length,
+    };
+  }, touchSunderSetup);
+  await mobile.page.screenshot({
+    path: path.join(ARTIFACT_DIR, 'mobile-real-tap-sunder-hit.png'),
+    fullPage: true,
+  });
+
+  // Exercise the real mobile Execute route, then read React's
+  // live-region-adjacent combat status. Canvas, semantics and action agree.
   const touchExecuteSetup = await mobile.page.evaluate(() => {
     const g = window.__game;
     cancelAnimationFrame(g.raf);
@@ -653,6 +773,17 @@ async function openGame(browser, options) {
     const rows = [...document.querySelectorAll('#game-combat-status > div')];
     const technique = rows.find((row) => row.querySelector('dt')?.textContent === 'Technique');
     const resolve = rows.find((row) => row.querySelector('dt')?.textContent === 'Resolve');
+    const labels = [];
+    const originalFillText = CanvasRenderingContext2D.prototype.fillText;
+    CanvasRenderingContext2D.prototype.fillText = function capture(text, x, y, ...rest) {
+      labels.push(String(text));
+      return originalFillText.call(this, text, x, y, ...rest);
+    };
+    try {
+      g.render();
+    } finally {
+      CanvasRenderingContext2D.prototype.fillText = originalFillText;
+    }
     const outcome = {
       executeConsumed: g.boss.executeConsumed,
       damage: startHp - g.boss.hp,
@@ -662,6 +793,10 @@ async function openGame(browser, options) {
       domTechnique: technique?.querySelector('dd')?.textContent || '',
       snapshotResolveReady: g.uiSnapshot().combat.resolveReady,
       domResolve: resolve?.querySelector('dd')?.textContent || '',
+      reaction: g.boss.techniqueImpact,
+      reactionT: g.boss.techniqueImpactT,
+      reactionStrength: g.boss.techniqueImpactStrength,
+      techniqueLabels: labels.filter((label) => label === 'EXECUTE').length,
     };
     cancelAnimationFrame(g.raf);
     g.raf = 0;
@@ -973,15 +1108,31 @@ async function openGame(browser, options) {
       CanvasRenderingContext2D.prototype.fillText = originalFillText;
     }
     const hud = g.playerHudRect();
+    const snapshot = g.uiSnapshot().combat;
+    g.resolve = 0;
+    g.player.routeLightHits = 2;
+    g.player.sunderWindow = 0.5;
+    const sunderLabels = [];
+    CanvasRenderingContext2D.prototype.fillText = function captureSunder(text, x, y, ...rest) {
+      sunderLabels.push(String(text));
+      return originalFillText.call(this, text, x, y, ...rest);
+    };
+    try {
+      g.render();
+    } finally {
+      CanvasRenderingContext2D.prototype.fillText = originalFillText;
+    }
     return {
       hud,
       contained: hud.x >= 0 && hud.y >= 0
         && hud.x + hud.width <= innerWidth
         && hud.y + hud.height <= innerHeight,
-      snapshot: g.uiSnapshot().combat,
+      snapshot,
       labels,
       breakReadyLabel: labels.includes('BREAK READY'),
       breakReadyHint: labels.some((label) => label.includes('HOLD K: BREAK')),
+      sunderReadyPrompt: sunderLabels.includes('SUNDER READY · TAP K'),
+      staleSunderPrompt: sunderLabels.includes('SUNDER READY · TAP HVY'),
     };
   });
   await desktop.page.screenshot({
@@ -1015,6 +1166,17 @@ async function openGame(browser, options) {
     g.boss.hp = 9999;
     g.boss.maxHp = 9999;
     g.boss.poise = g.boss.maxPoise;
+    const labels = [];
+    const originalFillText = CanvasRenderingContext2D.prototype.fillText;
+    CanvasRenderingContext2D.prototype.fillText = function capture(text, x, y, ...rest) {
+      labels.push(String(text));
+      return originalFillText.call(this, text, x, y, ...rest);
+    };
+    try {
+      g.render();
+    } finally {
+      CanvasRenderingContext2D.prototype.fillText = originalFillText;
+    }
     g.paused = false;
     g.lastTs = performance.now();
     g.startLoop();
@@ -1024,6 +1186,8 @@ async function openGame(browser, options) {
       startHp: g.boss.hp,
       snapshotTechnique: g.uiSnapshot().combat.technique,
       snapshotResolveReady: g.uiSnapshot().combat.resolveReady,
+      correctPrompt: labels.includes('EXECUTE READY · TAP K'),
+      stalePrompt: labels.includes('EXECUTE READY · TAP HVY'),
     };
   });
   await desktop.page.waitForFunction(() => {
@@ -1074,6 +1238,9 @@ async function openGame(browser, options) {
       domResolve: resolve?.querySelector('dd')?.textContent || '',
       domStatus: status?.textContent || '',
       statusAriaLive: status?.getAttribute('aria-live') || '',
+      reaction: g.boss.techniqueImpact,
+      reactionT: g.boss.techniqueImpactT,
+      reactionStrength: g.boss.techniqueImpactStrength,
     };
     cancelAnimationFrame(g.raf);
     g.raf = 0;
@@ -1085,6 +1252,16 @@ async function openGame(browser, options) {
   });
 
   const failures = [];
+  if (touchSunder.damage < 46
+    || touchSunder.damage > 54
+    || touchSunder.poise < 66
+    || touchSunder.poise > 74
+    || touchSunder.reaction !== 'sunder'
+    || !(touchSunder.reactionT > 0)
+    || !(touchSunder.reactionStrength > 0)
+    || touchSunder.techniqueLabels !== 1) {
+    failures.push(`real touch Sunder path or king reaction failed: ${JSON.stringify(touchSunder)}`);
+  }
   if (touchExecuteSetup.snapshotTechnique !== 'Execute ready'
     || touchExecuteSetup.snapshotResolveReady
     || touchExecuteReadyDom.technique !== 'Execute ready'
@@ -1096,7 +1273,11 @@ async function openGame(browser, options) {
     || touchExecute.snapshotTechnique !== 'EXECUTE'
     || touchExecute.domTechnique !== touchExecute.snapshotTechnique
     || touchExecute.snapshotResolveReady
-    || touchExecute.domResolve !== '100%') {
+    || touchExecute.domResolve !== '100%'
+    || touchExecute.reaction !== 'execute'
+    || !(touchExecute.reactionT > 0)
+    || !(touchExecute.reactionStrength > 0)
+    || touchExecute.techniqueLabels !== 1) {
     failures.push(`real touch Execute path disagreed with semantic status: ${JSON.stringify({
       setup: touchExecuteSetup,
       readyDom: touchExecuteReadyDom,
@@ -1127,7 +1308,10 @@ async function openGame(browser, options) {
     || result.sunder.poise !== 70
     || result.sunder.stamina !== 44
     || result.sunder.resolve !== 8
-    || !result.sunder.routeCleared) {
+    || !result.sunder.routeCleared
+    || result.sunder.reaction?.kind !== 'sunder'
+    || !(result.sunder.reaction?.timer > 0)
+    || !(result.sunder.reaction?.strength > 0)) {
     failures.push(`ATK ATK SUNDER contract failed: ${JSON.stringify(result.sunder)}`);
   }
   if (result.lightString.damage !== 50
@@ -1299,7 +1483,9 @@ async function openGame(browser, options) {
     || !desktopLayout.contained
     || desktopLayout.snapshot.resolvePercent !== 100
     || !desktopLayout.breakReadyLabel
-    || !desktopLayout.breakReadyHint) {
+    || !desktopLayout.breakReadyHint
+    || !desktopLayout.sunderReadyPrompt
+    || desktopLayout.staleSunderPrompt) {
     failures.push(`Resolve HUD/audio acceptance failed: ${JSON.stringify({
       mobile: result.layout,
       desktop: desktopLayout,
@@ -1323,6 +1509,8 @@ async function openGame(browser, options) {
   }
   if (desktopExecuteSetup.snapshotTechnique !== 'Execute ready'
     || desktopExecuteSetup.snapshotResolveReady
+    || !desktopExecuteSetup.correctPrompt
+    || desktopExecuteSetup.stalePrompt
     || desktopExecuteReadyDom.technique !== 'Execute ready'
     || desktopExecuteReadyDom.resolve !== '89%'
     || !desktopExecute.executeConsumed
@@ -1334,7 +1522,10 @@ async function openGame(browser, options) {
     || desktopExecute.snapshotResolveReady
     || desktopExecute.domResolve !== '100%'
     || desktopExecute.domStatus !== 'Battle in progress, phase 1. MALAKAR STAGGERED. Resolve full'
-    || desktopExecute.statusAriaLive !== 'polite') {
+    || desktopExecute.statusAriaLive !== 'polite'
+    || desktopExecute.reaction !== 'execute'
+    || !(desktopExecute.reactionT > 0)
+    || !(desktopExecute.reactionStrength > 0)) {
     failures.push(`desktop K Execute path disagreed with semantic status: ${JSON.stringify({
       setup: desktopExecuteSetup,
       readyDom: desktopExecuteReadyDom,
@@ -1349,6 +1540,8 @@ async function openGame(browser, options) {
     nErrors: failures.length,
     failures,
     result,
+    touchSunderSetup,
+    touchSunder,
     touchExecuteSetup,
     touchExecuteReadyDom,
     touchExecute,

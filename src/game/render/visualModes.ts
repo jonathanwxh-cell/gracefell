@@ -23,6 +23,8 @@ export type BossVisualAttack =
   | 'ring'
   | 'spiral';
 
+export type MalakarTechniqueImpact = 'sunder' | 'execute';
+
 export interface VisualProofFlags {
   arena: ArenaVisualMode;
   boss: BossVisualMode;
@@ -42,6 +44,8 @@ export interface MalakarVisualSnapshot {
   secondSwordDraw: number;
   recoil: number;
   recoilAng: number;
+  techniqueImpact: MalakarTechniqueImpact | null;
+  techniqueImpactStrength: number;
   time: number;
 }
 

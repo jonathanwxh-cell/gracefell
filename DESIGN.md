@@ -3022,3 +3022,67 @@ visual/failure gate passed with zero errors or warnings.
 The documentation-only acceptance merge is the tagged checkpoint. It changes
 no runtime file and binds the exact implementation, deployment evidence, and
 future-agent handoff to `v2.27.5`.
+
+## v2.27.6 — Codex (GPT-5), "break the crown" (2026-07-29)
+
+### Problem
+
+Sunder and Execute were mechanically authoritative but shared almost the same
+boss-local reaction: white hurt flash, recoil, sparks, and numeric damage. Each
+also repeated its technique name over Malakar while the central feedback lane
+already announced the same word. On desktop, the central ready prompts said
+`TAP HVY` even though the authored heavy key is `K`.
+
+### Decision
+
+Keep the central lane as the single textual technique authority and make the
+king carry the local distinction. A connected Sunder briefly compresses
+Malakar, splays his orbiting halo, and draws broken gold fracture arcs. Execute
+uses a stronger compression, wider crown burst, and a narrow spirit cleave.
+Both use deterministic, bounded Canvas paths and the existing gold/spirit
+language; neither uses the hostile danger hue.
+
+`Boss.techniqueImpact` is presentation state alongside recoil. It enters the
+read-only Malakar snapshot, decays over 0.28 or 0.38 seconds, clears to `null`,
+and is recreated with each fight. The opt-in Three renderer consumes the same
+strength for pose and halo spread so the supported visual modes agree. Numeric
+damage remains at the hit and the central lane announces the technique once.
+
+Desktop Sunder and Execute prompts now say `TAP K`; touch keeps `TAP HVY`.
+
+### Rejected alternatives
+
+- A permanent rim light was not revived because the v2.24 review already found
+  it competed with Malakar's halo silhouette.
+- Full-screen flashes, danger red, extra particles, new text, and a fifth
+  control would add noise or borrow hostile telegraph language.
+- Damage, poise, stamina, Resolve, hitstop, stagger, input priority, and save
+  changes were excluded because the problem was reaction clarity, not balance.
+
+### Changed from v2.27.5
+
+- Sunder and Execute have distinct, king-local presentation reactions.
+- Duplicate local `SUNDER` and `EXECUTE` words are removed; damage numbers and
+  the one central technique announcement remain.
+- Desktop next-action prompts name `K`; touch still names `HVY`.
+- The v2.24 lane now locks technique-reaction decay, reset, and render purity.
+- The v2.27 lane adds genuine three-tap Sunder screenshots, reaction-state
+  assertions, single-label checks, and the corrected desktop prompt contract.
+- Combat values, action timing, authority, difficulty, score, save-v7, audio,
+  assets, touch geometry, boss position/collision/AI, and shadow anchoring are
+  unchanged.
+
+### Acceptance and release boundary
+
+This is a local `gracefell@2.27.6` candidate. It is not pushed, released, or
+deployed. Lint, 30 unit tests, build, the focused v2.24 and expanded v2.27
+browser lanes, and the complete QA matrix passed. The full run reported zero
+errors; visual-upgrade readiness was `ready` with zero errors/warnings; the
+render census remained 920 mobile / 903 desktop draws with 39 gradients,
+two `drawImage` calls, and nine shadow-blur writes in each scene.
+
+The passing real-input artifacts were inspected at 390×844 and 1440×900:
+mobile Sunder shows one central name plus gold crown fractures, mobile Execute
+shows one central name plus numeric damage and the spirit cleave, and desktop
+Execute readiness names `K`. Production remains v2.27.5 until a separate
+publish request.
