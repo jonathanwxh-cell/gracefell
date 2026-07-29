@@ -8,17 +8,15 @@ rules are all decided by what works one-handed on a 390px screen.
 
 **Play it: [gracefell.alyoechosys.dev](https://gracefell.alyoechosys.dev)**
 
-Release candidate: **v2.27.5** — one earned stagger now owns its complete
+Current release: **[v2.27.5](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.5)** —
+one earned stagger now owns its complete
 opening even when the poise-breaking hit also crosses a phase threshold.
 Execute is the single next-action truth across the central HUD, semantic combat
 status, and contextual heavy button until consumed; afterward the same opening
 returns to ordinary HVY without spending Resolve. Damage, stamina, poise,
 timings, difficulty, saves, scores, audio, assets, and touch geometry are
-unchanged. Candidate evidence is recorded in
-[`docs/releases/v2.27.5.md`](docs/releases/v2.27.5.md). The latest published
-checkpoint remains
-[v2.27.4](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.4)
-until review, exact-SHA deployment, public QA, and tagging finish.
+unchanged. Exact candidate, CI, deployment, public QA, and five-role evidence
+are recorded in [`docs/releases/v2.27.5.md`](docs/releases/v2.27.5.md).
 
 The **v2.27.2** combo-truth foundation remains intact. A poise-breaking second
 light can no longer let Sunder steal
@@ -779,8 +777,10 @@ That record includes reviewed CI, exact-SHA deployment, and complete public QA.
 
 Research, adversarial review, exact-duration and exact-once checks, genuine
 touch/keyboard actions, and semantic-DOM evidence are in
-[`docs/releases/v2.27.5.md`](docs/releases/v2.27.5.md). Publication remains
-provisional until the blocking release sequence completes.
+[`docs/releases/v2.27.5.md`](docs/releases/v2.27.5.md). Five exact-bundle
+agent-simulated gamer roles scored it 9.0–9.6/10 with no zero category or
+blocker; the same record contains reviewed CI, exact-SHA deployment, and the
+complete public QA receipt.
 
 ## Running it
 

@@ -1,11 +1,15 @@
 # GRACEFELL project facts
 
-- Current package candidate: `gracefell@2.27.5`
-- Current release candidate: `v2.27.5` stagger authority
-- Published checkpoint: [`v2.27.4`](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.4)
-- Candidate release receipt: [`docs/releases/v2.27.5.md`](docs/releases/v2.27.5.md)
-- Candidate publication state: provisional until reviewed merge, exact-SHA deployment, public QA, acceptance merge, tag, and GitHub release
-- Previous release: [`v2.27.3`](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.3), final SHA `81663a3a86f827bf4d1e37afef0d771e1e551472`
+- Current package: `gracefell@2.27.5`
+- Current release: [`v2.27.5`](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.5), stagger authority
+- Release receipt: [`docs/releases/v2.27.5.md`](docs/releases/v2.27.5.md)
+- Previous release: [`v2.27.4`](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.4)
+- v2.27.5 reviewed head: `62aa91848ef6e794d5e9b849b8dab48bf07e3b10`
+- v2.27.5 implementation PR: [#108](https://github.com/jonathanwxh-cell/gracefell/pull/108)
+- v2.27.5 PR CI: [run 30446253514](https://github.com/jonathanwxh-cell/gracefell/actions/runs/30446253514), passed
+- v2.27.5 runtime merge: `fca01e8c324aa227e8bb63f217aba5788f79b53e`
+- v2.27.5 runtime-main CI: [run 30446537473](https://github.com/jonathanwxh-cell/gracefell/actions/runs/30446537473), passed
+- v2.27.5 production bundle: `assets/index-C6-AvkyV.js`
 - v2.27.4 reviewed head: `8302a12957bc369b604332070811eff1eebc013f`
 - v2.27.4 implementation PR: [#106](https://github.com/jonathanwxh-cell/gracefell/pull/106)
 - v2.27.4 PR CI: [run 30436996211](https://github.com/jonathanwxh-cell/gracefell/actions/runs/30436996211), passed
