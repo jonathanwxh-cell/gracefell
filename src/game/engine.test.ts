@@ -8,6 +8,7 @@ import {
   resolveGainFor, RESOLVE_MAX,
   SUNDER_DAMAGE, SUNDER_TOTAL_POISE,
   GRACEBREAK_DAMAGE, GRACEBREAK_TOTAL_POISE,
+  openingStalkSeconds, GUIDED_OPENING_STALK_SECONDS,
 } from './engine';
 
 describe('math helpers', () => {
@@ -223,5 +224,16 @@ describe('v2.27 Resolve and authored enders', () => {
     expect(SUNDER_TOTAL_POISE).toBeGreaterThan(SUNDER_DAMAGE);
     expect(GRACEBREAK_TOTAL_POISE).toBeGreaterThan(GRACEBREAK_DAMAGE);
     expect(GRACEBREAK_DAMAGE).toBeGreaterThan(SUNDER_DAMAGE);
+  });
+});
+
+describe('first-run opening guidance', () => {
+  it('gives only an unfinished Journey tutorial a readable opening approach', () => {
+    expect(openingStalkSeconds(false, -3)).toBe(GUIDED_OPENING_STALK_SECONDS);
+    expect(openingStalkSeconds(false, -2)).toBe(GUIDED_OPENING_STALK_SECONDS);
+    expect(openingStalkSeconds(false, -1)).toBe(GUIDED_OPENING_STALK_SECONDS);
+    expect(openingStalkSeconds(true, -2)).toBe(0.4);
+    expect(openingStalkSeconds(false, 0)).toBe(0.4);
+    expect(openingStalkSeconds(false, 5)).toBe(0.4);
   });
 });

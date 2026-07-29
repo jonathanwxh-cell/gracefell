@@ -1,9 +1,10 @@
 # GRACEFELL project facts
 
-- Current package: `gracefell@2.27.3`
-- Current release: `v2.27.3` touch BREAK activation
-- Published checkpoint: [`v2.27.3`](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.3) after reviewed publication
-- Release receipts: [`docs/releases/v2.27.3.md`](docs/releases/v2.27.3.md)
+- Current package: `gracefell@2.27.4` candidate
+- Current published release: `v2.27.3` touch BREAK activation
+- Published checkpoint: [`v2.27.3`](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.3)
+- Candidate record: [`docs/releases/v2.27.4.md`](docs/releases/v2.27.4.md)
+- Previous release receipts: [`docs/releases/v2.27.3.md`](docs/releases/v2.27.3.md)
 - Previous release: [`v2.27.2`](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.2), final SHA `d45272eb5407fe6dc7f3103df21978f1fbb58efd`
 - v2.27.3 reviewed head: `8e1e6d2958f8a595671365b2855248912e29f516`
 - v2.27.3 implementation PR: [#104](https://github.com/jonathanwxh-cell/gracefell/pull/104)

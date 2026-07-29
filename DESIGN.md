@@ -2863,3 +2863,61 @@ interruption preserved Resolve and cleared the latch; desktop partial hold
 remained manual. The complete public QA gate then passed with zero errors,
 zero visual warnings, and the unchanged 920 mobile / 903 desktop draw-call
 census.
+
+## v2.27.4 — Codex (GPT-5), "room to read" (2026-07-29)
+
+Five role-directed baseline reviews agreed that Gracefell's compact combat
+verbs, feedback, retry, and presentation were already strong. The repeated
+failure was narrower: a new touch player spent the first exchange parsing a
+floating stick, four actions, the HUD, and the tutorial while Malakar could
+choose an attack after 0.4 seconds. The intro also consumed most of the
+4.5-second MOVE lesson before the player could act.
+
+### Decision
+
+Treat first-run orientation as an ownership bug, not a request for more game.
+Only an unfinished tutorial on a negative Journey path receives a 3.2-second
+opening stalk. The tutorial clock begins when the fight becomes playable, the
+existing faint MOVE target survives until movement is learned, and the next
+ROLL lesson leaves after four seconds instead of six. Returning players,
+Measured, and Oaths retain the established 0.4-second opening.
+
+The optional semantic Combat tips are now three short techniques and name the
+actual device action: touch taps BREAK; desktop holds Heavy through its charge.
+
+### Rejected alternatives
+
+- A tutorial screen, fifth button, permanent combo panel, new mode, reward, or
+  currency would add first-minute weight to a game whose strength is one
+  readable duel.
+- Global boss-speed, damage, health, recovery, or telegraph changes would
+  dilute Measured/Oath mastery without addressing the first-run clock.
+- A new character-rim or effect pass was deferred. Two roles noticed brief
+  close-range silhouette compression, but all five final roles passed after
+  the timing/banner correction and no visual blocker was reproduced.
+- Removing the intro or retrying directly into combat would change the duel's
+  authored cadence; the existing skip and bounded re-entry already tested well.
+
+### Changed from v2.27.3
+
+- New unfinished Journey runs receive one readable opening approach.
+- Tutorial time is playable time, not intro time.
+- The touch MOVE target persists through the MOVE lesson.
+- The follow-up ROLL prompt lasts four seconds instead of six.
+- Combat tips are concise and device-correct.
+- Damage, poise, stamina, Resolve, health, iframes, boss actions, difficulty,
+  scores, saves, audio, assets, touch geometry, camera, and rendering are
+  unchanged.
+
+### Acceptance
+
+The pure opening helper locks the scope in unit tests. The complete local gate
+passed 30 tests, lint, build, desktop/mobile/true-touch QA, v2.21/v2.24/v2.27
+focused lanes, audio lifecycle, the ready/zero-warning visual gate, and the
+920-mobile / 903-desktop deterministic render census with zero errors.
+
+Five independent agent-simulated gamer roles then scored the exact candidate
+8.0, 8.0, 8.25, 8.3, and 8.6 out of 10 with no zero category or control
+blocker. The touch regular observed first boss commitment at 3.22 seconds and
+first damage at 3.97 seconds; the veteran observed windup at 3.39 seconds and
+strike at 4.13 seconds while verifying Sunder and roll slash.

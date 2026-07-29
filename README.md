@@ -162,7 +162,7 @@ who did which pass, and the rules any future agent follows before touching the c
 | drag on the **movement side** | a floating stick appears under your thumb; defaults left and can be mirrored |
 | **ATK** | slash — connect three light hits for a finisher, press during a roll for a recovery slash, or connect two then use HVY for Sunder |
 | **ROLL** | invincible — roll *into* a swing for a perfect dodge |
-| **HVY** | heavy, slow, big poise damage; after two connected light hits it becomes Sunder, and at full Resolve a full hold becomes Gracebreak |
+| **HVY** | heavy, slow, big poise damage; after two connected light hits it becomes Sunder, and at full Resolve it becomes BREAK — tap once to complete the charge and release Gracebreak |
 | **FLASK** | heal (Journey starts with four; the selected path is shown before the fight) |
 | **MIX** | freezes combat while the score remains audible; set Music/Combat effects, test SFX, then Done |
 | **PAUSE / RESUME** | freezes the fight and audio; no time, attack, or input advances |
@@ -195,9 +195,10 @@ Break his poise to stagger him; staggered hits do 1.4×. Land a roll *into* an i
 Connected attacks and deliberate defensive play build the thin **Resolve**
 rail under stamina. Light hits grant 1/1/3 across the string; Sunder grants 6,
 a roll slash 4, a perfect dodge 8, a sufficiently charged heavy 6, a flank 4,
-and an Execute 12. Resolve never persists between attempts. At 100, hold HVY
-through its complete charge to release Gracebreak. Quick or partial heavy
-attacks leave the meter ready for later.
+and an Execute 12. Resolve never persists between attempts. At 100, touch
+players tap BREAK once to complete its charge; keyboard and mouse players hold
+HVY through the charge. Quick or partial desktop heavy attacks leave the meter
+ready for later.
 
 Victory is graded S through C on time and wounds taken. Your best time and win count persist locally.
 The title-screen **SCORES** chronicle keeps the latest 20 victories on this device with their grade,
@@ -732,6 +733,32 @@ publication, and exact-SHA deployment receipts:
 
 Complete implementation, local acceptance, GitHub publication, and exact-SHA
 production receipts: [`docs/releases/v2.27.2.md`](docs/releases/v2.27.2.md).
+
+## Candidate by Codex — v2.27.4 room to read
+
+- **The first Journey opening is playable teaching time.** An unfinished
+  tutorial on a negative Journey path gives Malakar one 3.2-second stalking
+  approach before attack selection. Returning players, Measured, and every
+  Oath retain the established 0.4-second opening.
+- **The intro no longer spends the tutorial clock.** The opening MOVE message
+  receives its full 4.5 seconds after control begins. On touch, the faint MOVE
+  target remains visible until movement is learned even if another action is
+  tried first.
+- **Teaching leaves the exchange sooner.** Moving advances to the existing
+  roll lesson for four seconds rather than six, reducing banner competition
+  during close combat without adding a new tutorial screen.
+- **Instructions match the device.** Combat tips are three short techniques.
+  Touch says `tap Break`; keyboard and mouse say `hold Heavy through the
+  charge`.
+- **The combat stays Gracefell.** No new action, button, mode, boss pattern,
+  reward, damage value, stamina value, save field, asset, or touch geometry was
+  added.
+
+Five independent agent-simulated gamer roles scored the exact candidate
+8.0–8.6/10. Research, local acceptance, scorecards, and the bounded-change
+record are in [`docs/releases/v2.27.4.md`](docs/releases/v2.27.4.md).
+Publication receipts remain pending until reviewed CI, exact-SHA deployment,
+and public QA complete.
 
 ## Running it
 
