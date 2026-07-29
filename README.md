@@ -755,7 +755,7 @@ production receipts: [`docs/releases/v2.27.2.md`](docs/releases/v2.27.2.md).
   added.
 
 Five independent agent-simulated gamer roles scored the exact candidate
-8.0–8.6/10. Research, local acceptance, scorecards, and the bounded-change
+8.0–9.0/10. Research, local acceptance, scorecards, and the bounded-change
 record are in [`docs/releases/v2.27.4.md`](docs/releases/v2.27.4.md).
 Publication receipts remain pending until reviewed CI, exact-SHA deployment,
 and public QA complete.

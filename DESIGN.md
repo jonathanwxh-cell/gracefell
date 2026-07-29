@@ -2916,8 +2916,13 @@ passed 30 tests, lint, build, desktop/mobile/true-touch QA, v2.21/v2.24/v2.27
 focused lanes, audio lifecycle, the ready/zero-warning visual gate, and the
 920-mobile / 903-desktop deterministic render census with zero errors.
 
-Five independent agent-simulated gamer roles then scored the exact candidate
-8.0, 8.0, 8.25, 8.3, and 8.6 out of 10 with no zero category or control
-blocker. The touch regular observed first boss commitment at 3.22 seconds and
-first damage at 3.97 seconds; the veteran observed windup at 3.39 seconds and
-strike at 4.13 seconds while verifying Sunder and roll slash.
+The frozen-diff review then found that the MOVE ring still expired with the
+text timer if no movement occurred. The amended build keeps only that faint
+spatial affordance until movement advances the stage, with a rendered
+post-expiry regression proving presence before learning and absence afterward.
+
+All five agent-simulated gamer roles reran on the amended exact bundle and
+scored 8.0, 8.4, 8.9, 9.0, and 9.0 out of 10 with no zero category or control
+blocker. A newcomer remained alive after 4.85 idle seconds, then dealt 183
+damage through the next 18.5 seconds; the veteran reached stagger at 5.88
+seconds and tutorial completion at 6.90 seconds.

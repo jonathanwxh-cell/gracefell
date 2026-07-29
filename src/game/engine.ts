@@ -5278,6 +5278,7 @@ Game.prototype.drawVictory = function drawVictory(this: Game, ctx: CanvasRenderi
 
 Game.prototype.drawTouchUI = function drawTouchUI(this: Game, ctx: CanvasRenderingContext2D) {
   // joystick
+  const moveLessonActive = this.tutorialStage === 'move';
   if (this.input.joyActive) {
     ctx.globalAlpha = 0.25;
     ctx.strokeStyle = PAL.parchment;
@@ -5287,10 +5288,12 @@ Game.prototype.drawTouchUI = function drawTouchUI(this: Game, ctx: CanvasRenderi
     ctx.fillStyle = PAL.parchment;
     ctx.beginPath(); ctx.arc(this.input.joyOx + this.input.joyX * 52, this.input.joyOy + this.input.joyY * 52, 22, 0, TAU); ctx.fill();
     ctx.globalAlpha = 1;
-  } else if (this.hintT > 0 || (this.tutorialStage === 'move' && this.tutorialT > 0)) {
+  } else if (this.hintT > 0 || moveLessonActive) {
     const guideX = this.w * (this.leftHanded ? 0.78 : 0.22);
     const guideY = this.h - Math.max(84, 72 + this.safeBottom);
-    const guideT = this.tutorialStage === 'move' ? Math.max(this.hintT, this.tutorialT) : this.hintT;
+    // The text lesson may expire, but a hesitant first-run player keeps one
+    // faint spatial affordance until movement actually advances the lesson.
+    const guideT = moveLessonActive ? Math.max(1, this.hintT, this.tutorialT) : this.hintT;
     ctx.globalAlpha = 0.38 * clamp(guideT / 2, 0, 1);
     ctx.strokeStyle = PAL.parchment;
     ctx.lineWidth = 1.5;

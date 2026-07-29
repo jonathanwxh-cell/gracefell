@@ -2251,6 +2251,44 @@ async function installAudioSampleRate(context) {
         out.errors.push('touch: first-run Journey lost its playable opening guidance: '
           + JSON.stringify(t.openingGuidance));
       }
+      t.moveGuidePersistence = await pg.evaluate(() => {
+        const g = window.__game;
+        const canvas = document.querySelector('canvas');
+        const ctx = canvas.getContext('2d');
+        const originalFillText = ctx.fillText;
+        const original = {
+          stage: g.tutorialStage,
+          tutorialT: g.tutorialT,
+          hintT: g.hintT,
+        };
+        let moveLabels = 0;
+        ctx.fillText = function (text, x, y, maxWidth) {
+          if (String(text) === 'MOVE') moveLabels++;
+          return maxWidth === undefined
+            ? originalFillText.call(this, text, x, y)
+            : originalFillText.call(this, text, x, y, maxWidth);
+        };
+        g.tutorialStage = 'move';
+        g.tutorialT = 0;
+        g.hintT = 0;
+        g.render();
+        const afterPromptExpiry = moveLabels;
+        moveLabels = 0;
+        g.tutorialStage = 'roll';
+        g.render();
+        const afterMovementLearned = moveLabels;
+        ctx.fillText = originalFillText;
+        g.tutorialStage = original.stage;
+        g.tutorialT = original.tutorialT;
+        g.hintT = original.hintT;
+        g.render();
+        return { afterPromptExpiry, afterMovementLearned };
+      });
+      if (t.moveGuidePersistence.afterPromptExpiry < 1
+        || t.moveGuidePersistence.afterMovementLearned !== 0) {
+        out.errors.push('touch: MOVE guide does not persist exactly until movement is learned: '
+          + JSON.stringify(t.moveGuidePersistence));
+      }
 
       // The player-resource HUD is Canvas content while the utilities mix DOM
       // and Canvas targets. Protect the actual cross-layer geometry so a valid
