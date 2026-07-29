@@ -8,15 +8,14 @@ rules are all decided by what works one-handed on a 390px screen.
 
 **Play it: [gracefell.alyoechosys.dev](https://gracefell.alyoechosys.dev)**
 
-Current release: **[v2.27.5](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.5)** —
-one earned stagger now owns its complete
-opening even when the poise-breaking hit also crosses a phase threshold.
-Execute is the single next-action truth across the central HUD, semantic combat
-status, and contextual heavy button until consumed; afterward the same opening
-returns to ordinary HVY without spending Resolve. Damage, stamina, poise,
-timings, difficulty, saves, scores, audio, assets, and touch geometry are
-unchanged. Exact candidate, CI, deployment, public QA, and five-role evidence
-are recorded in [`docs/releases/v2.27.5.md`](docs/releases/v2.27.5.md).
+Current release: **[v2.27.6](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.6)** —
+Sunder now fractures Malakar's crown in gold and Execute lands as a stronger
+spirit cleave. The central lane remains the one technique-name authority,
+desktop readiness names the real `K` key, and numeric damage stays king-local.
+Damage, stamina, poise, Resolve, timings, difficulty, saves, scores, audio,
+assets, collision, AI, and touch geometry are unchanged. Exact reviewed CI,
+deployment, public real-input QA, and visual evidence are recorded in
+[`docs/releases/v2.27.6.md`](docs/releases/v2.27.6.md).
 
 The **v2.27.2** combo-truth foundation remains intact. A poise-breaking second
 light can no longer let Sunder steal
@@ -782,7 +781,7 @@ agent-simulated gamer roles scored it 9.0–9.6/10 with no zero category or
 blocker; the same record contains reviewed CI, exact-SHA deployment, and the
 complete public QA receipt.
 
-## Local candidate — v2.27.6 king reactions
+## Improved by Codex — v2.27.6 king reactions
 
 - **Sunder breaks the crown in gold.** Its real `ATK · ATK · HVY` contact
   briefly compresses Malakar, splays his halo, and draws broken fracture arcs.
@@ -797,8 +796,9 @@ complete public QA receipt.
   phase authority, save-v7, touch geometry, boss collision/AI, audio, and
   hostile telegraph colors are unchanged.
 
-This work is a locally verified candidate, not the current release. Production
-and the linked public receipt remain v2.27.5 until a separate publish request.
+The reviewed runtime is deployed and publicly verified. The complete
+exact-SHA, bundle-hash, real-input, performance, and visual acceptance record
+is [`docs/releases/v2.27.6.md`](docs/releases/v2.27.6.md).
 
 ## Running it
 

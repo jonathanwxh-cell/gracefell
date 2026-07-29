@@ -1,9 +1,16 @@
 # GRACEFELL project facts
 
-- Current package candidate: `gracefell@2.27.6` (local; not released or deployed)
-- Current release: [`v2.27.5`](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.5), stagger authority
-- Release receipt: [`docs/releases/v2.27.5.md`](docs/releases/v2.27.5.md)
-- Previous release: [`v2.27.4`](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.4)
+- Current package: `gracefell@2.27.6`
+- Current release: [`v2.27.6`](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.6), Sunder/Execute king reactions
+- Release receipt: [`docs/releases/v2.27.6.md`](docs/releases/v2.27.6.md)
+- Previous release: [`v2.27.5`](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.5)
+- v2.27.6 reviewed head: `c0d206254518b7d0afb5474fa9f36af161167a4b`
+- v2.27.6 implementation PR: [#110](https://github.com/jonathanwxh-cell/gracefell/pull/110)
+- v2.27.6 PR CI: [run 30454794423](https://github.com/jonathanwxh-cell/gracefell/actions/runs/30454794423), passed
+- v2.27.6 runtime merge: `a693a4a92adfd20b7732d2f05b63ac27adc89980`
+- v2.27.6 runtime-main CI: [run 30455115531](https://github.com/jonathanwxh-cell/gracefell/actions/runs/30455115531), passed
+- v2.27.6 production bundle: `assets/index-C9hWQYkd.js`
+- v2.27.6 bundle SHA-256: `3245E3C69DCE63E43A8330C32F7BAC1365BE2F9324770BF784305B1F2192513B`
 - v2.27.5 reviewed head: `62aa91848ef6e794d5e9b849b8dab48bf07e3b10`
 - v2.27.5 implementation PR: [#108](https://github.com/jonathanwxh-cell/gracefell/pull/108)
 - v2.27.5 PR CI: [run 30446253514](https://github.com/jonathanwxh-cell/gracefell/actions/runs/30446253514), passed
@@ -24,7 +31,7 @@
 - Final acceptance-main CI: [run 30318778678](https://github.com/jonathanwxh-cell/gracefell/actions/runs/30318778678), passed
 - Production-receipt merge: `b1cca605d325122830ac01737f32a097165b1ed9`
 - Receipt-main CI: [run 30316920447](https://github.com/jonathanwxh-cell/gracefell/actions/runs/30316920447), passed
-- Production bundle: `assets/index-DDP4dxP_.js`
+- Production bundle: `assets/index-C9hWQYkd.js`
 - Visual release: Blender-authored cached arena + Canvas-first Malakar
 - Character foundation: Kite-Veil Penitent + Fallen Blade-Saint
 - Production: <https://gracefell.alyoechosys.dev>

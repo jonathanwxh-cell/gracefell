@@ -3074,15 +3074,34 @@ Desktop Sunder and Execute prompts now say `TAP K`; touch keeps `TAP HVY`.
 
 ### Acceptance and release boundary
 
-This is a local `gracefell@2.27.6` candidate. It is not pushed, released, or
-deployed. Lint, 30 unit tests, build, the focused v2.24 and expanded v2.27
-browser lanes, and the complete QA matrix passed. The full run reported zero
-errors; visual-upgrade readiness was `ready` with zero errors/warnings; the
-render census remained 920 mobile / 903 desktop draws with 39 gradients,
-two `drawImage` calls, and nine shadow-blur writes in each scene.
+`gracefell@2.27.6` passed lint, 30 unit tests, build, the focused v2.24 and
+expanded v2.27 browser lanes, and the complete local QA matrix. Reviewed head
+`c0d206254518b7d0afb5474fa9f36af161167a4b` passed GitHub Actions run
+30454794423 in PR #110. Runtime merge
+`a693a4a92adfd20b7732d2f05b63ac27adc89980` passed independent main run
+30455115531 before production changed.
+
+Production fast-forwarded cleanly to that exact runtime merge, built
+`assets/index-C9hWQYkd.js`, and restarted `gracefell.service` at
+21:19:50 +08. Loopback and public health returned
+`{"ok":true,"app":"gracefell"}`. The public bundle matched the server at
+SHA-256
+`3245E3C69DCE63E43A8330C32F7BAC1365BE2F9324770BF784305B1F2192513B`.
+
+The public main desktop/mobile/true-touch rerun and the v2.21, v2.24, v2.27,
+performance, and visual/failure gates all passed with zero errors; visual
+readiness was `ready` with zero warnings. The render census remained 920
+mobile / 903 desktop draws with 39 radial gradients, two `drawImage` calls,
+and nine shadow-blur writes in each scene.
 
 The passing real-input artifacts were inspected at 390×844 and 1440×900:
 mobile Sunder shows one central name plus gold crown fractures, mobile Execute
 shows one central name plus numeric damage and the spirit cleave, and desktop
-Execute readiness names `K`. Production remains v2.27.5 until a separate
-publish request.
+Execute readiness names `K`. The first public evidence capture revealed that a
+full-page screenshot could consume the real 600 ms Sunder window; the harness
+now freezes simulation only for that ready-state capture and resumes before
+the real HVY tap. No gameplay timer or acceptance threshold changed.
+
+`docs/releases/v2.27.6.md` is the durable acceptance record. This non-runtime
+checkpoint changes no shipped gameplay behavior and is the annotated `v2.27.6`
+tag target.
