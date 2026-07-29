@@ -889,7 +889,20 @@ async function installAudioSampleRate(context) {
         await pg.waitForTimeout(400);
 
         // phase 2
-        await pg.evaluate(() => { const g = (window).__game; g.boss.takeDamage(g.boss.maxHp * 0.5, g, g.player.x, g.player.y); });
+        await pg.evaluate(() => {
+          const g = window.__game;
+          // This lane owns soundtrack/weather transition behavior, so isolate
+          // it from the adaptive-audio stagger probe above. v227.cjs separately
+          // proves that a same-hit poise break defers this transition until the
+          // complete authored stagger opening ends.
+          g.boss.state = 'recover';
+          g.boss.t = 99;
+          // takeDamage also subtracts its packet from poise. Keep this
+          // soundtrack-only probe above both forced HP packets without changing
+          // the authored maxPoise value used by gameplay.
+          g.boss.poise = g.boss.maxHp;
+          g.boss.takeDamage(g.boss.maxHp * 0.5, g, g.player.x, g.player.y);
+        });
         await pg.waitForFunction(() => window.__game.audio.debugState().soundtrackTransitioning,
           null, { timeout: 1500 }).catch(() => {});
         const phase2TransitionStarted = await pg.evaluate(() => window.__game.audio.debugState().soundtrackTransitioning);

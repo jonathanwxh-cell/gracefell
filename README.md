@@ -8,15 +8,17 @@ rules are all decided by what works one-handed on a 390px screen.
 
 **Play it: [gracefell.alyoechosys.dev](https://gracefell.alyoechosys.dev)**
 
-Current release: **v2.27.4** — a first Journey player now receives one readable
-opening approach, the full tutorial clock begins only when combat is playable,
-and the faint touch MOVE ring remains until movement is actually learned.
-Moving clears that guide and the next ROLL lesson leaves sooner. Returning
-players, Measured, Oaths, combat balance, and the compact action set are
-unchanged. Five amended-build gamer roles scored 8.0–9.0/10. Evidence is
-recorded in [`docs/releases/v2.27.4.md`](docs/releases/v2.27.4.md); the durable
-GitHub checkpoint is
-[v2.27.4](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.4).
+Release candidate: **v2.27.5** — one earned stagger now owns its complete
+opening even when the poise-breaking hit also crosses a phase threshold.
+Execute is the single next-action truth across the central HUD, semantic combat
+status, and contextual heavy button until consumed; afterward the same opening
+returns to ordinary HVY without spending Resolve. Damage, stamina, poise,
+timings, difficulty, saves, scores, audio, assets, and touch geometry are
+unchanged. Candidate evidence is recorded in
+[`docs/releases/v2.27.5.md`](docs/releases/v2.27.5.md). The latest published
+checkpoint remains
+[v2.27.4](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.4)
+until review, exact-SHA deployment, public QA, and tagging finish.
 
 The **v2.27.2** combo-truth foundation remains intact. A poise-breaking second
 light can no longer let Sunder steal
@@ -758,6 +760,27 @@ Five independent agent-simulated gamer roles scored the exact candidate
 8.0–9.0/10. Research, local acceptance, scorecards, and the bounded-change
 record are in [`docs/releases/v2.27.4.md`](docs/releases/v2.27.4.md).
 That record includes reviewed CI, exact-SHA deployment, and complete public QA.
+
+## Improved by Codex — v2.27.5 stagger authority
+
+- **The earned opening cannot be stolen.** A poise break that also crosses the
+  55% or 22% phase threshold keeps its complete authored stagger. The existing
+  ring transition begins once after that opening ends.
+- **Every surface names the same next action.** `boss.executeReady` owns the
+  central prompt, semantic combat status, touch heavy label, Resolve rail, and
+  live status. Sunder and Gracebreak cannot advertise over an available
+  Execute; a full stored meter says `RESOLVE FULL` until stagger ends.
+- **Consumption is truthful.** The successful Execute announces `EXECUTE`.
+  While the remaining stagger animation finishes, the button returns to
+  ordinary `HVY`; a second heavy remains ordinary and preserves full Resolve.
+- **The combat stays Gracefell.** No damage, poise, stamina, stagger duration,
+  phase timing, difficulty, score, save, audio, asset, control, or geometry
+  value changed.
+
+Research, adversarial review, exact-duration and exact-once checks, genuine
+touch/keyboard actions, and semantic-DOM evidence are in
+[`docs/releases/v2.27.5.md`](docs/releases/v2.27.5.md). Publication remains
+provisional until the blocking release sequence completes.
 
 ## Running it
 

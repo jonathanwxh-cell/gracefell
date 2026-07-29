@@ -1,9 +1,10 @@
 # GRACEFELL project facts
 
-- Current package: `gracefell@2.27.4`
-- Current release: `v2.27.4` room to read
+- Current package candidate: `gracefell@2.27.5`
+- Current release candidate: `v2.27.5` stagger authority
 - Published checkpoint: [`v2.27.4`](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.4)
-- Release receipts: [`docs/releases/v2.27.4.md`](docs/releases/v2.27.4.md)
+- Candidate release receipt: [`docs/releases/v2.27.5.md`](docs/releases/v2.27.5.md)
+- Candidate publication state: provisional until reviewed merge, exact-SHA deployment, public QA, acceptance merge, tag, and GitHub release
 - Previous release: [`v2.27.3`](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.3), final SHA `81663a3a86f827bf4d1e37afef0d771e1e551472`
 - v2.27.4 reviewed head: `8302a12957bc369b604332070811eff1eebc013f`
 - v2.27.4 implementation PR: [#106](https://github.com/jonathanwxh-cell/gracefell/pull/106)

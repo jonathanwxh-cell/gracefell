@@ -1162,6 +1162,7 @@ export class Boss {
   impulseVx = 0; impulseVy = 0; traceCount = 0;
   poise = 120; maxPoise = 120;
   executeConsumed = false; // one stagger execution (riposte) per poise break
+  get executeReady() { return this.state === 'staggered' && !this.executeConsumed; }
   cooldowns: Record<BossAttack, number> = { swipe: 0, slam: 0, charge: 0, volley: 0, meteor: 0, ring: 0, spiral: 0 };
   aura = 0; hurtFlash = 0;
   // Visual-only knockback: the drawn body gives ground on a hit while the
@@ -1356,7 +1357,12 @@ export class Boss {
     }
 
     // phase transitions
-    if (this.phase === 1 && this.hp <= this.maxHp * 0.55 && !this.phaseRoarDone) {
+    if (
+      this.phase === 1
+      && this.hp <= this.maxHp * 0.55
+      && !this.phaseRoarDone
+      && this.state !== 'staggered'
+    ) {
       this.phaseRoarDone = true;
       this.phase = 2;
       this.chainQueue = []; this.chainStep = 0; this.chainTotal = 0;
@@ -1374,7 +1380,12 @@ export class Boss {
       // push player back
       const a = angTo(this.x, this.y, p.x, p.y);
       p.impulseVx = Math.cos(a) * 420; p.impulseVy = Math.sin(a) * 420;
-    } else if (this.phase === 2 && this.hp <= this.maxHp * 0.22 && !this.phase3Done) {
+    } else if (
+      this.phase === 2
+      && this.hp <= this.maxHp * 0.22
+      && !this.phase3Done
+      && this.state !== 'staggered'
+    ) {
       this.phase3Done = true;
       this.phase = 3;
       this.chainQueue = []; this.chainStep = 0; this.chainTotal = 0;
@@ -2868,7 +2879,11 @@ export class Game {
     const status = this.paused ? 'Paused' : this.state === 'title' ? 'Title screen'
       : this.state === 'intro' ? 'Malakar enters the arena'
       : this.state === 'fight'
-        ? `Battle in progress, phase ${this.boss.phase}${telegraph ? `. ${telegraph}` : ''}${this.resolve >= RESOLVE_MAX ? '. Resolve ready' : ''}`
+        ? `Battle in progress, phase ${this.boss.phase}${telegraph ? `. ${telegraph}` : ''}${
+          this.resolve >= RESOLVE_MAX
+            ? this.boss.state === 'staggered' ? '. Resolve full' : '. Resolve ready'
+            : ''
+        }`
       : this.state === 'dead' ? `Defeated. Malakar has ${Math.max(0, Math.ceil((this.boss.hp / this.boss.maxHp) * 100))}% health remaining`
       : `Victory. Grade ${this.grade}. Score saved`;
     return {
@@ -2911,16 +2926,18 @@ export class Game {
         queuedLights: this.player.queuedLightAttacks,
         queuedAction: this.player.recoveryAction ?? '',
         resolvePercent: Math.round(clamp(this.resolve / RESOLVE_MAX, 0, 1) * 100),
-        resolveReady: this.resolve >= RESOLVE_MAX,
-        technique: this.techniqueT > 0
-          ? this.techniqueText
-          : this.boss.state === 'staggered'
-            ? 'Execute ready'
+        resolveReady: this.resolve >= RESOLVE_MAX && this.boss.state !== 'staggered',
+        technique: this.boss.executeReady
+          ? 'Execute ready'
+          : this.techniqueT > 0
+            ? this.techniqueText
             : this.player.recoveryAction
               ? `${this.player.recoveryAction} queued for recovery`
-              : this.player.sunderWindow > 0.08
+              : this.boss.state !== 'staggered' && this.player.sunderWindow > 0.08
                 ? (this.player.sunderQueued ? 'Sunder queued' : 'Sunder available')
-                : this.resolve >= RESOLVE_MAX ? 'Gracebreak ready' : '',
+                : this.boss.state !== 'staggered' && this.resolve >= RESOLVE_MAX
+                  ? 'Gracebreak ready'
+                  : '',
       },
     };
   }
@@ -3380,10 +3397,14 @@ export class Game {
     this.resolve = clamp(this.resolve + amount, 0, RESOLVE_MAX);
     if (before < RESOLVE_MAX && this.resolve >= RESOLVE_MAX) {
       this.audio.resolveReady();
-      this.announceTechnique(
-        this.input.isTouch ? 'RESOLVE FULL · TAP BREAK' : 'RESOLVE FULL · HOLD HVY',
-        1.8,
-      );
+      // A full meter earned on the same contact as a stagger remains stored,
+      // but Execute owns the next-action lane until that opening ends.
+      if (this.boss.state !== 'staggered') {
+        this.announceTechnique(
+          this.input.isTouch ? 'RESOLVE FULL · TAP BREAK' : 'RESOLVE FULL · HOLD HVY',
+          1.8,
+        );
+      }
       this.vibrate([10, 24, 14]);
       this.uiChanged?.();
     }
@@ -3492,7 +3513,7 @@ export class Game {
       const a = angTo(p.x, p.y, b.x, b.y);
       if (Math.abs(angDiff(p.facing, a)) < arc) {
         const punishedStagger = b.state === 'staggered';
-        execute = heavy && punishedStagger && !b.executeConsumed;
+        execute = heavy && b.executeReady;
         flank = !punishedStagger && b.state !== 'windup'
           && isFlankHit(b.facing, b.x, b.y, p.x, p.y);
         if (execute) {
@@ -3509,6 +3530,7 @@ export class Game {
           this.shake(14, 0.4);
           this.sparks(b.x, b.y, 24);
           this.addDamageNum(b.x, b.y - b.r - 48, 'EXECUTE', PAL.spirit, 24);
+          this.announceTechnique('EXECUTE');
           this.audio.execute(this.audioSpatial(b.x, b.y));
         } else {
           const base = (heavy || sunder || finisher || rollSlash) ? dmg : dmg + Math.floor(rand(-2, 3));
@@ -3543,7 +3565,10 @@ export class Game {
             this.hitstop = Math.max(this.hitstop, 0.1);
             this.zoomPunch = Math.max(this.zoomPunch, 0.052);
             this.addDamageNum(b.x, b.y - b.r - 46, 'SUNDER', PAL.goldBright, 19);
-            this.announceTechnique('SUNDER');
+            // A Sunder contact may also earn the stagger opening. In that
+            // case Execute is the next authoritative action and owns the
+            // transient lane immediately.
+            if (b.state !== 'staggered') this.announceTechnique('SUNDER');
           }
           if (gracebreak) {
             p.stam = clamp(p.stam + 20, 0, p.maxStam);
@@ -4665,21 +4690,27 @@ Game.prototype.drawHUD = function drawHUD(this: Game, ctx: CanvasRenderingContex
   const segmentGap = 2;
   const segmentW = (resolveW - segmentGap * 3) / 4;
   const resolveFilled = (this.resolve / RESOLVE_MAX) * 4;
+  const resolveFull = this.resolve >= RESOLVE_MAX;
+  const gracebreakReady = resolveFull && this.boss.state !== 'staggered';
   for (let i = 0; i < 4; i++) {
     const x = i * (segmentW + segmentGap);
     ctx.fillStyle = 'rgba(188,215,255,0.18)';
     ctx.fillRect(x, 0, segmentW, 6);
     const fill = clamp(resolveFilled - i, 0, 1);
     if (fill > 0) {
-      ctx.fillStyle = this.resolve >= RESOLVE_MAX ? PAL.spirit : 'rgba(201,169,89,0.92)';
+      ctx.fillStyle = resolveFull ? PAL.spirit : 'rgba(201,169,89,0.92)';
       ctx.fillRect(x, 0, segmentW * fill, 6);
     }
   }
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   ctx.font = body(8, 800);
-  ctx.fillStyle = this.resolve >= RESOLVE_MAX ? PAL.spirit : 'rgba(226,208,164,0.82)';
-  ctx.fillText(this.resolve >= RESOLVE_MAX ? 'BREAK READY' : 'RESOLVE', resolveW + 7, 3);
+  ctx.fillStyle = resolveFull ? PAL.spirit : 'rgba(226,208,164,0.82)';
+  ctx.fillText(
+    gracebreakReady ? 'BREAK READY' : resolveFull ? 'RESOLVE FULL' : 'RESOLVE',
+    resolveW + 7,
+    3,
+  );
 
   // flasks
   ctx.translate(0, 9);
@@ -4719,8 +4750,8 @@ Game.prototype.drawHUD = function drawHUD(this: Game, ctx: CanvasRenderingContex
   const queuedLights = this.player.queuedLightAttacks;
   // Retire the route cue just before the simulation boundary so a displayed
   // SUNDER prompt always survives long enough for a touch to resolve.
-  const executeReady = this.boss.state === 'staggered';
-  const showSunder = !executeReady && this.player.sunderWindow > 0.08;
+  const executeReady = this.boss.executeReady;
+  const showSunder = this.boss.state !== 'staggered' && this.player.sunderWindow > 0.08;
   const recoveryAction = this.player.recoveryAction?.toUpperCase() ?? '';
   if (
     this.techniqueT > 0
@@ -4735,7 +4766,7 @@ Game.prototype.drawHUD = function drawHUD(this: Game, ctx: CanvasRenderingContex
     const queued = '\u25c6'.repeat(queuedLights);
     ctx.globalAlpha = this.playerChainHits > 0 ? clamp(this.playerChainT / 0.28, 0, 1) : 1;
     ctx.textAlign = 'center';
-    const techniqueActive = this.techniqueT > 0;
+    const techniqueActive = this.techniqueT > 0 && !executeReady;
     const highlighted = techniqueActive || this.chainBreakT > 0 || executeReady || showSunder || this.playerChainFinished;
     ctx.font = serif(techniqueActive || this.playerChainFinished ? 17 : 14, 750);
     ctx.fillStyle = highlighted ? PAL.spirit : PAL.parchment;
@@ -4750,12 +4781,12 @@ Game.prototype.drawHUD = function drawHUD(this: Game, ctx: CanvasRenderingContex
           : queuedLights > 0
             ? `ATK QUEUED · ${queued}`
             : '';
-    const feedbackText = techniqueActive
-      ? this.techniqueText
-      : this.chainBreakT > 0
-        ? this.chainBreakText
-        : executeReady
-          ? 'EXECUTE READY · TAP HVY'
+    const feedbackText = executeReady
+      ? 'EXECUTE READY · TAP HVY'
+      : techniqueActive
+        ? this.techniqueText
+        : this.chainBreakT > 0
+          ? this.chainBreakText
           : recoveryAction
             ? `RECOVERING · ${recoveryAction} QUEUED`
             : chainText;
@@ -4856,7 +4887,11 @@ Game.prototype.drawHUD = function drawHUD(this: Game, ctx: CanvasRenderingContex
   }
 
   // ---- control hints
-  if (this.hintT > 0 && !(rite && tutorialLayout.sharesControlHintLane)) {
+  if (
+    this.hintT > 0
+    && this.boss.state !== 'staggered'
+    && !(rite && tutorialLayout.sharesControlHintLane)
+  ) {
     const hintAlpha = clamp(this.hintT / 2, 0, 1);
     ctx.globalAlpha = hintAlpha;
     ctx.textAlign = 'center';
@@ -5309,9 +5344,10 @@ Game.prototype.drawTouchUI = function drawTouchUI(this: Game, ctx: CanvasRenderi
   for (const b of laidOut) {
     const bx = b.x, by = b.y;
     const unavailable = b.id === 'flask' && this.player.flasks <= 0;
-    const breakReady = b.id === 'heavy' && this.resolve >= RESOLVE_MAX;
-    const executeReady = b.id === 'heavy' && this.boss.state === 'staggered';
-    const sunderReady = b.id === 'heavy' && !executeReady && this.player.sunderWindow > 0.08;
+    const bossStaggered = this.boss.state === 'staggered';
+    const breakReady = b.id === 'heavy' && !bossStaggered && this.resolve >= RESOLVE_MAX;
+    const executeReady = b.id === 'heavy' && this.boss.executeReady;
+    const sunderReady = b.id === 'heavy' && !bossStaggered && this.player.sunderWindow > 0.08;
     const techniqueReady = breakReady || executeReady || sunderReady;
     const active = this.input.btnPressed[b.id]
       || this.input.hasBuffered(b.id)

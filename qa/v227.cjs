@@ -89,11 +89,11 @@ async function openGame(browser, options) {
       return states;
     };
 
-    const renderLabels = () => {
-      const labels = [];
+    const renderText = () => {
+      const entries = [];
       const originalFillText = CanvasRenderingContext2D.prototype.fillText;
       CanvasRenderingContext2D.prototype.fillText = function capture(text, x, y, ...rest) {
-        labels.push(String(text));
+        entries.push({ text: String(text), x, y });
         return originalFillText.call(this, text, x, y, ...rest);
       };
       try {
@@ -101,7 +101,20 @@ async function openGame(browser, options) {
       } finally {
         CanvasRenderingContext2D.prototype.fillText = originalFillText;
       }
-      return labels;
+      return entries;
+    };
+    const renderLabels = () => renderText().map(({ text }) => text);
+    const isCentralFeedback = ({ x, y }) => Math.abs(x - g.w / 2) < 1
+      && y >= 100
+      && y <= 250;
+    const isHeavyButtonLabel = ({ text, x, y }, label) => {
+      const heavyButton = g.touchLayout().btns.find((button) => button.id === 'heavy');
+      return Boolean(
+        heavyButton
+        && text === label
+        && Math.abs(x - heavyButton.x) < 1
+        && Math.abs(y - (heavyButton.y + 4)) < 1
+      );
     };
 
     // ATK, ATK, HVY must branch only after two connected lights.
@@ -249,22 +262,226 @@ async function openGame(browser, options) {
     g.tutorialStage = 'done';
     g.tutorialT = 0;
     g.hintT = 0;
+    g.resolve = 100;
     perform('light');
     b.poise = 10;
     perform('light');
-    const executeRouteLabels = renderLabels();
+    g.hintT = 4;
+    const executeRouteText = renderText();
+    const executeRouteLabels = executeRouteText.map(({ text }) => text);
+    const executeRouteCombat = g.uiSnapshot().combat;
     const executeRouteStartHp = b.hp;
     const executeRouteStates = perform('heavy');
+    const postExecuteText = renderText();
+    const postExecuteCombat = g.uiSnapshot().combat;
     const executeOverSunder = {
-      staggeredAfterSecondContact: executeRouteLabels.some((label) => label.includes('EXECUTE READY')),
+      staggeredAfterSecondContact: b.state === 'staggered',
+      centralExecuteReady: executeRouteText.some(
+        (entry) => entry.text === 'EXECUTE READY · TAP HVY'
+          && isCentralFeedback(entry),
+      ),
+      semanticExecuteReady: executeRouteCombat.technique === 'Execute ready',
+      semanticGracebreakReady: executeRouteCombat.resolveReady,
+      resolveFullLabel: executeRouteLabels.includes('RESOLVE FULL'),
+      showedBreakReady: executeRouteLabels.includes('BREAK READY'),
+      showedGracebreakHint: executeRouteLabels.some((label) => label.includes('GRACEBREAK')),
+      showedSunderHint: executeRouteLabels.some((label) => label.includes('SUNDER')),
       showedSunderReady: executeRouteLabels.some((label) => label.includes('SUNDER READY')),
-      executeButton: executeRouteLabels.includes('EXECUTE'),
+      executeButton: executeRouteText.some((entry) => isHeavyButtonLabel(entry, 'EXECUTE')),
       sawHeavy: executeRouteStates.includes('heavy'),
       sawSunder: executeRouteStates.includes('sunder'),
       executeConsumed: b.executeConsumed,
       damage: executeRouteStartHp - b.hp,
       routeCleared: p.routeLightHits === 0 && p.sunderWindow === 0 && !p.sunderQueued,
+      postExecuteTechnique: postExecuteCombat.technique,
+      postSemanticGracebreakReady: postExecuteCombat.resolveReady,
+      postResolveFullLabel: postExecuteText.some(({ text }) => text === 'RESOLVE FULL'),
+      postShowedBreakReady: postExecuteText.some(({ text }) => text === 'BREAK READY'),
+      postShowedGracebreakHint: postExecuteText.some(({ text }) => text.includes('GRACEBREAK')),
+      postShowedSunderHint: postExecuteText.some(({ text }) => text.includes('SUNDER')),
+      postExecuteReady: postExecuteText.some(
+        (entry) => entry.text === 'EXECUTE READY · TAP HVY'
+          && isCentralFeedback(entry),
+      )
+        || postExecuteCombat.technique === 'Execute ready',
+      postExecuteButton: postExecuteText.some((entry) => isHeavyButtonLabel(entry, 'EXECUTE')),
+      postBreakButton: postExecuteText.some((entry) => isHeavyButtonLabel(entry, 'BREAK')),
+      postSunderButton: postExecuteText.some((entry) => isHeavyButtonLabel(entry, 'SUNDER')),
+      postHeavyButton: postExecuteText.some((entry) => isHeavyButtonLabel(entry, 'HVY')),
     };
+    const postExecuteHeavyStart = {
+      hp: b.hp,
+      resolve: g.resolve,
+      uses: g.resolveUses,
+    };
+    const postExecuteHeavyStates = perform('heavy');
+    executeOverSunder.postExecuteHeavy = {
+      sawHeavy: postExecuteHeavyStates.includes('heavy'),
+      sawSunder: postExecuteHeavyStates.includes('sunder'),
+      damage: postExecuteHeavyStart.hp - b.hp,
+      resolve: g.resolve,
+      uses: g.resolveUses,
+    };
+    b.state = 'recover';
+    b.t = 99;
+    const afterStaggerText = renderText();
+    const afterStaggerCombat = g.uiSnapshot().combat;
+    executeOverSunder.afterStagger = {
+      semanticGracebreakReady: afterStaggerCombat.resolveReady,
+      breakReadyLabel: afterStaggerText.some(({ text }) => text === 'BREAK READY'),
+      breakButton: afterStaggerText.some((entry) => isHeavyButtonLabel(entry, 'BREAK')),
+      gracebreakHint: afterStaggerText.some(({ text }) => text.includes('GRACEBREAK')),
+    };
+
+    // Execute can naturally cross the Resolve cap. The stored meter may become
+    // full, but its Break action must not overwrite Execute authority.
+    ({ p, b } = setArena());
+    g.tutorialStage = 'done';
+    g.tutorialT = 0;
+    g.hintT = 4;
+    g.resolve = 89;
+    b.state = 'staggered';
+    b.t = 99;
+    b.executeConsumed = false;
+    const executeFillStartHp = b.hp;
+    const executeFillStates = perform('heavy');
+    const executeFillText = renderText();
+    const executeFillLabels = executeFillText.map(({ text }) => text);
+    const executeFillCombat = g.uiSnapshot().combat;
+    const executeFill = {
+      sawHeavy: executeFillStates.includes('heavy'),
+      executeConsumed: b.executeConsumed,
+      damage: executeFillStartHp - b.hp,
+      resolve: g.resolve,
+      technique: executeFillCombat.technique,
+      status: g.uiSnapshot().status,
+      semanticGracebreakReady: executeFillCombat.resolveReady,
+      centralExecute: executeFillText.some(
+        (entry) => entry.text === 'EXECUTE' && isCentralFeedback(entry),
+      ),
+      resolveFullLabel: executeFillLabels.includes('RESOLVE FULL'),
+      showedBreakReady: executeFillLabels.includes('BREAK READY'),
+      showedGracebreakHint: executeFillLabels.some((label) => label.includes('GRACEBREAK')),
+      heavyButton: executeFillText.some((entry) => isHeavyButtonLabel(entry, 'HVY')),
+    };
+
+    // Sunder remains the connected action, but if its poise packet creates a
+    // stagger, the newly earned Execute opportunity owns every next-action
+    // surface immediately.
+    ({ p, b } = setArena());
+    g.tutorialStage = 'done';
+    g.tutorialT = 0;
+    g.hintT = 0;
+    perform('light');
+    perform('light');
+    b.poise = 20;
+    const sunderStaggerStates = perform('heavy');
+    const sunderStaggerText = renderText();
+    const sunderStaggerAuthority = {
+      sawSunder: sunderStaggerStates.includes('sunder'),
+      bossState: b.state,
+      technique: g.uiSnapshot().combat.technique,
+      centralExecuteReady: sunderStaggerText.some(
+        (entry) => entry.text === 'EXECUTE READY · TAP HVY'
+          && isCentralFeedback(entry),
+      ),
+      executeButton: sunderStaggerText.some((entry) => isHeavyButtonLabel(entry, 'EXECUTE')),
+      staleSunderBanner: sunderStaggerText.some(
+        (entry) => entry.text === 'SUNDER' && isCentralFeedback(entry),
+      ),
+    };
+
+    // A poise break owns its complete punish opening even when the same hit
+    // crosses a phase threshold. The existing ring transition begins exactly
+    // once after the stagger expires.
+    const phaseThresholdStagger = (phase) => {
+      ({ p, b } = setArena());
+      b.maxHp = 1000;
+      b.hp = phase === 1 ? 560 : 230;
+      b.phase = phase;
+      b.phaseRoarDone = phase >= 2;
+      b.phase3Done = false;
+      b.maxPoise = 400;
+      b.poise = 1;
+      b.state = 'recover';
+      b.t = 99;
+      const expectedOpening = g.mods.staggerDuration;
+      const transitionCalls = {
+        setPhase: 0,
+        phaseBanner: 0,
+        staggerBanner: 0,
+        deepenArena: 0,
+        stampPhaseScars: 0,
+      };
+      const originalSetPhase = g.audio.setPhase;
+      const originalBanner = g.banner;
+      const originalDeepenArena = g.deepenArena;
+      const originalStampPhaseScars = g.stampPhaseScars;
+      g.audio.setPhase = (...args) => {
+        transitionCalls.setPhase++;
+        return originalSetPhase.apply(g.audio, args);
+      };
+      g.banner = (...args) => {
+        if (args[1] === 'phase') transitionCalls.phaseBanner++;
+        if (args[1] === 'stagger') transitionCalls.staggerBanner++;
+        return originalBanner.apply(g, args);
+      };
+      g.deepenArena = (...args) => {
+        transitionCalls.deepenArena++;
+        return originalDeepenArena.apply(g, args);
+      };
+      g.stampPhaseScars = (...args) => {
+        transitionCalls.stampPhaseScars++;
+        return originalStampPhaseScars.apply(g, args);
+      };
+      try {
+        b.takeDamage(20, g, p.x, p.y, 'heavy');
+        const awarded = {
+          phase: b.phase,
+          state: b.state,
+          opening: b.t,
+          expectedOpening,
+          executeReady: g.uiSnapshot().combat.technique,
+        };
+        b.update(1 / 60, g);
+        const during = {
+          phase: b.phase,
+          state: b.state,
+          remaining: b.t,
+          executeReady: g.uiSnapshot().combat.technique,
+        };
+        let heldFrames = 1;
+        while (b.state === 'staggered' && b.t > 1 / 60 && heldFrames < 240) {
+          b.update(1 / 60, g);
+          heldFrames++;
+        }
+        const beforeTransition = {
+          phase: b.phase,
+          state: b.state,
+          remaining: b.t,
+          heldFrames,
+        };
+        b.update(1 / 60, g);
+        const transitioned = {
+          phase: b.phase,
+          state: b.state,
+          attack: b.attack,
+          phaseRoarDone: b.phaseRoarDone,
+          phase3Done: b.phase3Done,
+        };
+        b.update(1 / 60, g);
+        transitioned.stablePhase = b.phase;
+        transitioned.calls = { ...transitionCalls };
+        return { awarded, during, beforeTransition, transitioned };
+      } finally {
+        g.audio.setPhase = originalSetPhase;
+        g.banner = originalBanner;
+        g.deepenArena = originalDeepenArena;
+        g.stampPhaseScars = originalStampPhaseScars;
+      }
+    };
+    const phaseTwoStagger = phaseThresholdStagger(1);
+    const phaseThreeStagger = phaseThresholdStagger(2);
 
     // One deliberate action survives the 320 ms wound recovery. A later ROLL
     // replaces an earlier attack because defense owns the priority lane.
@@ -355,9 +572,104 @@ async function openGame(browser, options) {
     return {
       sunder, lightString, missRoute, rollPriority,
       gracebreak, whiff, partial, executePriority, interruptedTouchBreak,
-      executeOverSunder, recoveryAttack, recoveryRoll, comboFeedback,
+      executeOverSunder, sunderStaggerAuthority, phaseTwoStagger, phaseThreeStagger,
+      executeFill, recoveryAttack, recoveryRoll, comboFeedback,
       journeyWounds, measuredWounds, ironbound, layout,
     };
+  });
+
+  // Exercise the real mobile event route, then read React's live-region-adjacent
+  // combat status. The canvas, semantic panel and resolved action must agree.
+  const touchExecuteSetup = await mobile.page.evaluate(() => {
+    const g = window.__game;
+    cancelAnimationFrame(g.raf);
+    g.raf = 0;
+    g.grace = 0;
+    g.resetFight();
+    g.state = 'fight';
+    g.stateT = 1;
+    g.input.reset();
+    g.input.isTouch = true;
+    g.resolve = 100;
+    g.tutorialStage = 'done';
+    g.tutorialT = 0;
+    g.hintT = 0;
+    g.player.x = 0;
+    g.player.y = 0;
+    g.player.facing = 0;
+    g.player.stam = 100;
+    g.player.iframes = 999;
+    g.boss.x = 145;
+    g.boss.y = 0;
+    g.boss.state = 'staggered';
+    g.boss.t = 99;
+    g.boss.executeConsumed = false;
+    g.boss.hp = 9999;
+    g.boss.maxHp = 9999;
+    g.boss.poise = g.boss.maxPoise;
+    g.render();
+    g.paused = false;
+    g.lastTs = performance.now();
+    g.startLoop();
+    g.uiChanged?.();
+    return {
+      button: g.touchLayout().btns.find((candidate) => candidate.id === 'heavy'),
+      startHp: g.boss.hp,
+      snapshotTechnique: g.uiSnapshot().combat.technique,
+      snapshotResolveReady: g.uiSnapshot().combat.resolveReady,
+    };
+  });
+  await mobile.page.waitForFunction(() => {
+    const rows = [...document.querySelectorAll('#game-combat-status > div')];
+    const technique = rows.find((row) => row.querySelector('dt')?.textContent === 'Technique');
+    const resolve = rows.find((row) => row.querySelector('dt')?.textContent === 'Resolve');
+    return technique?.querySelector('dd')?.textContent === 'Execute ready'
+      && resolve?.querySelector('dd')?.textContent === '100%';
+  });
+  const touchExecuteReadyDom = await mobile.page.evaluate(() => {
+    const rows = [...document.querySelectorAll('#game-combat-status > div')];
+    const technique = rows.find((row) => row.querySelector('dt')?.textContent === 'Technique');
+    const resolve = rows.find((row) => row.querySelector('dt')?.textContent === 'Resolve');
+    return {
+      technique: technique?.querySelector('dd')?.textContent || '',
+      resolve: resolve?.querySelector('dd')?.textContent || '',
+    };
+  });
+  await mobile.page.screenshot({
+    path: path.join(ARTIFACT_DIR, 'mobile-real-tap-execute-ready.png'),
+    fullPage: true,
+  });
+  await mobile.page.touchscreen.tap(touchExecuteSetup.button.x, touchExecuteSetup.button.y);
+  await mobile.page.waitForFunction(() => window.__game?.boss.executeConsumed === true);
+  await mobile.page.waitForFunction(() => {
+    const rows = [...document.querySelectorAll('#game-combat-status > div')];
+    const technique = rows.find((row) => row.querySelector('dt')?.textContent === 'Technique');
+    const resolve = rows.find((row) => row.querySelector('dt')?.textContent === 'Resolve');
+    return technique?.querySelector('dd')?.textContent === 'EXECUTE'
+      && resolve?.querySelector('dd')?.textContent === '100%';
+  });
+  const touchExecute = await mobile.page.evaluate((startHp) => {
+    const g = window.__game;
+    const rows = [...document.querySelectorAll('#game-combat-status > div')];
+    const technique = rows.find((row) => row.querySelector('dt')?.textContent === 'Technique');
+    const resolve = rows.find((row) => row.querySelector('dt')?.textContent === 'Resolve');
+    const outcome = {
+      executeConsumed: g.boss.executeConsumed,
+      damage: startHp - g.boss.hp,
+      resolve: g.resolve,
+      uses: g.resolveUses,
+      snapshotTechnique: g.uiSnapshot().combat.technique,
+      domTechnique: technique?.querySelector('dd')?.textContent || '',
+      snapshotResolveReady: g.uiSnapshot().combat.resolveReady,
+      domResolve: resolve?.querySelector('dd')?.textContent || '',
+    };
+    cancelAnimationFrame(g.raf);
+    g.raf = 0;
+    return outcome;
+  }, touchExecuteSetup.startHp);
+  await mobile.page.screenshot({
+    path: path.join(ARTIFACT_DIR, 'mobile-real-tap-execute-hit.png'),
+    fullPage: true,
   });
 
   // The visible touch button says BREAK at full Resolve. Exercise that exact
@@ -677,7 +989,120 @@ async function openGame(browser, options) {
     fullPage: true,
   });
 
+  // Exercise the authored desktop KeyK route against the same authority.
+  const desktopExecuteSetup = await desktop.page.evaluate(() => {
+    const g = window.__game;
+    g.grace = 0;
+    g.resetFight();
+    g.state = 'fight';
+    g.stateT = 1;
+    g.input.reset();
+    g.input.isTouch = false;
+    g.resolve = 89;
+    g.tutorialStage = 'done';
+    g.tutorialT = 0;
+    g.hintT = 0;
+    g.player.x = 0;
+    g.player.y = 0;
+    g.player.facing = 0;
+    g.player.stam = 100;
+    g.player.iframes = 999;
+    g.boss.x = 145;
+    g.boss.y = 0;
+    g.boss.state = 'staggered';
+    g.boss.t = 99;
+    g.boss.executeConsumed = false;
+    g.boss.hp = 9999;
+    g.boss.maxHp = 9999;
+    g.boss.poise = g.boss.maxPoise;
+    g.paused = false;
+    g.lastTs = performance.now();
+    g.startLoop();
+    g.uiChanged?.();
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    return {
+      startHp: g.boss.hp,
+      snapshotTechnique: g.uiSnapshot().combat.technique,
+      snapshotResolveReady: g.uiSnapshot().combat.resolveReady,
+    };
+  });
+  await desktop.page.waitForFunction(() => {
+    const rows = [...document.querySelectorAll('#game-combat-status > div')];
+    const technique = rows.find((row) => row.querySelector('dt')?.textContent === 'Technique');
+    const resolve = rows.find((row) => row.querySelector('dt')?.textContent === 'Resolve');
+    return technique?.querySelector('dd')?.textContent === 'Execute ready'
+      && resolve?.querySelector('dd')?.textContent === '89%';
+  });
+  const desktopExecuteReadyDom = await desktop.page.evaluate(() => {
+    const rows = [...document.querySelectorAll('#game-combat-status > div')];
+    const technique = rows.find((row) => row.querySelector('dt')?.textContent === 'Technique');
+    const resolve = rows.find((row) => row.querySelector('dt')?.textContent === 'Resolve');
+    return {
+      technique: technique?.querySelector('dd')?.textContent || '',
+      resolve: resolve?.querySelector('dd')?.textContent || '',
+    };
+  });
+  await desktop.page.screenshot({
+    path: path.join(ARTIFACT_DIR, 'desktop-key-k-execute-ready.png'),
+    fullPage: true,
+  });
+  await desktop.page.keyboard.press('k');
+  await desktop.page.waitForFunction(() => window.__game?.boss.executeConsumed === true);
+  await desktop.page.waitForFunction(() => {
+    const rows = [...document.querySelectorAll('#game-combat-status > div')];
+    const technique = rows.find((row) => row.querySelector('dt')?.textContent === 'Technique');
+    const resolve = rows.find((row) => row.querySelector('dt')?.textContent === 'Resolve');
+    const status = document.querySelector('#game-status')?.textContent;
+    return technique?.querySelector('dd')?.textContent === 'EXECUTE'
+      && resolve?.querySelector('dd')?.textContent === '100%'
+      && status === 'Battle in progress, phase 1. MALAKAR STAGGERED. Resolve full';
+  });
+  const desktopExecute = await desktop.page.evaluate((startHp) => {
+    const g = window.__game;
+    const rows = [...document.querySelectorAll('#game-combat-status > div')];
+    const technique = rows.find((row) => row.querySelector('dt')?.textContent === 'Technique');
+    const resolve = rows.find((row) => row.querySelector('dt')?.textContent === 'Resolve');
+    const status = document.querySelector('#game-status');
+    const outcome = {
+      executeConsumed: g.boss.executeConsumed,
+      damage: startHp - g.boss.hp,
+      resolve: g.resolve,
+      uses: g.resolveUses,
+      snapshotTechnique: g.uiSnapshot().combat.technique,
+      domTechnique: technique?.querySelector('dd')?.textContent || '',
+      snapshotResolveReady: g.uiSnapshot().combat.resolveReady,
+      domResolve: resolve?.querySelector('dd')?.textContent || '',
+      domStatus: status?.textContent || '',
+      statusAriaLive: status?.getAttribute('aria-live') || '',
+    };
+    cancelAnimationFrame(g.raf);
+    g.raf = 0;
+    return outcome;
+  }, desktopExecuteSetup.startHp);
+  await desktop.page.screenshot({
+    path: path.join(ARTIFACT_DIR, 'desktop-key-k-execute-hit.png'),
+    fullPage: true,
+  });
+
   const failures = [];
+  if (touchExecuteSetup.snapshotTechnique !== 'Execute ready'
+    || touchExecuteSetup.snapshotResolveReady
+    || touchExecuteReadyDom.technique !== 'Execute ready'
+    || touchExecuteReadyDom.resolve !== '100%'
+    || !touchExecute.executeConsumed
+    || Math.abs(touchExecute.damage - 109.2) > 0.01
+    || touchExecute.resolve !== 100
+    || touchExecute.uses !== 0
+    || touchExecute.snapshotTechnique !== 'EXECUTE'
+    || touchExecute.domTechnique !== touchExecute.snapshotTechnique
+    || touchExecute.snapshotResolveReady
+    || touchExecute.domResolve !== '100%') {
+    failures.push(`real touch Execute path disagreed with semantic status: ${JSON.stringify({
+      setup: touchExecuteSetup,
+      readyDom: touchExecuteReadyDom,
+      outcome: touchExecute,
+    })}`);
+  }
   if (!touchBreakSetup.readyCopy
     || touchBreakCharging.state !== 'heavy'
     || !(touchBreakCharging.charge > 0 && touchBreakCharging.charge < 0.5)
@@ -752,14 +1177,93 @@ async function openGame(browser, options) {
     failures.push(`damage did not cancel touch BREAK safely: ${JSON.stringify(result.interruptedTouchBreak)}`);
   }
   if (!result.executeOverSunder.staggeredAfterSecondContact
+    || !result.executeOverSunder.centralExecuteReady
+    || !result.executeOverSunder.semanticExecuteReady
+    || result.executeOverSunder.semanticGracebreakReady
+    || !result.executeOverSunder.resolveFullLabel
+    || result.executeOverSunder.showedBreakReady
+    || result.executeOverSunder.showedGracebreakHint
+    || result.executeOverSunder.showedSunderHint
     || result.executeOverSunder.showedSunderReady
     || !result.executeOverSunder.executeButton
     || !result.executeOverSunder.sawHeavy
     || result.executeOverSunder.sawSunder
     || !result.executeOverSunder.executeConsumed
     || result.executeOverSunder.damage < 100
-    || !result.executeOverSunder.routeCleared) {
+    || !result.executeOverSunder.routeCleared
+    || result.executeOverSunder.postExecuteReady
+    || result.executeOverSunder.postExecuteButton
+    || result.executeOverSunder.postBreakButton
+    || result.executeOverSunder.postSunderButton
+    || !result.executeOverSunder.postHeavyButton
+    || result.executeOverSunder.postSemanticGracebreakReady
+    || !result.executeOverSunder.postResolveFullLabel
+    || result.executeOverSunder.postShowedBreakReady
+    || result.executeOverSunder.postShowedGracebreakHint
+    || result.executeOverSunder.postShowedSunderHint
+    || !result.executeOverSunder.postExecuteHeavy.sawHeavy
+    || result.executeOverSunder.postExecuteHeavy.sawSunder
+    || Math.abs(result.executeOverSunder.postExecuteHeavy.damage - 42) > 0.01
+    || result.executeOverSunder.postExecuteHeavy.resolve !== 100
+    || result.executeOverSunder.postExecuteHeavy.uses !== 0
+    || !result.executeOverSunder.afterStagger.semanticGracebreakReady
+    || !result.executeOverSunder.afterStagger.breakReadyLabel
+    || !result.executeOverSunder.afterStagger.breakButton
+    || !result.executeOverSunder.afterStagger.gracebreakHint) {
     failures.push(`Sunder route stole stagger Execute: ${JSON.stringify(result.executeOverSunder)}`);
+  }
+  if (!result.executeFill.sawHeavy
+    || !result.executeFill.executeConsumed
+    || Math.abs(result.executeFill.damage - 109.2) > 0.01
+    || result.executeFill.resolve !== 100
+    || result.executeFill.technique !== 'EXECUTE'
+    || !result.executeFill.status.includes('MALAKAR STAGGERED')
+    || !result.executeFill.status.includes('Resolve full')
+    || result.executeFill.status.includes('Resolve ready')
+    || result.executeFill.semanticGracebreakReady
+    || !result.executeFill.centralExecute
+    || !result.executeFill.resolveFullLabel
+    || result.executeFill.showedBreakReady
+    || result.executeFill.showedGracebreakHint
+    || !result.executeFill.heavyButton) {
+    failures.push(`Execute-filled Resolve displaced stagger authority: ${JSON.stringify(result.executeFill)}`);
+  }
+  if (!result.sunderStaggerAuthority.sawSunder
+    || result.sunderStaggerAuthority.bossState !== 'staggered'
+    || result.sunderStaggerAuthority.technique !== 'Execute ready'
+    || !result.sunderStaggerAuthority.centralExecuteReady
+    || !result.sunderStaggerAuthority.executeButton
+    || result.sunderStaggerAuthority.staleSunderBanner) {
+    failures.push(`Sunder-created stagger did not yield one Execute truth: ${JSON.stringify(result.sunderStaggerAuthority)}`);
+  }
+  for (const [label, phaseResult, fromPhase, toPhase] of [
+    ['phase two', result.phaseTwoStagger, 1, 2],
+    ['phase three', result.phaseThreeStagger, 2, 3],
+  ]) {
+    if (phaseResult.awarded.phase !== fromPhase
+      || phaseResult.awarded.state !== 'staggered'
+      || phaseResult.awarded.executeReady !== 'Execute ready'
+      || Math.abs(phaseResult.awarded.opening - phaseResult.awarded.expectedOpening) > 0.000001
+      || phaseResult.during.phase !== fromPhase
+      || phaseResult.during.state !== 'staggered'
+      || phaseResult.during.executeReady !== 'Execute ready'
+      || !(phaseResult.during.remaining < phaseResult.awarded.opening)
+      || phaseResult.beforeTransition.phase !== fromPhase
+      || phaseResult.beforeTransition.state !== 'staggered'
+      || phaseResult.beforeTransition.heldFrames !== Math.ceil(phaseResult.awarded.expectedOpening * 60)
+      || phaseResult.transitioned.phase !== toPhase
+      || phaseResult.transitioned.stablePhase !== toPhase
+      || phaseResult.transitioned.state !== 'windup'
+      || phaseResult.transitioned.attack !== 'ring'
+      || !phaseResult.transitioned.phaseRoarDone
+      || (toPhase === 3 && !phaseResult.transitioned.phase3Done)
+      || phaseResult.transitioned.calls.setPhase !== 1
+      || phaseResult.transitioned.calls.phaseBanner !== 1
+      || phaseResult.transitioned.calls.staggerBanner !== 1
+      || phaseResult.transitioned.calls.deepenArena !== 1
+      || phaseResult.transitioned.calls.stampPhaseScars !== 1) {
+      failures.push(`${label} threshold stole or repeated stagger payoff: ${JSON.stringify(phaseResult)}`);
+    }
   }
   if (result.recoveryAttack.queued !== 'light'
     || !result.recoveryAttack.sawLight
@@ -817,6 +1321,26 @@ async function openGame(browser, options) {
     || oathHud.separateIronbound.length !== 0) {
     failures.push(`Oath chain and IRONBOUND are not in one compact lane: ${JSON.stringify(oathHud)}`);
   }
+  if (desktopExecuteSetup.snapshotTechnique !== 'Execute ready'
+    || desktopExecuteSetup.snapshotResolveReady
+    || desktopExecuteReadyDom.technique !== 'Execute ready'
+    || desktopExecuteReadyDom.resolve !== '89%'
+    || !desktopExecute.executeConsumed
+    || Math.abs(desktopExecute.damage - 109.2) > 0.01
+    || desktopExecute.resolve !== 100
+    || desktopExecute.uses !== 0
+    || desktopExecute.snapshotTechnique !== 'EXECUTE'
+    || desktopExecute.domTechnique !== desktopExecute.snapshotTechnique
+    || desktopExecute.snapshotResolveReady
+    || desktopExecute.domResolve !== '100%'
+    || desktopExecute.domStatus !== 'Battle in progress, phase 1. MALAKAR STAGGERED. Resolve full'
+    || desktopExecute.statusAriaLive !== 'polite') {
+    failures.push(`desktop K Execute path disagreed with semantic status: ${JSON.stringify({
+      setup: desktopExecuteSetup,
+      readyDom: desktopExecuteReadyDom,
+      outcome: desktopExecute,
+    })}`);
+  }
   const errors = [...mobile.errors, ...shortTouch.errors, ...desktop.errors];
   if (errors.length) failures.push(`page errors: ${JSON.stringify(errors)}`);
 
@@ -825,6 +1349,9 @@ async function openGame(browser, options) {
     nErrors: failures.length,
     failures,
     result,
+    touchExecuteSetup,
+    touchExecuteReadyDom,
+    touchExecute,
     touchBreakSetup,
     touchBreakCharging,
     touchBreak,
@@ -832,6 +1359,9 @@ async function openGame(browser, options) {
     pauseLayout,
     oathHud,
     desktopLayout,
+    desktopExecuteSetup,
+    desktopExecuteReadyDom,
+    desktopExecute,
     artifacts: ARTIFACT_DIR,
   };
   fs.writeFileSync(path.join(ARTIFACT_DIR, 'result.json'), JSON.stringify(out, null, 2));

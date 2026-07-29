@@ -2941,3 +2941,67 @@ Loopback and public health both returned `{"ok":true,"app":"gracefell"}`. The
 complete public desktop/mobile/true-touch gate then passed in 257.1 seconds
 with zero errors, zero visual warnings, the MOVE post-expiry lifecycle intact,
 and the unchanged 920-mobile / 903-desktop render census.
+
+## v2.27.5 — Codex (GPT-5), stagger authority (2026-07-29)
+
+### Problem
+
+v2.27.2 correctly made a poise-breaking second light route to Execute instead
+of Sunder, but the authority was incomplete. A stagger earned on the same hit
+as a 55% or 22% phase threshold could be overwritten by the phase transition
+one update later. A Sunder-created stagger could also leave transient Sunder
+copy competing with the newly earned Execute, and the touch button continued
+to advertise Execute after its one consumption.
+
+### Decision
+
+Treat stagger as an owned combat transaction. `Boss.executeReady` is true only
+while Malakar is staggered and the one execution is unconsumed. That property
+drives action resolution and all next-action surfaces. Phase transitions defer
+while the boss remains staggered and resume through their existing ring path
+after the complete authored opening.
+
+Execute outranks transient Sunder copy immediately. Once consumed, the
+remaining stagger cannot advertise Execute, Sunder, or Gracebreak; heavy is an
+ordinary heavy and the earned Resolve meter is preserved.
+
+### Rejected alternatives
+
+- Retuning stagger length, phase thresholds, damage, stamina, poise, or Resolve
+  would hide an ownership defect behind balance drift.
+- Adding a fifth Execute control or permanent status panel would duplicate an
+  action already owned by HVY.
+- Starting the phase ring immediately and extending its recovery would still
+  replace the earned punish state and change phase timing.
+
+### Changed from v2.27.4
+
+- One authoritative `executeReady` property controls resolution and feedback.
+- Same-hit phase thresholds wait until stagger finishes.
+- Execute-ready copy outranks Sunder on central, semantic, and touch surfaces.
+- Full Resolve remains visibly stored as `RESOLVE FULL` during stagger without
+  advertising Break; action hints and aria-live status restore Break readiness
+  only after stagger ends.
+- A consumed Execute returns the contextual control to ordinary HVY.
+- Successful Execute announces `EXECUTE`.
+- Damage, poise, stamina, Resolve, stagger duration, phase actions/timings,
+  difficulty, scoring, save-v7, audio, assets, rendering, and touch geometry
+  remain unchanged.
+
+### Acceptance contract
+
+The v2.27 browser lane mutation-proved the old bundle against four failures,
+then verifies both phase thresholds at the exact difficulty-derived stagger
+duration and frame count. Each deferred transition must set its phase, banner,
+arena depth, and scars exactly once. A genuine touchscreen tap and desktop
+`K` press must each consume one Execute for 109.2 damage, preserve Resolve at
+100 with zero uses, and make the actual `#game-combat-status` Technique row
+move from `Execute ready` to `EXECUTE`. A later heavy in the same stagger must
+remain ordinary 42-damage HVY. A natural Execute that fills Resolve from
+89→100 must keep the `EXECUTE` result, announce `Resolve full` rather than
+`Resolve ready`, and restore Break surfaces only after stagger exits.
+
+Publication remains provisional until frozen-candidate role evaluation,
+reviewed CI, exact-SHA production deployment, complete public QA, final
+acceptance documentation, the annotated `v2.27.5` tag, and GitHub release all
+complete.
