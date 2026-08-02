@@ -3176,3 +3176,19 @@ an asset claim false must fix the claim. Added to AGENTS.md so the next
 ### Changed from v2.27.7
 - No source, build output, or behaviour. GitHub description/topics and the
   sites-hub blurb only, plus this documentation.
+
+### v2.27.8 addendum — the missing checkpoint (2026-08-03)
+
+Following the storefront fixes, a documentation-currency sweep found that the
+README's "Current release v2.27.6" link had been a 404 since 2026-07-29: the
+v2.27.6 release doc committed to "the annotated `v2.27.6` tag and GitHub
+release target its exact merge", but neither was ever created — the newest tag
+was v2.27.5. Created retroactively: annotated tag `v2.27.6` at the acceptance
+merge `96fd8e9` (matching the v2.27.5 convention, whose tag also points at its
+acceptance-doc merge), and the GitHub release, whose notes disclose the
+retroactive creation rather than backdating it. README now also states what
+has landed on `main` since the checkpoint (v2.27.7, v2.27.8) and that shipped
+runtime files are identical to it.
+
+Session provenance across the fleet: this session was also logged to the
+`interest_events` table per box convention.
