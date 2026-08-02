@@ -823,7 +823,7 @@ art/blender/          reproducible Blender sources, review proof, and receipts
 public/art/           optimized versioned runtime arena and Malakar assets
 scripts/art/          deterministic Blender build and asset validator
 src/pages/Home.tsx   mounts the canvas + semantic companion controls
-qa/run.cjs           starts an isolated 127.0.0.1:8492 QA server
+qa/run.cjs           starts an isolated QA server on a free 127.0.0.1 port (GRACEFELL_QA_PORT overrides)
 qa/verify.cjs        portable headless Playwright gate — the thing that decides "done"
 DESIGN.md            per-version reasoning log
 AGENTS.md            operational runbook / don't-undo list
