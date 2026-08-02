@@ -17,6 +17,15 @@ assets, collision, AI, and touch geometry are unchanged. Exact reviewed CI,
 deployment, public real-input QA, and visual evidence are recorded in
 [`docs/releases/v2.27.6.md`](docs/releases/v2.27.6.md).
 
+Since that release, two non-runtime passes have landed on `main`: **v2.27.7**
+made the QA harness port-portable (a free ephemeral port instead of the
+hardcoded 8492 that collided with live services on the production box), and
+**v2.27.8** corrected the public storefront — the GitHub description, topics,
+and sites-hub blurb still claimed "zero assets" twenty-five versions after the
+recorded score and art masks shipped. Both are documented in
+[`DESIGN.md`](DESIGN.md) and the [`PROVENANCE.md`](PROVENANCE.md) ledger.
+Shipped runtime files are identical to the v2.27.6 checkpoint.
+
 The **v2.27.2** combo-truth foundation remains intact. A poise-breaking second
 light can no longer let Sunder steal
 the earned Execute. One deliberate combat input now survives the 320 ms wound
