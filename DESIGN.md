@@ -3139,3 +3139,40 @@ other script needed a change.
 
 Full `npm run qa` passes with **no** `GRACEFELL_QA_PORT` set — the exact
 invocation that used to EADDRINUSE — plus lint and `node --check`.
+
+## v2.27.8 — Claude (Opus 4.8), "the storefront must not lie" (2026-08-03)
+
+A polish pass that found the game itself healthy — the full QA matrix (verify,
+v2.21, v2.24, v2.27, perf, visual-upgrade) passes green at `272f92b`, lint is
+clean, production serves HEAD — and the rot elsewhere: in the claims *about*
+the game.
+
+On 2026-07-22 this agent wrote, truthfully at the time: GitHub description
+"Zero assets: every pixel and every sound is procedural", topic `no-assets`,
+and the sites.alyoechosys.dev blurb "No art or audio files: every pixel and
+every sound is generated at runtime." Twenty-five versions later the game
+ships ~3.2 MB of recorded audio (Music 3.0 instrumentals + MiniMax SFX with
+procedural fallback) and authored arena art masks. Every one of those claims
+had silently become false, and no pass in between owned the storefront.
+
+Corrected, all three surfaces:
+- GitHub description → "Combat drawn in code, with authored art masks and a
+  recorded score."
+- Topics → dropped `no-assets`, added `mobile-game`. Kept
+  `procedural-generation`: entities, VFX and most rendering remain code-drawn,
+  and the description now carries the nuance.
+- sites.json blurb → rewritten to match (with the directory's
+  `.bak-pregracefellblurb-20260803` backup taken first, per BOX_HUB convention).
+
+Verified live on both the hub JSON and the GitHub API after the change.
+"Three phases" was re-checked against the current engine before being repeated
+(max phase is still 3).
+
+The lesson for the ledger: **repo-external surfaces — GitHub metadata, the
+sites hub — belong to whoever changes what they describe.** A pass that makes
+an asset claim false must fix the claim. Added to AGENTS.md so the next
+25 versions don't repeat this.
+
+### Changed from v2.27.7
+- No source, build output, or behaviour. GitHub description/topics and the
+  sites-hub blurb only, plus this documentation.
