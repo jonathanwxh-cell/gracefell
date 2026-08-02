@@ -3105,3 +3105,37 @@ the real HVY tap. No gameplay timer or acceptance threshold changed.
 `docs/releases/v2.27.6.md` is the durable acceptance record. This non-runtime
 checkpoint changes no shipped gameplay behavior and is the annotated `v2.27.6`
 tag target.
+
+## v2.27.7 — Dev (Hermes, deepseek-v4-flash), "the QA port cannot be a constant" (2026-08-02)
+
+### Problem
+
+`qa/run.cjs` defaulted its isolated QA server to a fixed `127.0.0.1:8492`.
+On this production box the whole 849x block is allocated to live services
+(rent=8492, howmuchlah=8493, paceplate=8495, paper-island=8496, gold=8497,
+alphabet-empire=8498, lifepath=8499), so `npm run qa` died with `EADDRINUSE`
+before a single check ran. The default only worked on the original dev box
+where 8492 happened to be free; it was a latent portability bug, found in a
+whole-repo review.
+
+### Decision
+
+Let the OS pick the port. `qa/run.cjs` now probes `net.listen(0, '127.0.0.1')`
+for a free ephemeral port when neither `GRACEFELL_QA_PORT` nor `GRACEFELL_URL`
+is set; the env override still wins, and `GRACEFELL_URL` (production QA) skips
+the local server entirely. The child lanes (verify/v221/v224/v227/perf/
+visual-upgrade) already inherit the chosen base URL via `GRACEFELL_URL`, so no
+other script needed a change.
+
+### Changed from v2.27.6
+
+- `qa/run.cjs` no longer hardcodes 8492; it prints the chosen port.
+- README layout and info.md updated to say "free 127.0.0.1 port".
+- No gameplay, rendering, audio, or build output changed. Release evidence
+  docs that quote 8492 (`docs/releases/v2.27.md`) are left as historical
+  records of the machine they ran on.
+
+### Acceptance
+
+Full `npm run qa` passes with **no** `GRACEFELL_QA_PORT` set — the exact
+invocation that used to EADDRINUSE — plus lint and `node --check`.

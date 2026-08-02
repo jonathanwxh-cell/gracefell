@@ -1,8 +1,28 @@
 const { spawn } = require('child_process');
+const net = require('node:net');
 
 // Keep automated QA isolated from the user's fixed 8491 preview/service.
-const PORT = Number(process.env.GRACEFELL_QA_PORT || 8492);
-const BASE_URL = process.env.GRACEFELL_URL || `http://127.0.0.1:${PORT}/`;
+// The QA port cannot be a fixed constant: the 849x block on the production
+// box is allocated to other services (rent=8492, howmuchlah=8493,
+// paceplate=8495, paper-island=8496, gold=8497, alphabet-empire=8498,
+// lifepath=8499), so a hardcoded default dies with EADDRINUSE before any
+// check runs. Pick a free ephemeral port instead; an explicit
+// GRACEFELL_QA_PORT override still wins, and GRACEFELL_URL skips the local
+// server entirely (production QA).
+function findFreePort() {
+  return new Promise((resolve, reject) => {
+    const probe = net.createServer();
+    probe.unref();
+    probe.on('error', reject);
+    probe.listen(0, '127.0.0.1', () => {
+      const { port } = probe.address();
+      probe.close(() => resolve(port));
+    });
+  });
+}
+
+let PORT = null;
+let BASE_URL = process.env.GRACEFELL_URL || '';
 let server = null;
 
 async function healthy() {
@@ -37,6 +57,13 @@ function runScript(script) {
 
 (async () => {
   try {
+    if (!BASE_URL) {
+      PORT = process.env.GRACEFELL_QA_PORT
+        ? Number(process.env.GRACEFELL_QA_PORT)
+        : await findFreePort();
+      BASE_URL = `http://127.0.0.1:${PORT}/`;
+      console.log(`gracefell QA server on 127.0.0.1:${PORT}`);
+    }
     if (!(await healthy())) {
       server = spawn(process.execPath, ['server.mjs'], {
         stdio: 'inherit',

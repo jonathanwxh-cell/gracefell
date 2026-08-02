@@ -60,8 +60,8 @@ npm run build
 npm run qa
 ```
 
-`npm run qa` is the acceptance gate. It builds the app, starts an isolated server on
-`127.0.0.1:8492`, and drives desktop, mobile, and real-touch Chromium paths. See
+`npm run qa` is the acceptance gate. It builds the app, starts an isolated server on a
+free `127.0.0.1` port (set `GRACEFELL_QA_PORT` to pin one), and drives desktop, mobile, and real-touch Chromium paths. See
 [`docs/releases/v2.27.2.md`](docs/releases/v2.27.2.md) for Execute/Sunder
 priority, recovery input, truthful combo feedback, pause recipes, and release
 evidence,
