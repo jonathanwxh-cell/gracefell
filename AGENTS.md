@@ -44,6 +44,14 @@ folder. Named release runs may set `GRACEFELL_QA_DIR` / `GRACEFELL_QA_RESULT`; r
 `.artifacts/` is ignored. The v2.10 evidence contract is documented in
 [`docs/releases/v2.10.md`](docs/releases/v2.10.md).
 
+## External surfaces are part of the change
+The GitHub repo description/topics and the sites-hub entry
+(`~/apps/sites/sites.json`, backup-first per BOX_HUB) describe this game to
+strangers. If your pass makes one of their claims false — asset provenance,
+phase count, input model, anything — fixing the claim is part of your pass,
+not someone else's. This rule exists because "zero assets: every sound is
+procedural" survived 25 versions after the first recorded soundtrack shipped.
+
 ## Don't-undo list
 - `window.__game` debug hook — QA depends on it.
 - **`qa/perf.cjs` asserts op COUNTS, not durations, on purpose.** Canvas call counts for its pinned scene are identical on every machine; frame timings on this codebase drift ±20% run to run, which is why the v2.20 weather budget (0.5 ms median delta from single `render()` calls) cannot actually detect what it asserts. Do not "improve" the gate by converting it to a time budget. The load-bearing assertion is the *slope* — the scene is censused with 32 projectiles and again with none, and gradients-per-projectile must stay ≤ 1.2 — so a new per-entity gradient trips it even while the absolute count still fits. Keep the two-consecutive-frame determinism check: it is what caught a lazily-built cache that allocated only on its first frame.
