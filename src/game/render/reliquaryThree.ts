@@ -3,11 +3,13 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { RELIQUARY_ASSET_VERSION, type MalakarVisualSnapshot } from './visualModes';
+import { CharacterMotion, JOINTS, type MotionInput, type MotionPose } from './reliquaryMotion';
 
 export interface PilgrimSnapshot {
   x: number; y: number; r: number; facing: number; time: number;
   state: string; t: number; moving: boolean; swordAngle: number;
   heavyCharging: boolean; heavyCharge: number; hurt: boolean;
+  vx: number; vy: number; comboStep: number; rollDir: number;
 }
 
 type Kind = 'kiteveil' | 'malakar';
@@ -19,6 +21,9 @@ interface Actor {
   cloth: { mesh: THREE.Mesh; rest: Float32Array }[];
   state: LoadState;
   triangles: number;
+  motion: CharacterMotion;
+  rest: Record<string, THREE.Vector3>;
+  pose: MotionPose | null;
 }
 
 function forgedSurface(material: THREE.MeshStandardMaterial) {
@@ -116,7 +121,8 @@ export class ReliquaryThree {
     this.scene.add(this.key, this.rim, new THREE.HemisphereLight(0xbbd5ed, 0x24170b, 1.2));
     const createActor = (): Actor => {
       const root = new THREE.Group(); root.rotation.order = 'YXZ';
-      return { root, nodes: {}, materials: [], cloth: [], state: 'loading', triangles: 0 };
+      return { root, nodes: {}, materials: [], cloth: [], state: 'loading', triangles: 0,
+        motion: new CharacterMotion(), rest: {}, pose: null };
     };
     this.actors = { kiteveil: createActor(), malakar: createActor() };
     for (const actor of Object.values(this.actors)) { actor.root.visible = false; this.scene.add(actor.root); }
@@ -150,13 +156,14 @@ export class ReliquaryThree {
       const { scene } = await loader.loadAsync(url.href);
       if (this.destroyed) { this.disposeObject(scene); return; }
       try {
-        for (const name of ['Torso', 'Head', 'Cape', 'Arm_L', 'Arm_R', 'Forearm_L', 'Forearm_R', 'Leg_L', 'Leg_R', 'Sword_R']) {
+        for (const name of JOINTS.filter(name => name !== 'Sword_L')) {
           const node = scene.getObjectByName(name);
           if (!node) throw new Error(`${kind}: missing articulated node ${name}`);
           actor.nodes[name] = node;
+          actor.rest[name] = node.position.clone();
         }
         const secondSword = scene.getObjectByName('Sword_L');
-        if (secondSword) actor.nodes.Sword_L = secondSword;
+        if (secondSword) { actor.nodes.Sword_L = secondSword; actor.rest.Sword_L = secondSword.position.clone(); }
         scene.traverse((object) => {
           if (![...object.position, ...object.quaternion, ...object.scale].every(Number.isFinite)) {
             throw new Error(`${kind}: non-finite transform`);
@@ -180,7 +187,7 @@ export class ReliquaryThree {
           }
           // Rest-space cloth vertices, deterministic time-driven displacement.
           // No accumulated transforms, no new physics state or animation clocks.
-          if (/Cape_/.test(object.name)) {
+          if (/Cape_|Head_/.test(object.name) && materials.some(material => /velvet|linen/.test(material.name))) {
             // Meshopt attributes may be quantized; expand before deforming.
             const rest = new Float32Array(positions.count * 3);
             for (let i = 0; i < positions.count; i++) {
@@ -209,26 +216,30 @@ export class ReliquaryThree {
   get ready() { return this.activated && !this.destroyed && !this.lost; }
   get failed() { return Object.values(this.actors).some((a) => a.state === 'failed'); }
 
-  private pose(actor: Actor, time: number, movement: number, hurt: boolean, motion: number) {
+  private pose(actor: Actor, input: MotionInput, hurt: boolean) {
     const n = actor.nodes;
-    // Reset all rotation every draw; no animation data is written into combat.
-    for (const node of Object.values(n)) node.rotation.set(0, 0, 0);
-    actor.root.rotation.set(0, 0, 0); actor.root.position.set(0, 0, 0);
-    n.Leg_L.rotation.x = Math.sin(time * 8.5) * .34 * movement;
-    n.Leg_R.rotation.x = -n.Leg_L.rotation.x;
-    n.Torso.rotation.z = Math.sin(time * 4.25) * .025 * movement;
-    n.Arm_L.rotation.x = -.14 + Math.sin(time * 8.5) * .14 * movement;
-    n.Arm_R.rotation.x = -.18 - Math.sin(time * 8.5) * .14 * movement;
-    n.Forearm_R.rotation.x = -.38;
-    n.Sword_R.rotation.x = -1.10;
-    if (n.Sword_L) n.Sword_L.rotation.x = -1.1;
-    n.Cape.rotation.x = .05 + movement * .12;
+    const pose = actor.motion.sample(input);
+    actor.pose = pose;
+    for (const [name, node] of Object.entries(n)) {
+      node.position.copy(actor.rest[name]);
+      node.rotation.set(...pose.joints[name as keyof typeof pose.joints]);
+      node.scale.set(1, 1, 1);
+    }
+    n.Pelvis.position.x += pose.pelvis[0]; n.Pelvis.position.y += pose.pelvis[1]; n.Pelvis.position.z += pose.pelvis[2];
+    const facing = -Math.PI / 2 - pose.facing;
+    actor.root.rotation.set(pose.rootRotation[0], facing + pose.rootRotation[1], pose.rootRotation[2]);
+    actor.root.position.set(Math.sin(facing) * pose.root[2] + Math.cos(facing) * pose.root[0],
+      pose.root[1], Math.cos(facing) * pose.root[2] - Math.sin(facing) * pose.root[0]);
+    const motion = input.reduced ? .3 : 1, movement = Math.min(1, pose.speed / 180);
     for (const { mesh, rest } of actor.cloth) {
       const positions = mesh.geometry.getAttribute('position');
       for (let i = 0; i < positions.count; i++) {
         const x = rest[i * 3], y = rest[i * 3 + 1], z = rest[i * 3 + 2];
         const fall = Math.min(1, Math.abs(y) / 1.35);
-        positions.setXYZ(i, x, y, z + Math.sin(time * 2.8 * motion + x * 7 + y * 4) * .048 * fall);
+        const flutter = Math.sin(input.time * 4.2 + x * 6 + y * 5) * (.035 + movement * .045)
+          + Math.sin(input.time * 7.1 + y * 8) * movement * .018;
+        positions.setXYZ(i, x + Math.sin(input.time * 2.1 + y * 3) * .02 * fall * motion,
+          y, z + flutter * fall * motion);
       }
       positions.needsUpdate = true;
     }
@@ -254,33 +265,9 @@ export class ReliquaryThree {
   renderPlayer(ctx: CanvasRenderingContext2D, s: PilgrimSnapshot, reducedMotion: boolean) {
     if (!this.ready) return false;
     const actor = this.actors.kiteveil, n = actor.nodes;
-    this.pose(actor, s.time, s.moving ? 1 : 0, s.hurt, reducedMotion ? .45 : 1);
-    actor.root.rotation.y = -Math.PI / 2 - s.facing;
-    const attacking = ['light', 'heavy', 'sunder', 'rollSlash'].includes(s.state);
-    n.Sword_R.scale.set(1, attacking && !s.heavyCharging ? (s.state === 'heavy' ? 2.55 : 2.15) : 1, 1);
-    if (attacking) {
-      n.Torso.rotation.y = Math.sin(s.swordAngle - s.facing) * .25;
-      n.Arm_R.rotation.y = -(s.swordAngle - s.facing) + .45;
-      n.Arm_R.rotation.x = -.8;
-      n.Forearm_R.rotation.x = -.6;
-      n.Sword_R.rotation.x = -.8;
-    }
-    if (s.heavyCharging) {
-      n.Arm_R.rotation.x = -1.45; n.Forearm_R.rotation.x = -.85;
-      n.Sword_R.rotation.x = .35; n.Torso.rotation.x = -.1;
-    }
-    if (s.state === 'flask') { n.Arm_L.rotation.x = -1.3; n.Forearm_L.rotation.x = -1; }
-    if (s.state === 'stagger') n.Torso.rotation.x = -.26;
-    if (s.state === 'dead') { actor.root.rotation.z = 1.35; actor.root.position.y = -.55; }
-    if (s.state === 'roll') {
-      const angle = (1 - s.t / .42) * Math.PI * 2;
-      actor.root.rotation.x = angle;
-      // Roll around the torso, not the origin at the feet; that would make the
-      // whole model orbit the ground anchor and clip through its own viewport.
-      const offset = -1.05 * Math.sin(angle);
-      actor.root.position.set(Math.sin(actor.root.rotation.y) * offset,
-        1.05 * (1 - Math.cos(angle)), Math.cos(actor.root.rotation.y) * offset);
-    }
+    this.pose(actor, { kind: 'kiteveil', x: s.x, y: s.y, time: s.time, vx: s.vx, vy: s.vy,
+      facing: s.facing, state: s.state, remaining: s.t, combo: s.comboStep,
+      charging: s.heavyCharging, charge: s.heavyCharge, rollDir: s.rollDir, reduced: reducedMotion }, s.hurt);
     n.Sword_R.visible = !['flask', 'dead', 'roll', 'stagger'].includes(s.state);
     this.rim.color.setHex(0x91cbff);
     this.composite(ctx, 'kiteveil', s.x, s.y + s.r * .7, s.r * 7.2);
@@ -290,34 +277,19 @@ export class ReliquaryThree {
   renderBoss(ctx: CanvasRenderingContext2D, s: MalakarVisualSnapshot, reducedMotion: boolean) {
     if (!this.ready) return false;
     const actor = this.actors.malakar, n = actor.nodes;
-    this.pose(actor, s.time, s.state === 'stalk' ? .5 : 0, s.hurtFlash > 0, reducedMotion ? .45 : 1);
-    actor.root.rotation.y = -Math.PI / 2 - s.facing;
-    const windup = Math.max(0, Math.min(1, s.windupProgress));
-    if (s.state === 'windup') {
-      n.Torso.rotation.y = -.2 - windup * .3;
-      if (s.attack === 'slam' || s.attack === 'meteor') {
-        n.Arm_R.rotation.x = -1.6 * windup; n.Sword_R.rotation.x = .3;
-      } else if (s.attack === 'swipe' || s.attack === 'charge') {
-        n.Arm_R.rotation.y = -.7 - windup * 1.1; n.Arm_R.rotation.x = -.75;
-      } else { n.Arm_L.rotation.z = -.9 * windup; n.Arm_R.rotation.z = .9 * windup; }
-    }
-    if (s.state === 'strike') {
-      n.Arm_R.rotation.y = 1.25; n.Arm_R.rotation.x = -.65;
-      n.Torso.rotation.y = .4; n.Sword_R.rotation.x = -1.25;
-    }
-    if (s.state === 'recover') { n.Torso.rotation.x = .12; n.Sword_R.rotation.x = -2.3; }
-    if (s.state === 'staggered') { n.Torso.rotation.x = .42; n.Head.rotation.x = .25; n.Arm_R.rotation.z = .25; }
+    this.pose(actor, { kind: 'malakar', x: s.x, y: s.y, time: s.time,
+      vx: s.vx ?? 0, vy: s.vy ?? 0, facing: s.facing, state: s.state,
+      remaining: s.stateRemaining ?? 0, attack: s.attack, windup: s.windupProgress,
+      phase: s.phase, reduced: reducedMotion }, s.hurtFlash > 0);
     const impact = s.techniqueImpactStrength * (s.techniqueImpact === 'execute' ? 1 : .6);
     n.Torso.rotation.x -= impact * .42;
-    actor.root.position.x = Math.cos(s.recoilAng) * s.recoil / 50;
-    actor.root.position.z = Math.sin(s.recoilAng) * s.recoil / 50;
+    actor.root.position.x += Math.cos(s.recoilAng) * s.recoil / 50;
+    actor.root.position.z += Math.sin(s.recoilAng) * s.recoil / 50;
     n.Cape.rotation.x += s.phase >= 2 ? .18 : 0;
     const sword = n.Sword_L;
     if (sword) {
       sword.visible = s.phase >= 3 && s.secondSwordDraw > .02;
       sword.scale.setScalar(Math.max(.01, Math.min(1, s.secondSwordDraw)));
-      n.Arm_L.rotation.y = s.state === 'strike' ? -1 : .4;
-      n.Arm_L.rotation.x = -.55;
     }
     // Halo belongs to world-facing presentation, so it does not disappear
     // edge-on when Malakar turns. Its nine shards still track volley spending.
@@ -343,6 +315,7 @@ export class ReliquaryThree {
       canvasSize: this.size, geometries: this.renderer.info.memory.geometries,
       textures: this.renderer.info.memory.textures,
       models: Object.fromEntries(Object.entries(this.actors).map(([name, actor]) => [name, { state: actor.state, triangles: actor.triangles }])),
+      motion: Object.fromEntries(Object.entries(this.actors).map(([name, actor]) => [name, actor.pose])),
     };
   }
 

@@ -8,6 +8,12 @@ rules are all decided by what works one-handed on a 390px screen.
 
 **Play it: [gracefell.alyoechosys.dev](https://gracefell.alyoechosys.dev)**
 
+Local motion candidate: **v2.29 — Living Motion** adds articulated knees and
+ankles, travel-driven stepping, breathing, body-led cuts and continuous
+windup/release/recovery. This is procedural animation, not motion capture.
+It is **not deployed**; the live site remains v2.28 while the owner reviews
+the moving comparison. See [the candidate record](docs/releases/v2.29.md).
+
 Graphics upgrade: **v2.28 — The Forged Reliquary**. Detailed, articulated
 Blender GLB models now replace the player and boss on hardware-accelerated
 browsers. A weathered stone arena is lit and baked in Blender Cycles; live

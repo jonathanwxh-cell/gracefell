@@ -233,7 +233,8 @@ def character(kind):
     textile=mat('Royal charcoal velvet' if boss else 'Pilgrim teal linen',(.03,.018,.044) if boss else (.035,.14,.16),0,.94)
     emission=mat('Sovereign ember' if boss else 'Pilgrim grace',(.95,.45,.09) if boss else (.24,.78,.84),.3,.26,3)
     root=empty('Malakar_Root' if boss else 'KiteVeil_Root')
-    torso=empty('Torso',(0,0,1.25),root)
+    pelvis=empty('Pelvis',(0,0,1.02),root)
+    torso=empty('Torso',(0,0,1.25),pelvis)
     # Tapered waist, barrel ribcage, peaked gorget. The armor is not a sphere stack.
     loft('Cuirass',[(1.04,.25,.16,0),(1.18,.31,.19,0),(1.43,.43 if boss else .35,.22,.015),
                      (1.6,.39 if boss else .32,.18,0),(1.7,.21,.13,0)],steel,torso)
@@ -272,18 +273,21 @@ def character(kind):
         tube('Helm crest',[(0,-.14,1.9),(0,-.14,2.07),(0,0,2.18),(0,.14,2.06)],.025,GOLD,head)
     cape=empty('Cape',(0,-.17,1.62),torso)
     cloth('Divided mantle',(0,-.17,1.62),1.35 if boss else 1.18,.65 if boss else .40,textile,cape,True)
-    # Legs retain independent thigh pivots; all geometric detail is grouped by material.
+    # Three-segment legs: real knee and ankle pivots keep planted feet level
+    # while the pelvis transfers weight. Preserve world rest positions.
     for side,label in ((-1,'L'),(1,'R')):
-        leg=empty('Leg_'+label,(side*.18,0,1.02),root)
+        leg=empty('Leg_'+label,(side*.18,0,1.02),pelvis)
         ellipsoid('Mail thigh',(side*.18,0,.80),(.145,.14,.25),DARK,leg)
         ellipsoid('Thigh cuisse',(side*.18,.08,.8),(.132,.12,.23),steel,leg)
-        ellipsoid('Pointed poleyn',(side*.18,.135,.54),(.15,.11,.115),edge,leg)
-        shin=loft('Fluted greave',[(.13,.115,.11,.025),(.29,.105,.09,0),(.46,.12,.13,0),(.52,.105,.095,0)],steel,leg)
+        knee=empty('Knee_'+label,(side*.18,0,.54),leg)
+        ellipsoid('Pointed poleyn',(side*.18,.135,.54),(.15,.11,.115),edge,knee)
+        shin=loft('Fluted greave',[(.13,.115,.11,.025),(.29,.105,.09,0),(.46,.12,.13,0),(.52,.105,.095,0)],steel,knee)
         shin.location.x+=side*.18
-        tube('Greave raised flute',[(side*.18,.13,.17),(side*.18,.143,.40),(side*.18,.14,.49)],.014,GOLD,leg)
-        box('Sabatons',(side*.18,.09,.075),(.22,.40,.15),steel,leg,.048)
+        tube('Greave raised flute',[(side*.18,.13,.17),(side*.18,.143,.40),(side*.18,.14,.49)],.014,GOLD,knee)
+        foot=empty('Foot_'+label,(side*.18,0,.12),knee)
+        box('Sabatons',(side*.18,.09,.075),(.22,.40,.15),steel,foot,.048)
         for i in range(4):
-            tube('Sabatons overlapping lames',[(side*.18-.09,.07+i*.05,.15),(side*.18,.085+i*.05,.16),(side*.18+.09,.07+i*.05,.15)],.009,edge,leg)
+            tube('Sabatons overlapping lames',[(side*.18-.09,.07+i*.05,.15),(side*.18,.085+i*.05,.16),(side*.18+.09,.07+i*.05,.15)],.009,edge,foot)
         arm=empty('Arm_'+label,(side*.4,0,1.53),torso)
         ellipsoid('Upper arm',(side*.46,0,1.32),(.11,.12,.23),DARK,arm)
         for j in range(3):

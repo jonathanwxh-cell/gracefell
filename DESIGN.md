@@ -3264,3 +3264,42 @@ Release review found that the Graphics selector had its own offsets but was omit
 from the shared fixed-position button rule, leaving it outside the visible canvas.
 Include it in that rule and enforce visible 44px geometry, separation from Scores,
 and an actual two-way toggle in desktop and phone browser QA. No combat code changes.
+
+## v2.29 — Codex (GPT-5), "Living Motion" (2026-09-06)
+
+The owner's feedback was about static movement, not insufficient polygon count.
+The v2.28 models had articulated upper bodies but rigid whole legs and largely
+state-held gestures. More mesh detail would not address that. Extend the existing
+original models with a pelvis and actual knee/ankle pivots, then make the visible
+body respond continuously to the same combat snapshots.
+
+### Changed from v2.28
+
+- Two-bone sagittal leg solving supplies bent knees and level ankles. Stepping
+  advances with actual traveled distance, with stance/swing segments; idle actors
+  breathe without marching. Hip weight, counter-rotating torso, head and arms
+  break the rigid single-transform silhouette. This is not perfect world-space
+  foot locking, motion capture, human skinning, or a claim of photoreal movement.
+- Cubic gesture keys connect preparation, release and recovery for cuts/heavies
+  and boss attacks. Rolls tuck about the torso, flasks raise/drink/lower, stagger
+  and death yield at joints. Remove elastic weapon-length stretching from the
+  new renderer; authoritative attack trails and collision reach remain unchanged.
+- Review of magnified moving sequences caught reversed shoulder/elbow flexion
+  and sword aim. glTF faces -Z; upper-body X flexion and combat-to-model Y yaw
+  need explicit sign conventions, separate from the directly solved leg axes.
+- Small actor-local history smooths presentation transitions and turns. It uses
+  the existing game clock, resets on rewind/discontinuity, and advances no clock
+  itself. Repeated renders of the same snapshot must be identical. Velocity,
+  combo and remaining-time snapshot fields are read-only; combat, audio, saves,
+  input, camera and Classic mode are untouched. Reduced-motion settings attenuate
+  incidental breathing/cloth/strain without hiding authoritative action poses.
+- Rebuilt both original Blender source files and compressed GLBs; retained the
+  original geometry attribution, arena, asset budgets and separate v2.25 pipeline.
+- `qa/motion-capture.cjs` captures real runtime meshes side by side with deployed
+  v2.28 in a clearly labeled magnified audition, not a replacement gameplay camera.
+  Unit tests cover leg endpoints, distance phase, same-clock idempotence, reset,
+  action continuity, finite transforms and reduced incidental movement. Existing
+  hardware, fallback/context-loss and real-input lanes remain required.
+
+Keep this candidate local for the owner to assess it moving before publication.
+No remote files, services or production assets were changed by this motion pass.

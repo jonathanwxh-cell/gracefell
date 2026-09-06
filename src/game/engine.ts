@@ -1724,6 +1724,9 @@ export class Boss {
         techniqueImpact: this.techniqueImpact,
         techniqueImpactStrength: this.techniqueImpactStrength,
         time: game.time,
+        vx: this.vx,
+        vy: this.vy,
+        stateRemaining: this.t,
       });
       return;
     }
@@ -3358,7 +3361,8 @@ export class Game {
     try {
       return this.reliquary?.renderPlayer(ctx, {
         x: p.x, y: p.y, r: p.r, facing: p.facing, time: this.time, state: p.state,
-        t: p.t, moving: Math.hypot(p.vx, p.vy) > 10, swordAngle: p.swordAngle(),
+        t: p.t, moving: Math.hypot(p.vx, p.vy) > 10, vx: p.vx, vy: p.vy,
+        comboStep: p.comboStep, rollDir: p.rollDir, swordAngle: p.swordAngle(),
         heavyCharging: p.heavyCharging, heavyCharge: p.heavyChargeT, hurt: p.hurtFlash > 0,
       }, this.flashReduced || !this.shakeEnabled) ?? false;
     } catch (error) { this.releaseReliquary(error); return false; }

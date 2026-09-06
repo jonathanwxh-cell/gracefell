@@ -4,7 +4,7 @@ export type BossVisualMode = 'current' | 'blender-canvas' | 'blender-three' | 'r
 // `/art/` is served with immutable caching. Every changed shipping asset must
 // bump this token so an older CDN/browser response cannot survive a release.
 export const VISUAL_ASSET_VERSION = 'v225-2';
-export const RELIQUARY_ASSET_VERSION = 'v228-1';
+export const RELIQUARY_ASSET_VERSION = 'v229-1';
 
 export type BossVisualState =
   | 'spawn'
@@ -48,6 +48,10 @@ export interface MalakarVisualSnapshot {
   techniqueImpact: MalakarTechniqueImpact | null;
   techniqueImpactStrength: number;
   time: number;
+  /** Read-only motion channels; optional for the retained v2.25 proof API. */
+  vx?: number;
+  vy?: number;
+  stateRemaining?: number;
 }
 
 const BOSS_MODES = new Set<BossVisualMode>([
