@@ -77,6 +77,7 @@ function runScript(script) {
     await runScript('qa/v227.cjs');
     await runScript('qa/perf.cjs');
     await runScript('qa/visual-upgrade.cjs');
+    await runScript('qa/reliquary.cjs');
   } finally {
     if (server) server.kill();
   }

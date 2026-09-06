@@ -8,7 +8,15 @@ rules are all decided by what works one-handed on a 390px screen.
 
 **Play it: [gracefell.alyoechosys.dev](https://gracefell.alyoechosys.dev)**
 
-Current release: **[v2.27.6](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.6)** —
+Graphics upgrade: **v2.28 — The Forged Reliquary**. Detailed, articulated
+Blender GLB models now replace the player and boss on hardware-accelerated
+browsers. A weathered stone arena is lit and baked in Blender Cycles; live
+characters use physical metal materials, environment reflections, cloth motion,
+and combat-driven poses. The title's GRAPHICS button selects 3D or Classic.
+See [the asset and validation record](docs/releases/v2.28.md) and
+[publication and live-deployment receipts in PR #115](https://github.com/jonathanwxh-cell/gracefell/pull/115).
+
+Previous tagged release: **[v2.27.6](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.6)** —
 Sunder now fractures Malakar's crown in gold and Execute lands as a stronger
 spirit cleave. The central lane remains the one technique-name authority,
 desktop readiness names the real `K` key, and numeric damage stays king-local.
@@ -24,7 +32,8 @@ hardcoded 8492 that collided with live services on the production box), and
 and sites-hub blurb still claimed "zero assets" twenty-five versions after the
 recorded score and art masks shipped. Both are documented in
 [`DESIGN.md`](DESIGN.md) and the [`PROVENANCE.md`](PROVENANCE.md) ledger.
-Shipped runtime files are identical to the v2.27.6 checkpoint.
+Those two historical passes kept runtime files identical to the v2.27.6 checkpoint;
+the v2.28 upgrade described above changes presentation.
 
 The **v2.27.2** combo-truth foundation remains intact. A poise-breaking second
 light can no longer let Sunder steal
@@ -86,7 +95,7 @@ CI, deployment, and public verification record is in
 [`docs/releases/v2.20.md`](docs/releases/v2.20.md), and the v2.19 navigation and score
 chronicle record remains in [`docs/releases/v2.19.md`](docs/releases/v2.19.md).
 
-Three compact Canvas art textures, one query-only low-poly proof, three generated music tracks,
+The published v2.27.6 treatment uses three compact Canvas art textures, one query-only low-poly proof, three generated music tracks,
 and one bounded recorded combat-SFX library. Character combat presentation, swords, halo state,
 telegraphs, weather, and effects remain driven at runtime by Canvas 2D; the Blender-authored arena
 base and phase masks occupy existing cached surfaces instead of adding a render loop. Three MiniMax

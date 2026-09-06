@@ -14,7 +14,7 @@
 >
 > Enable the commit template once: `git config commit.template .gitmessage`
 
-App: GRACEFELL, boss-arena souls-like. https://gracefell.alyoechosys.dev · port 8491 · service `gracefell` · repo jonathanwxh-cell/gracefell (public).
+App: GRACEFELL, boss-arena souls-like. https://gracefell.alyoechosys.dev · shared `app-host` on 127.0.0.1:8000 · repo jonathanwxh-cell/gracefell (public). Verified 2026-09-06: the old port-8491 `gracefell.service` is disabled; do not start it as part of deployment.
 
 ## This is a mobile-first game
 Design for a 390×844 phone held in two hands, then let desktop inherit. Any new UI has to be
@@ -32,12 +32,15 @@ secondary path, and no feature should require a keyboard.
 1. Change the scoped source or documentation and update `PROVENANCE.md` + `DESIGN.md`.
 2. `npm run lint`, `npm run build`, and `npm run qa` — all MUST pass.
 3. Publish through a reviewed GitHub PR and identify the exact merged SHA.
-4. On the host, fast-forward `/home/alyosha/apps/gracefell` to `origin/main` and run
-   `npm --prefix /home/alyosha/apps/gracefell run build`.
-5. Restart in an isolated command with `systemctl --user restart gracefell.service`. The
-   `restart_service` helper is not available in the ordinary SSH shell.
-6. Verify `systemctl --user is-active gracefell.service`, the remote Git SHA, `/health`, and the
-   public URL. For gameplay changes, rerun `qa/verify.cjs` with `GRACEFELL_URL` set to production.
+4. On the host, confirm a clean checkout and the live app-host registry entry, back up the
+   existing `dist/`, then fast-forward `/home/alyosha/apps/gracefell` to the exact reviewed
+   `origin/main` SHA. Build into a staging output directory, validate it, and promote assets
+   before atomically replacing `dist/index.html`. Preserve old hashed chunks for open clients.
+5. The shared host reads `/home/alyosha/apps/gracefell/dist` per request. No restart is needed;
+   do not restart shared infrastructure or revive the retired dedicated service.
+6. Verify `systemctl --user is-active app-host.service`, the remote Git SHA, `/health`, public
+   bundle/asset hashes and the public URL. Rerun `qa/verify.cjs` with `GRACEFELL_URL` set to
+   production, plus the new 3D and real-input lanes for graphics changes.
 
 The default QA result and screenshots live under the platform temp directory's `gracefell-qa`
 folder. Named release runs may set `GRACEFELL_QA_DIR` / `GRACEFELL_QA_RESULT`; repo-local
@@ -57,7 +60,8 @@ procedural" survived 25 versions after the first recorded soundtrack shipped.
 - **`qa/perf.cjs` asserts op COUNTS, not durations, on purpose.** Canvas call counts for its pinned scene are identical on every machine; frame timings on this codebase drift ±20% run to run, which is why the v2.20 weather budget (0.5 ms median delta from single `render()` calls) cannot actually detect what it asserts. Do not "improve" the gate by converting it to a time budget. The load-bearing assertion is the *slope* — the scene is censused with 32 projectiles and again with none, and gradients-per-projectile must stay ≤ 1.2 — so a new per-entity gradient trips it even while the absolute count still fits. Keep the two-consecutive-frame determinism check: it is what caught a lazily-built cache that allocated only on its first frame.
 - **Do not re-attempt the v2.23 render optimisations without on-device evidence.** Pre-baked glow sprites for particles were measured **17.6% slower** (non-overlapping IQR, interleaved against a same-build control at +0.5%). A projectile-glow sprite (−1.5%/−3.5%), offset double-draw instead of `shadowBlur` (−1.4%), and a baked static vignette (+1.9%) were all inside the noise floor. A worst-case phase-three frame is ~1.7 ms of a 16.7 ms budget: **the draw path is not the constraint.** Do not gate visual work on making it cheaper. If you must measure, serve the variants simultaneously and alternate measurement blocks between them, and always measure a second copy of the same build as a control — sequential measurement of one build at a time cannot separate signal from drift here. Micro-benchmarks in tight loops saturate the fill pipeline and gave three contradictory answers, including a `drawImage`/`fill` relationship that inverts between headless software raster and a real GPU.
 - Baked floor (`buildFloor`) + scorch canvas: floor detail is rendered ONCE offscreen. If you add floor detail, add it inside `buildFloor`, not in `drawArena` (per-frame).
-- v2.25 defaults to the Blender-authored cached arena plus `blender-canvas` Malakar. `?visual=procedural&boss=current` is the exact Classic comparison/fallback; `?boss=blender-three` is a query-gated development proof, not the production default. The arena copies into a replacement floor and swaps only after success. Late base assets wait for title/intro/pause/reset, late phase masks wait for another authored phase boundary, and asset/upload/WebGL failure must retain Canvas without changing simulation.
+- v2.28 local candidate defaults to `reliquary-three`: two articulated Blender GLBs rendered through one shared offscreen Three context, plus the Cycles-baked stone arena. `?boss=blender-canvas` retains the exact v2.25 treatment; `?visual=procedural&boss=current` retains the original comparison. `?boss=blender-three` remains the separate v2.25 low-poly proof. The new pair promotes together only at title/intro/pause, releases on permanent asset failure, and retains Canvas after context loss. GPU-rendered PMREM must be regenerated after context restoration. Software GPUs select Canvas automatically; `?visualQa=allow-software` is for slow automated coverage only, never a performance recommendation. Preserve the original simulation, input and camera coordinates.
+- The v2.28 assets have their own `RELIQUARY_ASSET_VERSION` and `scripts/art/validate_reliquary.mjs` budget gate; retain the separate v2.25 asset version and validation. Source Blender files and deterministic build scripts live under `art/blender/reliquary` and `scripts/art/build_reliquary.*`. `qa/reliquary.cjs` gates new models, poses, render purity, delayed activation, failed loads, context recovery and desktop/phone layouts. The older visual lane explicitly selects the v2.25 treatment so its strict acceptance remains useful.
 - Versioned `/art/?v=...` requests are immutable in production; unversioned art is intentionally `no-store` because Cloudflare's default four-hour browser TTL overrides `no-cache` for static extensions. `src/game/render/visualModes.ts` owns `VISUAL_ASSET_VERSION`; bump it whenever a shipping WebP or GLB changes. Keep arena/phase/GLB budgets and stable Malakar node names locked by `scripts/art/validate_assets.mjs`, and keep the strict visual lane in `qa/run.cjs`.
 - Missing `/assets/`, `/audio/`, and `/art/` files return `404 no-store`; never route a static miss to `index.html`, because the requested static prefix would otherwise make fallback HTML immutable.
 - Compact touch clear-tell/chain cues occupy the boss-title lane while active. Do not float them above the boss HUD: native-size review found that placement covered the player's lower silhouette during the ring dodge decision.

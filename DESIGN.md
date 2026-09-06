@@ -3192,3 +3192,75 @@ runtime files are identical to it.
 
 Session provenance across the fleet: this session was also logged to the
 `interest_events` table per box convention.
+
+## v2.28 — Codex (GPT-6), "The Forged Reliquary" (2026-09-06)
+
+The owner explicitly requested a graphics upgrade using higher-spec real 3D
+models and authorized Blender/tool use. The current v2.25 comparison asset was
+332 triangles and replaced only Malakar. That is insufficient geometry to
+express a character's armor, hands, weapons, silhouette and cloth at close view.
+This pass authors two complete articulated Blender GLBs, roughly 36–37k triangles
+each, and preserves the existing combat engine as the source of all state.
+
+The new adapter remains imperative Three.js because the game loop and its
+existing renderer already are imperative. Adding React Three Fiber solely for
+the surrounding React shell would introduce a second state/lifecycle boundary.
+One shared offscreen context serves both characters and composites at their
+existing world anchors. The arena stays baked into the established floor cache;
+this concentrates GPU work on the moving silhouettes where it actually matters.
+
+The first Blender inspection exposed a material-direction mistake: the clean
+blue stone looked like a new tiled plaza, and the polished armor looked too
+plastic. The revision narrows mortar gaps, uses photographic weathered stone
+with Cycles lighting/shadows, lowers ambient fill, and introduces restrained
+material-space metal patina. The original model-facing assumption was also
+wrong: Blender +Y exports to glTF -Z. Correcting that mapping makes Malakar face
+the player rather than showing his back during the opening approach.
+
+Cloth has immutable rest positions and a bounded sine displacement. Limbs and
+weapons pose from the existing gameplay state. No animation mixer, root motion,
+physics world, damage authority or additional gameplay clocks are introduced.
+Roll presentation rotates about the torso rather than the contact origin to
+prevent the full mesh orbiting the ground anchor. Malakar retains the existing
+halo spending, second sword, windup and technique-reaction semantics.
+
+### Changed from v2.27.6 / v2.25
+
+- Local default requests the new `reliquary-three` pair and new arena. The v2.25
+  cached arena and Canvas boss remain selectable, and the old Three proof and
+  its validated GLB are untouched. Neither previous author's work is relabeled.
+- The v2.25 strict visual lane now explicitly selects its original treatment.
+  A separate required lane tests the new default and assets. The deterministic
+  Canvas operation census is retained.
+- Actual laptop Intel Arc / D3D11 evidence showed approximately 2–4ms render
+  submission/composition with both models. Software rasterization exceeded
+  100ms, so it is detected and uses the established Canvas bodies automatically.
+  Phone-sized emulation is not treated as evidence about physical phone GPUs.
+- Late models promote together at title/intro/pause; permanent failure releases
+  the GPU context. On context restoration the prefiltered environment map must
+  be rendered again: retaining a JS texture is insufficient to restore pixels
+  originally generated in a lost GPU render target.
+- Source geometry, compressed exports, checksums and rebuild commands are kept.
+  The detached portable Blender copy remains in ignored local tooling. The
+  owner's unrelated `audio-workbench/` is not part of this pass.
+
+This is a local candidate, not a claim of a published release or AAA production
+asset quality. The release/validation and asset-provenance record is
+`docs/releases/v2.28.md`. Publication requires the existing release process and
+an accompanying update of storefront descriptions to reflect live 3D characters.
+
+## v2.28 — Codex (GPT-5), "Hetzner publication" (2026-09-06)
+
+The owner requested deployment of the completed graphics candidate. Live inspection
+found that the July runbook was stale: Cloudflare now routes Gracefell to the shared
+app-host on port 8000, whose registry reads this repo's dist directory. The dedicated
+gracefell unit is intentionally disabled. Preserve that architecture and avoid
+restarting infrastructure shared with other apps. Build off-path, retain the old
+hashed assets for already-open clients, then atomically publish the HTML entrypoint.
+
+### Changed from the local v2.28 candidate
+
+Release review found that the Graphics selector had its own offsets but was omitted
+from the shared fixed-position button rule, leaving it outside the visible canvas.
+Include it in that rule and enforce visible 44px geometry, separation from Scores,
+and an actual two-way toggle in desktop and phone browser QA. No combat code changes.

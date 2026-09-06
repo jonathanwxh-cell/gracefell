@@ -2,17 +2,17 @@ import { describe, expect, it } from 'vitest';
 import { parseVisualProofFlags } from './visualModes';
 
 describe('visual proof query flags', () => {
-  it('uses the accepted Canvas-first treatment by default', () => {
+  it('requests the authored 3D pair by default', () => {
     expect(parseVisualProofFlags('')).toEqual({
       arena: 'arena-bake',
-      boss: 'blender-canvas',
+      boss: 'reliquary-three',
     });
   });
 
   it('keeps every comparison mode explicitly selectable', () => {
     expect(parseVisualProofFlags('?visual=arena-bake')).toEqual({
       arena: 'arena-bake',
-      boss: 'blender-canvas',
+      boss: 'reliquary-three',
     });
     expect(parseVisualProofFlags('?boss=blender-canvas')).toEqual({
       arena: 'arena-bake',
@@ -31,11 +31,11 @@ describe('visual proof query flags', () => {
   it('falls back deterministically for stale or misspelled values', () => {
     expect(parseVisualProofFlags('?boss=three&visual=bake')).toEqual({
       arena: 'arena-bake',
-      boss: 'blender-canvas',
+      boss: 'reliquary-three',
     });
     expect(parseVisualProofFlags('?boss=&visual=arena-bake-extra')).toEqual({
       arena: 'arena-bake',
-      boss: 'blender-canvas',
+      boss: 'reliquary-three',
     });
   });
 });

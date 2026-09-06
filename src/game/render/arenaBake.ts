@@ -38,10 +38,10 @@ export class ArenaBakeAssets {
   private readonly callbacks: ArenaBakeCallbacks;
   private readonly assets: Record<keyof typeof ASSET_PATHS, ArenaBakeAsset>;
 
-  constructor(callbacks: ArenaBakeCallbacks) {
+  constructor(callbacks: ArenaBakeCallbacks, basePath: string = ASSET_PATHS.base, version = VISUAL_ASSET_VERSION) {
     this.callbacks = callbacks;
     this.assets = {
-      base: this.createAsset(ASSET_PATHS.base),
+      base: this.createAsset(basePath, version),
       phase2: this.createAsset(ASSET_PATHS.phase2),
       phase3: this.createAsset(ASSET_PATHS.phase3),
     };
@@ -51,9 +51,9 @@ export class ArenaBakeAssets {
     void this.load('phase3', generation);
   }
 
-  private createAsset(path: string): ArenaBakeAsset {
+  private createAsset(path: string, version = VISUAL_ASSET_VERSION): ArenaBakeAsset {
     const url = new URL(path, document.baseURI);
-    url.searchParams.set('v', VISUAL_ASSET_VERSION);
+    url.searchParams.set('v', version);
     return {
       image: null,
       diagnostic: {
