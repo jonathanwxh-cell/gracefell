@@ -2,7 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
 
-const receipt = { version: 'v228-1', models: {}, arena: {} };
+const receipt = { version: 'v229-1', models: {}, arena: {} };
 for (const name of ['kiteveil', 'malakar']) {
   const bytes = await readFile(new URL(`../../public/art/reliquary/${name}.glb`, import.meta.url));
   assert.equal(bytes.readUInt32LE(0), 0x46546c67);
@@ -10,7 +10,7 @@ for (const name of ['kiteveil', 'malakar']) {
   assert.equal(bytes.readUInt32LE(8), bytes.length);
   const gltf = JSON.parse(bytes.toString('utf8', 20, 20 + bytes.readUInt32LE(12)).trim());
   const nodes = new Set(gltf.nodes.map(node => node.name));
-  for (const node of ['Torso','Head','Cape','Arm_L','Arm_R','Forearm_L','Forearm_R','Leg_L','Leg_R','Sword_R']) {
+  for (const node of ['Pelvis','Torso','Head','Cape','Arm_L','Arm_R','Forearm_L','Forearm_R','Leg_L','Leg_R','Knee_L','Knee_R','Foot_L','Foot_R','Sword_R']) {
     assert(nodes.has(node), `${name}: lost anatomical pivot ${node}`);
   }
   assert(nodes.has(name === 'malakar' ? 'Malakar_Root' : 'KiteVeil_Root'));

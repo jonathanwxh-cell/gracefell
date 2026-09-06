@@ -104,13 +104,13 @@ async function pin(page, phase = 1) {
           assert(receipts[label].reliquary.models.malakar.triangles > 10000, 'Boss is not the authored detailed asset');
           assert.equal(receipts[label].boss.active, 'reliquary-three');
           for (const state of ['light', 'heavy', 'roll', 'flask', 'stagger', 'dead']) {
-            await page.evaluate(state => { const g=window.__game; g.player.state=state; g.player.t=.15; g.render(); }, state);
+            await page.evaluate(state => { const g=window.__game; g.player.state=state; g.player.t=.15; for(let i=0;i<12;i++){g.time+=1/60;g.render();} }, state);
             await page.screenshot({ path: path.join(out, `${label}-${state}.png`) });
           }
           await pin(page);
           // Pointer directions must visibly change the 3D silhouette.
           const front = await page.locator('canvas').first().screenshot();
-          await page.evaluate(() => { const g=window.__game; g.boss.facing+=Math.PI; g.render(); });
+          await page.evaluate(() => { const g=window.__game; g.boss.facing+=Math.PI; for(let i=0;i<12;i++){g.time+=1/60;g.render();} });
           const back = await page.locator('canvas').first().screenshot();
           assert(!front.equals(back), `${label}: 3D model does not turn with facing`);
           // Context loss must immediately expose both existing character bodies;
