@@ -3303,3 +3303,18 @@ body respond continuously to the same combat snapshots.
 
 Keep this candidate local for the owner to assess it moving before publication.
 No remote files, services or production assets were changed by this motion pass.
+
+## v2.29 — Codex (GPT-5), "Motion publication" (2026-09-06)
+
+The owner explicitly requested Hetzner deployment after the local motion handoff.
+Rechecked the clean production checkout, shared app-host service and storefront
+claims. Existing descriptions remain accurate; no unrelated hub changes are needed.
+
+### Changed from the local v2.29 candidate
+
+Only release status/documentation changes. Retain the reviewed motion runtime,
+original asset credits and all gameplay contracts. Publish through a PR and green
+CI, then build off-path on the verified host, preserve a complete previous dist
+backup and old hashed chunks, and atomically replace the HTML entrypoint. No
+shared service restart. Record exact SHA, hashes and public browser receipts on
+the PR after deployment rather than claiming a future merge SHA in this commit.

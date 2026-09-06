@@ -1,7 +1,7 @@
 # GRACEFELL project facts
 
-- Current local package: `gracefell@2.29.0` — Living Motion candidate, not deployed
-- Live graphics: v2.28 — Forged Reliquary; the motion candidate awaits owner review
+- Current package: `gracefell@2.29.0` — Living Motion, owner-authorized Hetzner publication
+- Motion publication and exact live-verification receipts: [`docs/releases/v2.29.md`](docs/releases/v2.29.md)
 - Graphics record: [`docs/releases/v2.28.md`](docs/releases/v2.28.md); exact publication/deployment receipts: [PR #115](https://github.com/jonathanwxh-cell/gracefell/pull/115)
 - Previous tagged release: [`v2.27.6`](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.6), Sunder/Execute king reactions
 - Release receipt: [`docs/releases/v2.27.6.md`](docs/releases/v2.27.6.md)
