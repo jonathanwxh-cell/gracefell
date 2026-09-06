@@ -58,7 +58,7 @@ async function pin(page, phase = 1) {
       const graphics = page.getByRole('button', { name: 'Graphics: Detailed 3D. Switch to Classic', exact: true });
       await graphics.waitFor({ state: 'visible' });
       const button = await graphics.boundingBox();
-      const scores = await page.getByRole('button', { name: 'SCORES', exact: true }).boundingBox();
+      const scores = await page.getByRole('button', { name: 'RECORDS', exact: true }).boundingBox();
       assert(button && button.width >= 44 && button.height >= 44, 'Graphics target must be fingertip-sized');
       assert(button.x >= 0 && button.y >= 0 && button.x + button.width <= (touch ? 390 : 1280) && button.y + button.height <= (touch ? 844 : 800), 'Graphics control must fit the viewport');
       assert(scores && button.x + button.width <= scores.x, 'Graphics must not overlap Scores');

@@ -1,8 +1,8 @@
 # GRACEFELL project facts
 
-- Current local package: `gracefell@2.28.0` — Forged Reliquary graphics candidate, not deployed
-- Candidate record: [`docs/releases/v2.28.md`](docs/releases/v2.28.md)
-- Current release: [`v2.27.6`](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.6), Sunder/Execute king reactions
+- Current package: `gracefell@2.28.0` — Forged Reliquary graphics upgrade
+- Graphics record: [`docs/releases/v2.28.md`](docs/releases/v2.28.md); exact publication/deployment receipts: [PR #115](https://github.com/jonathanwxh-cell/gracefell/pull/115)
+- Previous tagged release: [`v2.27.6`](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.6), Sunder/Execute king reactions
 - Release receipt: [`docs/releases/v2.27.6.md`](docs/releases/v2.27.6.md)
 - Previous release: [`v2.27.5`](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.5)
 - v2.27.6 reviewed head: `c0d206254518b7d0afb5474fa9f36af161167a4b`

@@ -8,15 +8,15 @@ rules are all decided by what works one-handed on a 390px screen.
 
 **Play it: [gracefell.alyoechosys.dev](https://gracefell.alyoechosys.dev)**
 
-Local graphics candidate: **v2.28 — The Forged Reliquary**. Detailed, articulated
+Graphics upgrade: **v2.28 — The Forged Reliquary**. Detailed, articulated
 Blender GLB models now replace the player and boss on hardware-accelerated
 browsers. A weathered stone arena is lit and baked in Blender Cycles; live
 characters use physical metal materials, environment reflections, cloth motion,
 and combat-driven poses. The title's GRAPHICS button selects 3D or Classic.
-This branch is a local preview, not a deployment or a new published release.
-See [the asset and validation record](docs/releases/v2.28.md).
+See [the asset and validation record](docs/releases/v2.28.md) and
+[publication and live-deployment receipts in PR #115](https://github.com/jonathanwxh-cell/gracefell/pull/115).
 
-Current release: **[v2.27.6](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.6)** —
+Previous tagged release: **[v2.27.6](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.6)** —
 Sunder now fractures Malakar's crown in gold and Execute lands as a stronger
 spirit cleave. The central lane remains the one technique-name authority,
 desktop readiness names the real `K` key, and numeric damage stays king-local.
@@ -33,7 +33,7 @@ and sites-hub blurb still claimed "zero assets" twenty-five versions after the
 recorded score and art masks shipped. Both are documented in
 [`DESIGN.md`](DESIGN.md) and the [`PROVENANCE.md`](PROVENANCE.md) ledger.
 Those two historical passes kept runtime files identical to the v2.27.6 checkpoint;
-the v2.28 candidate described above changes the local presentation.
+the v2.28 upgrade described above changes presentation.
 
 The **v2.27.2** combo-truth foundation remains intact. A poise-breaking second
 light can no longer let Sunder steal
