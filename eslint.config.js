@@ -8,7 +8,7 @@ import { defineConfig, globalIgnores } from 'eslint/config'
 export default defineConfig([
   // The generated shadcn catalogue is an inactive starter scaffold; lint the
   // shipped game surface rather than components that are never imported.
-  globalIgnores(['dist', 'src/components/ui/**']),
+  globalIgnores(['dist', '.artifacts/**', 'src/components/ui/**']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [

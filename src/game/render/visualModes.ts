@@ -1,9 +1,10 @@
 export type ArenaVisualMode = 'procedural' | 'arena-bake';
-export type BossVisualMode = 'current' | 'blender-canvas' | 'blender-three';
+export type BossVisualMode = 'current' | 'blender-canvas' | 'blender-three' | 'reliquary-three';
 
 // `/art/` is served with immutable caching. Every changed shipping asset must
 // bump this token so an older CDN/browser response cannot survive a release.
 export const VISUAL_ASSET_VERSION = 'v225-2';
+export const RELIQUARY_ASSET_VERSION = 'v228-1';
 
 export type BossVisualState =
   | 'spawn'
@@ -53,18 +54,18 @@ const BOSS_MODES = new Set<BossVisualMode>([
   'current',
   'blender-canvas',
   'blender-three',
+  'reliquary-three',
 ]);
 
 export function parseVisualProofFlags(search: string): VisualProofFlags {
   const params = new URLSearchParams(search);
   const requestedBoss = params.get('boss');
   return {
-    // The accepted baked arena and Canvas Malakar are the production v2.25
-    // treatment. Explicit classic flags preserve the measured v2.24 fallback;
-    // live Three remains opt-in only.
+    // Explicit legacy flags preserve both previous looks. The new authored
+    // pair promotes together after loading, at an intro/title/pause boundary.
     arena: params.get('visual') === 'procedural' ? 'procedural' : 'arena-bake',
     boss: requestedBoss && BOSS_MODES.has(requestedBoss as BossVisualMode)
       ? requestedBoss as BossVisualMode
-      : 'blender-canvas',
+      : 'reliquary-three',
   };
 }

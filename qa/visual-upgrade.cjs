@@ -2111,17 +2111,19 @@ function validatePerf(viewportName, baseline, candidate) {
 
     const assetContext = await browser.newContext();
     const assetPage = await assetContext.newPage();
-    await assetPage.goto(BASE_URL, { waitUntil: 'load' });
+    // Preserve the full v2.25 fallback contract under its explicit selection.
+    // v2.28's new default, real models and GPU failures are gated in reliquary.cjs.
+    await assetPage.goto(new URL(`?${ARENA_QUERY}`, BASE_URL).href, { waitUntil: 'load' });
     out.productionDefaultGesture = await performFirstGesture(assetPage, false);
-    validateFirstGesture('production default', out.productionDefaultGesture, false);
+    validateFirstGesture('legacy Canvas selection', out.productionDefaultGesture, false);
     await waitForCandidateSettled(assetPage);
     out.productionDefault = await assetPage.evaluate(readVisualDiagnosticsInPage);
-    validateDiagnostics('production default', out.productionDefault, 'arena', {
+    validateDiagnostics('legacy Canvas selection', out.productionDefault, 'arena', {
       allowImplicitDefault: true,
     });
     if (out.productionDefault.requestedBoss !== 'blender-canvas'
       || out.productionDefault.activeBoss !== 'blender-canvas') {
-      addError(`production default did not select accepted Blender-to-Canvas Malakar: ${JSON.stringify({
+      addError(`legacy selection did not select Blender-to-Canvas Malakar: ${JSON.stringify({
         requested: out.productionDefault.requestedBoss,
         active: out.productionDefault.activeBoss,
       })}`);

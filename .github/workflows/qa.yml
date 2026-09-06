@@ -30,6 +30,9 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      - name: Validate authored 3D assets
+        run: node scripts/art/validate_reliquary.mjs
+
       - name: Build and playtest
         run: npm run qa
 
@@ -38,5 +41,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: gracefell-playtest
-          path: /tmp/gracefell-qa
+          path: |
+            /tmp/gracefell-qa
+            .artifacts/reliquary/*.png
+            .artifacts/reliquary/*receipt.json
           if-no-files-found: ignore

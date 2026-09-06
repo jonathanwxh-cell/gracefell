@@ -6,6 +6,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
 import { Game, type GameUiSnapshot, type ScoreHistoryEntry } from '@/game/engine';
+import { parseVisualProofFlags } from '@/game/render/visualModes';
 
 type GameDialog = 'mix' | 'battle-menu' | 'scores' | null;
 
@@ -107,6 +108,7 @@ export default function Home() {
   const [dialog, setDialog] = useState<GameDialog>(null);
   const [shareStatus, setShareStatus] = useState('');
   const [controlsFocused, setControlsFocused] = useState(false);
+  const [graphics3d] = useState(() => parseVisualProofFlags(window.location.search).boss === 'reliquary-three');
 
   const mixOpen = dialog === 'mix';
   const dialogOpen = dialog !== null;
@@ -324,6 +326,24 @@ export default function Home() {
         tabIndex={dialogOpen ? -1 : 0}
         onPointerDown={(event) => event.currentTarget.focus({ preventScroll: true })}
       />
+
+      {ui.state === 'title' && (
+        <button
+          type="button"
+          className="game-graphics-toggle"
+          disabled={dialogOpen}
+          tabIndex={dialogOpen ? -1 : undefined}
+          aria-label={`Graphics: ${graphics3d ? 'Detailed 3D. Switch to Classic' : 'Classic. Switch to Detailed 3D'}`}
+          onClick={() => {
+            const url = new URL(window.location.href);
+            url.searchParams.set('boss', graphics3d ? 'blender-canvas' : 'reliquary-three');
+            url.searchParams.set('visual', 'arena-bake');
+            window.location.assign(url.href);
+          }}
+        >
+          {graphics3d ? 'GRAPHICS · 3D' : 'GRAPHICS · CLASSIC'}
+        </button>
+      )}
 
       {ui.state === 'title' && (
         <button

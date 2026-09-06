@@ -1,4 +1,4 @@
-// GRACEFELL — boss-arena ARPG engine (canvas 2D, procedural, no assets)
+// GRACEFELL — combat simulation, Canvas composition, authored 3D character adapter.
 import { GameAudio, type SpatialAudio } from './audio';
 import {
   ArenaBakeAssets,
@@ -6,8 +6,10 @@ import {
 } from './render/arenaBake';
 import { drawMalakarCanvasProof } from './render/malakarCanvas';
 import type { MalakarThreeProof } from './render/malakarThree';
+import type { ReliquaryThree } from './render/reliquaryThree';
 import {
   parseVisualProofFlags,
+  RELIQUARY_ASSET_VERSION,
   type MalakarTechniqueImpact,
   type MalakarVisualSnapshot,
 } from './render/visualModes';
@@ -989,6 +991,7 @@ export class Player {
 
   draw(ctx: CanvasRenderingContext2D, game: Game) {
     const { x, y } = this;
+    const threeBody = game.reliquaryReady;
     // roll afterimages
     for (const tr of this.trail) {
       ctx.save();
@@ -1045,7 +1048,21 @@ export class Player {
       // 0.16 s of a swing. Applied to the transform around the authored
       // silhouette so the state shapes themselves are unchanged.
       const stretch = attackStretchImpulse(this.state, this.t);
-      if (stretch > 0) {
+      if (threeBody) {
+        // Character renderer uses world coordinates, while legacy body artwork
+        // is local. Keep the heal, attack ribbon and ground cues in their slots.
+        ctx.save();
+        if (rolling) ctx.rotate(-rollSpin * 0.9);
+        if (stretch > 0) {
+          ctx.rotate(this.facing);
+          ctx.scale(1 + 0.17 * stretch, 1 - 0.11 * stretch);
+          ctx.rotate(-this.facing);
+        }
+        ctx.translate(-x, -y);
+        const drawn = game.drawReliquaryPlayer(ctx);
+        ctx.restore();
+        if (!drawn) this.drawKiteVeilBody(ctx, rolling);
+      } else if (stretch > 0) {
         ctx.save();
         ctx.rotate(this.facing);
         ctx.scale(1 + 0.17 * stretch, 1 - 0.11 * stretch);
@@ -1110,17 +1127,19 @@ export class Player {
         ctx.fill();
         ctx.restore();
       }
-      ctx.save();
-      ctx.translate(x, y);
-      ctx.rotate(a);
-      const grad = ctx.createLinearGradient(0, 0, len, 0);
-      grad.addColorStop(0, '#8d949e');
-      grad.addColorStop(1, '#e8edf4');
-      ctx.fillStyle = grad;
-      ctx.fillRect(6, -2, len, 4);
-      ctx.fillStyle = PAL.gold;
-      ctx.fillRect(2, -4.5, 6, 9);
-      ctx.restore();
+      if (!game.reliquaryReady) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(a);
+        const grad = ctx.createLinearGradient(0, 0, len, 0);
+        grad.addColorStop(0, '#8d949e');
+        grad.addColorStop(1, '#e8edf4');
+        ctx.fillStyle = grad;
+        ctx.fillRect(6, -2, len, 4);
+        ctx.fillStyle = PAL.gold;
+        ctx.fillRect(2, -4.5, 6, 9);
+        ctx.restore();
+      }
       // heavy charge glow
       if (this.state === 'heavy' && this.t > 0.28) {
         ctx.save();
@@ -2222,7 +2241,9 @@ export class Game {
   private arenaBaseApplied = false;
   private arenaOverlayStamps = new Set<ArenaBakePhase>();
   private arenaOverlayErrors: Record<ArenaBakePhase, string | null> = { 2: null, 3: null };
-  private bossVisualActive: 'current' | 'blender-canvas' | 'blender-three' | 'blender-canvas-fallback' = 'current';
+  private bossVisualActive: 'current' | 'blender-canvas' | 'blender-three' | 'reliquary-three' | 'blender-canvas-fallback' = 'current';
+  private reliquary: ReliquaryThree | null = null;
+  private reliquaryError: string | null = null;
   private malakarThree: MalakarThreeProof | null = null;
   private malakarThreeState: 'disabled' | 'loading' | 'ready' | 'fallback' = 'disabled';
   private malakarThreeError: string | null = null;
@@ -2353,6 +2374,8 @@ export class Game {
     this.visualProofStartTimer = null;
     this.malakarThree?.destroy();
     this.malakarThree = null;
+    this.reliquary?.destroy();
+    this.reliquary = null;
     window.removeEventListener('resize', this.resize);
     window.removeEventListener('blur', this.pauseForInterruption);
     window.removeEventListener('focus', this.resumeFromInterruption);
@@ -3140,13 +3163,24 @@ export class Game {
         // boundary. A late decode waits for the next run rather than mutating
         // the cache during a live dodge decision.
         onPhaseReady: () => undefined,
-      });
+      }, this.visualFlags.boss === 'reliquary-three' ? 'art/reliquary/arena.webp' : undefined,
+      this.visualFlags.boss === 'reliquary-three' ? RELIQUARY_ASSET_VERSION : undefined);
     }
     this.bossVisualActive = this.visualFlags.boss === 'blender-canvas'
       ? 'blender-canvas'
-      : this.visualFlags.boss === 'blender-three'
+      : this.visualFlags.boss === 'blender-three' || this.visualFlags.boss === 'reliquary-three'
         ? 'blender-canvas-fallback'
         : 'current';
+    if (this.visualFlags.boss === 'reliquary-three') {
+      void import('./render/reliquaryThree').then(({ ReliquaryThree: Renderer }) => {
+        if (this.destroyed) return;
+        try {
+          this.reliquary = new Renderer(this.input.isTouch,
+            new URLSearchParams(window.location.search).get('visualQa') === 'allow-software');
+        }
+        catch (error) { this.reliquaryError = error instanceof Error ? error.message : String(error); }
+      }).catch((error: unknown) => { this.reliquaryError = String(error); });
+    }
     if (this.visualFlags.boss === 'blender-three') {
       this.malakarThreeState = 'loading';
       void import('./render/malakarThree')
@@ -3267,6 +3301,14 @@ export class Game {
   }
 
   drawMalakarVisualProof(ctx: CanvasRenderingContext2D, snapshot: MalakarVisualSnapshot) {
+    if (this.reliquary?.ready) {
+      try {
+        if (this.reliquary.renderBoss(ctx, snapshot, this.flashReduced || !this.shakeEnabled)) {
+          this.bossVisualActive = 'reliquary-three';
+          return;
+        }
+      } catch (error) { this.releaseReliquary(error); }
+    }
     if (this.visualFlags.boss === 'blender-three' && this.malakarThree) {
       const proof = this.malakarThree;
       try {
@@ -3292,13 +3334,39 @@ export class Game {
       }
     }
     drawMalakarCanvasProof(ctx, snapshot);
-    this.bossVisualActive = this.visualFlags.boss === 'blender-three'
+    this.bossVisualActive = this.visualFlags.boss === 'blender-three' || this.visualFlags.boss === 'reliquary-three'
       ? 'blender-canvas-fallback'
       : 'blender-canvas';
   }
 
+  get reliquaryReady() { return this.reliquary?.ready ?? false; }
+
+  private releaseReliquary(error: unknown) {
+    this.reliquaryError = error instanceof Error ? error.message : String(error);
+    this.reliquary?.destroy();
+    this.reliquary = null;
+  }
+
+  prepareReliquaryFrame() {
+    if (!this.reliquary) return;
+    if (this.reliquary.failed) { this.releaseReliquary(this.reliquary.diagnostics().error); return; }
+    if (this.state === 'title' || this.state === 'intro' || this.paused) this.reliquary.activateAtBoundary();
+  }
+
+  drawReliquaryPlayer(ctx: CanvasRenderingContext2D) {
+    const p = this.player;
+    try {
+      return this.reliquary?.renderPlayer(ctx, {
+        x: p.x, y: p.y, r: p.r, facing: p.facing, time: this.time, state: p.state,
+        t: p.t, moving: Math.hypot(p.vx, p.vy) > 10, swordAngle: p.swordAngle(),
+        heavyCharging: p.heavyCharging, heavyCharge: p.heavyChargeT, hurt: p.hurtFlash > 0,
+      }, this.flashReduced || !this.shakeEnabled) ?? false;
+    } catch (error) { this.releaseReliquary(error); return false; }
+  }
+
   visualDebugState() {
     return {
+      reliquary: this.reliquary?.diagnostics() ?? { state: this.reliquaryError ? 'fallback' : 'disabled', error: this.reliquaryError },
       requested: { ...this.visualFlags },
       prepared: this.visualProofsPrepared,
       arena: this.visualFlags.arena === 'arena-bake'
@@ -4339,6 +4407,7 @@ const serif = (size: number, weight = 700) => `${weight} ${size}px Cinzel, 'Time
 const body = (size: number, weight = 400) => `${weight} ${size}px 'Cormorant Garamond', Georgia, serif`;
 
 Game.prototype.render = function render(this: Game) {
+  this.prepareReliquaryFrame();
   const ctx = this.ctx;
   const weatherFrom = weatherForPhase(this.weatherFromPhase);
   const weatherTo = weatherForPhase(this.weatherPhase);

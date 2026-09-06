@@ -1,6 +1,7 @@
 # GRACEFELL project facts
 
-- Current package: `gracefell@2.27.6`
+- Current local package: `gracefell@2.28.0` — Forged Reliquary graphics candidate, not deployed
+- Candidate record: [`docs/releases/v2.28.md`](docs/releases/v2.28.md)
 - Current release: [`v2.27.6`](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.6), Sunder/Execute king reactions
 - Release receipt: [`docs/releases/v2.27.6.md`](docs/releases/v2.27.6.md)
 - Previous release: [`v2.27.5`](https://github.com/jonathanwxh-cell/gracefell/releases/tag/v2.27.5)
@@ -40,7 +41,8 @@
 GRACEFELL is a mobile-first, single-arena boss game with an authoritative Canvas
 simulation and one visible Canvas. React mounts the canvas and provides
 focus-revealed semantic controls; `src/game/engine.ts` owns combat and
-presentation; `src/game/render/` owns the v2.25 cached-arena and boss treatments;
+presentation; `src/game/render/` owns the v2.28 authored 3D character adapter and
+the retained v2.25 cached-arena and boss treatments;
 `src/game/audio.ts` manages bounded recorded SFX, procedural fallback, and three
 streamed MiniMax phase cues; and `server.mjs` serves the production build.
 
