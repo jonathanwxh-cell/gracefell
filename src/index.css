@@ -121,7 +121,8 @@ html, body, #root {
 .game-mix-toggle,
 .game-pause-toggle,
 .game-menu-toggle,
-.game-scores-toggle {
+.game-scores-toggle,
+.game-graphics-toggle {
   position: fixed;
   z-index: 8;
   top: calc(12px + env(safe-area-inset-top, 0px));

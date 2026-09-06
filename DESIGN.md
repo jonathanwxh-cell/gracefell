@@ -3248,3 +3248,19 @@ This is a local candidate, not a claim of a published release or AAA production
 asset quality. The release/validation and asset-provenance record is
 `docs/releases/v2.28.md`. Publication requires the existing release process and
 an accompanying update of storefront descriptions to reflect live 3D characters.
+
+## v2.28 — Codex (GPT-5), "Hetzner publication" (2026-09-06)
+
+The owner requested deployment of the completed graphics candidate. Live inspection
+found that the July runbook was stale: Cloudflare now routes Gracefell to the shared
+app-host on port 8000, whose registry reads this repo's dist directory. The dedicated
+gracefell unit is intentionally disabled. Preserve that architecture and avoid
+restarting infrastructure shared with other apps. Build off-path, retain the old
+hashed assets for already-open clients, then atomically publish the HTML entrypoint.
+
+### Changed from the local v2.28 candidate
+
+Release review found that the Graphics selector had its own offsets but was omitted
+from the shared fixed-position button rule, leaving it outside the visible canvas.
+Include it in that rule and enforce visible 44px geometry, separation from Scores,
+and an actual two-way toggle in desktop and phone browser QA. No combat code changes.

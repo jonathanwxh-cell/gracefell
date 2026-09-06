@@ -14,7 +14,7 @@
 >
 > Enable the commit template once: `git config commit.template .gitmessage`
 
-App: GRACEFELL, boss-arena souls-like. https://gracefell.alyoechosys.dev · port 8491 · service `gracefell` · repo jonathanwxh-cell/gracefell (public).
+App: GRACEFELL, boss-arena souls-like. https://gracefell.alyoechosys.dev · shared `app-host` on 127.0.0.1:8000 · repo jonathanwxh-cell/gracefell (public). Verified 2026-09-06: the old port-8491 `gracefell.service` is disabled; do not start it as part of deployment.
 
 ## This is a mobile-first game
 Design for a 390×844 phone held in two hands, then let desktop inherit. Any new UI has to be
@@ -32,12 +32,15 @@ secondary path, and no feature should require a keyboard.
 1. Change the scoped source or documentation and update `PROVENANCE.md` + `DESIGN.md`.
 2. `npm run lint`, `npm run build`, and `npm run qa` — all MUST pass.
 3. Publish through a reviewed GitHub PR and identify the exact merged SHA.
-4. On the host, fast-forward `/home/alyosha/apps/gracefell` to `origin/main` and run
-   `npm --prefix /home/alyosha/apps/gracefell run build`.
-5. Restart in an isolated command with `systemctl --user restart gracefell.service`. The
-   `restart_service` helper is not available in the ordinary SSH shell.
-6. Verify `systemctl --user is-active gracefell.service`, the remote Git SHA, `/health`, and the
-   public URL. For gameplay changes, rerun `qa/verify.cjs` with `GRACEFELL_URL` set to production.
+4. On the host, confirm a clean checkout and the live app-host registry entry, back up the
+   existing `dist/`, then fast-forward `/home/alyosha/apps/gracefell` to the exact reviewed
+   `origin/main` SHA. Build into a staging output directory, validate it, and promote assets
+   before atomically replacing `dist/index.html`. Preserve old hashed chunks for open clients.
+5. The shared host reads `/home/alyosha/apps/gracefell/dist` per request. No restart is needed;
+   do not restart shared infrastructure or revive the retired dedicated service.
+6. Verify `systemctl --user is-active app-host.service`, the remote Git SHA, `/health`, public
+   bundle/asset hashes and the public URL. Rerun `qa/verify.cjs` with `GRACEFELL_URL` set to
+   production, plus the new 3D and real-input lanes for graphics changes.
 
 The default QA result and screenshots live under the platform temp directory's `gracefell-qa`
 folder. Named release runs may set `GRACEFELL_QA_DIR` / `GRACEFELL_QA_RESULT`; repo-local

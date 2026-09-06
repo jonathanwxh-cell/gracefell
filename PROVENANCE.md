@@ -71,6 +71,7 @@ Newest last. One row per pass. A "pass" = one continuous working session by one 
 | v2.27.8 | 2026-08-03 | Claude | Opus 4.8 via Hetzner MCP | @jonathanwxh-cell | Storefront truth: corrected GitHub description/topics and the sites-hub blurb, which still claimed zero assets 25 versions after recorded audio and art masks shipped; added the external-surfaces ownership rule to AGENTS.md |
 | v2.27.8a | 2026-08-03 | Claude | Opus 4.8 via Hetzner MCP | @jonathanwxh-cell | Documentation currency: created the missing v2.27.6 annotated tag + GitHub release (README's release link had 404'd since 07-29; retroactive creation disclosed in the release notes), and README now records what landed on main since the checkpoint |
 | v2.28 candidate | 2026-09-06 | Codex | GPT-6 / Codex Desktop | @jonathanwxh-cell | Authored two articulated high-detail Blender character GLBs and a Cycles-baked, CC0-textured ruined-stone arena; integrated read-only Three character presentation, physical materials, cloth and combat poses, safe asset/context fallback, a Classic selector, reproducible assets and desktop/phone/GPU acceptance; local candidate only |
+| v2.28 deployment | 2026-09-06 | Codex | GPT-5 / Codex Desktop | @jonathanwxh-cell | Prepared the owner-requested Hetzner release, discovered the retired dedicated service and live shared static host, corrected Graphics button positioning with a browser regression, and documented staged publication and rollback; final deployment receipts are in docs/releases/v2.28.md |
 
 ---
 
